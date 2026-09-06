@@ -14,6 +14,7 @@ from emperor.augmentations.adaptive_parameters import (
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
     BankExpansionFactorOptions,
+    DecayPolicy,
     DualModelDynamicWeightConfig,
     DynamicBiasConfig,
     DynamicDepthOptions,
@@ -34,7 +35,6 @@ from emperor.augmentations.adaptive_parameters import (
 from emperor.augmentations.adaptive_parameters._biases.base import (
     DynamicBiasAbstract,
 )
-from emperor.augmentations.adaptive_parameters._decay import _DecayPolicy
 from emperor.augmentations.adaptive_parameters._linear_adapter import (
     AdaptiveLinearLayer,
 )
@@ -211,11 +211,12 @@ class FailingGenerator(nn.Module):
 
 
 class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
-    def test_decay_policy_uses_composition_and_public_apply_method(self) -> None:
+    def test_decay_policy_uses_module_composition_and_forward(self) -> None:
         self.assertTupleEqual(DynamicWeightAbstract.__bases__, (Module,))
         self.assertTupleEqual(DynamicBiasAbstract.__bases__, (Module,))
-        self.assertTupleEqual(_DecayPolicy.__bases__, (object,))
-        self.assertTrue(callable(_DecayPolicy.apply))
+        self.assertTupleEqual(DecayPolicy.__bases__, (nn.Module,))
+        self.assertTrue(callable(DecayPolicy.forward))
+        self.assertIs(DecayPolicy.apply, nn.Module.apply)
         for legacy_attribute in (
             "decay_schedule_option",
             "decay_rate",
@@ -223,14 +224,14 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
         ):
             self.assertNotIn(legacy_attribute, vars(DynamicWeightAbstract))
             self.assertNotIn(legacy_attribute, vars(DynamicBiasAbstract))
-        self.assertFalse(hasattr(_DecayPolicy, "_compute_decay_factor_by_schedule"))
+        self.assertFalse(hasattr(DecayPolicy, "_compute_decay_factor_by_schedule"))
         self.assertTrue(
             callable(
-                vars(_DecayPolicy)["_DecayPolicy__compute_decay_factor_by_schedule"]
+                vars(DecayPolicy)["_DecayPolicy__compute_decay_factor_by_schedule"]
             )
         )
 
-    def test_all_leaves_keep_root_decay_buffer_topology(self) -> None:
+    def test_all_leaves_register_decay_buffers_in_the_policy_submodule(self) -> None:
         models = [config.build() for config in weight_configs()]
         models.extend(
             bias_config(
@@ -241,43 +242,44 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
             ).build()
             for config_type in all_bias_config_types()
         )
-
         for model in models:
             with self.subTest(model_type=type(model).__name__):
                 self.assertTupleEqual(
-                    tuple(model._buffers),
+                    tuple(model._decay_policy._buffers),
                     ("decay_step", "warmup_step"),
                 )
-                self.assertTupleEqual(tuple(model.decay_step.shape), (1,))
-                self.assertTupleEqual(tuple(model.warmup_step.shape), (1,))
-                self.assertEqual(model.decay_step.dtype, torch.float32)
-                self.assertEqual(model.warmup_step.dtype, torch.float32)
-                self.assertEqual(model.decay_step.item(), 0.0)
-                self.assertEqual(model.warmup_step.item(), 0.0)
-                self.assertIn("decay_step", model.state_dict())
-                self.assertIn("warmup_step", model.state_dict())
-                self.assertNotIn("decay_step", dict(model.named_parameters()))
-                self.assertNotIn("warmup_step", dict(model.named_parameters()))
-                self.assertIsInstance(model._decay_policy, _DecayPolicy)
-                self.assertNotIsInstance(model._decay_policy, nn.Module)
-                self.assertFalse(hasattr(model._decay_policy, "cfg"))
+                self.assertTupleEqual(tuple(model._decay_policy.decay_step.shape), (1,))
+                self.assertTupleEqual(
+                    tuple(model._decay_policy.warmup_step.shape), (1,)
+                )
+                self.assertEqual(model._decay_policy.decay_step.dtype, torch.float32)
+                self.assertEqual(model._decay_policy.warmup_step.dtype, torch.float32)
+                self.assertEqual(model._decay_policy.decay_step.item(), 0.0)
+                self.assertEqual(model._decay_policy.warmup_step.item(), 0.0)
+                for name in ("decay_step", "warmup_step"):
+                    self.assertFalse(hasattr(model, name))
+                    self.assertIn(f"_decay_policy.{name}", model.state_dict())
+                    self.assertNotIn(
+                        f"_decay_policy.{name}", dict(model.named_parameters())
+                    )
+                self.assertIsInstance(model._decay_policy, DecayPolicy)
+                self.assertIsInstance(model._decay_policy, nn.Module)
+                self.assertIs(model._decay_policy.cfg, model.cfg)
                 for legacy_attribute in (
                     "decay_schedule_option",
                     "decay_rate",
                     "decay_warmup_batches",
                 ):
                     self.assertFalse(hasattr(model, legacy_attribute))
-                self.assertFalse(
-                    any(
-                        module_name
-                        for module_name, _module in model.named_modules()
-                        if "decay" in module_name
-                    )
-                )
+                self.assertIs(model.get_submodule("_decay_policy"), model._decay_policy)
+                model.eval()
+                self.assertFalse(model._decay_policy.training)
+                model.train()
+                self.assertTrue(model._decay_policy.training)
 
                 model.double()
-                self.assertEqual(model.decay_step.dtype, torch.float64)
-                self.assertEqual(model.warmup_step.dtype, torch.float64)
+                self.assertEqual(model._decay_policy.decay_step.dtype, torch.float64)
+                self.assertEqual(model._decay_policy.warmup_step.dtype, torch.float64)
 
         nested = AdaptiveLinearLayer(
             AdaptiveLinearLayerConfig(
@@ -305,10 +307,78 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
         self.assertTupleEqual(
             nested_decay_keys,
             (
-                "adaptive_behaviour.bias_model.decay_step",
-                "adaptive_behaviour.bias_model.warmup_step",
+                "adaptive_behaviour.bias_model._decay_policy.decay_step",
+                "adaptive_behaviour.bias_model._decay_policy.warmup_step",
             ),
         )
+
+    def test_decay_uses_assigned_policy_buffers_and_current_training_mode(self) -> None:
+        configs = (
+            single_weight_config(
+                WeightDecayScheduleOptions.MULTIPLICATIVE,
+                rate=0.25,
+                warmup_batches=2,
+            ),
+            bias_config(
+                AdditiveDynamicBiasConfig,
+                WeightDecayScheduleOptions.MULTIPLICATIVE,
+                rate=0.25,
+                warmup_batches=2,
+            ),
+        )
+        for cfg in configs:
+            with self.subTest(config_type=type(cfg).__name__):
+                model = cfg.build().double()
+                policy = model._decay_policy
+                state = copy.deepcopy(model.state_dict())
+                state["_decay_policy.warmup_step"].fill_(1)
+                state["_decay_policy.decay_step"].fill_(3)
+                previous_decay_step = policy.decay_step
+                previous_warmup_step = policy.warmup_step
+                model.load_state_dict(state, strict=True, assign=True)
+                self.assertIsNot(policy.decay_step, previous_decay_step)
+                self.assertIsNot(policy.warmup_step, previous_warmup_step)
+                if isinstance(model, DynamicWeightAbstract):
+                    apply_decay = model._maybe_apply_weight_decay
+                else:
+                    apply_decay = model._maybe_apply_bias_decay
+                parameters = torch.tensor(
+                    [2.0, -4.0], dtype=torch.float64, requires_grad=True
+                )
+                observed_outputs = []
+                handle = policy.register_forward_hook(
+                    lambda _module, _inputs, output, observations=observed_outputs: (
+                        observations.append(output)
+                    )
+                )
+                try:
+                    model.eval()
+                    self.assertIs(apply_decay(parameters), parameters)
+                    self.assertEqual(policy.warmup_step.item(), 1)
+                    model.train()
+                    self.assertIs(apply_decay(parameters), parameters)
+                    self.assertEqual(policy.warmup_step.item(), 2)
+                    self.assertEqual(policy.decay_step.item(), 3)
+
+                    output = apply_decay(parameters)
+                    torch.testing.assert_close(output, parameters * 0.75**3)
+                    output.sum().backward()
+                    torch.testing.assert_close(
+                        parameters.grad, torch.full_like(parameters, 0.75**3)
+                    )
+                    self.assertEqual(policy.decay_step.item(), 4)
+                    model.eval()
+                    torch.testing.assert_close(
+                        apply_decay(parameters), parameters * 0.75**4
+                    )
+                    self.assertEqual(policy.decay_step.item(), 4)
+                    self.assertEqual(policy.warmup_step.item(), 2)
+                    self.assertEqual(len(observed_outputs), 4)
+                    self.assertIs(observed_outputs[2], output)
+                    self.assertEqual(previous_decay_step.item(), 0)
+                    self.assertEqual(previous_warmup_step.item(), 0)
+                finally:
+                    handle.remove()
 
     def test_weight_and_additive_bias_share_exact_forward_decay_traces(self) -> None:
         schedules = (
@@ -367,9 +437,17 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
                             bias_output,
                             bias_params.mul(factor).expand(2, -1),
                         )
-                        self.assertTrue(torch.equal(weight.decay_step, bias.decay_step))
                         self.assertTrue(
-                            torch.equal(weight.warmup_step, bias.warmup_step)
+                            torch.equal(
+                                weight._decay_policy.decay_step,
+                                bias._decay_policy.decay_step,
+                            )
+                        )
+                        self.assertTrue(
+                            torch.equal(
+                                weight._decay_policy.warmup_step,
+                                bias._decay_policy.warmup_step,
+                            )
                         )
                     self.assertTrue(
                         torch.equal(torch.random.get_rng_state(), random_state)
@@ -377,7 +455,7 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
 
                     weight.eval()
                     bias.eval()
-                    frozen_decay_step = weight.decay_step.clone()
+                    frozen_decay_step = weight._decay_policy.decay_step.clone()
                     evaluation_factor = self._factor(schedule, rate, step=2)
                     differentiable_weight = weight_params.clone().requires_grad_()
                     differentiable_bias = bias_params.clone().requires_grad_()
@@ -407,8 +485,12 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
                             2.0 * evaluation_factor,
                         ),
                     )
-                    self.assertTrue(torch.equal(weight.decay_step, frozen_decay_step))
-                    self.assertTrue(torch.equal(bias.decay_step, frozen_decay_step))
+                    self.assertTrue(
+                        torch.equal(weight._decay_policy.decay_step, frozen_decay_step)
+                    )
+                    self.assertTrue(
+                        torch.equal(bias._decay_policy.decay_step, frozen_decay_step)
+                    )
 
     def test_decay_config_overrides_resolve_before_policy_initialization(self) -> None:
         weight = single_weight_config(
@@ -443,8 +525,8 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
                 )
                 self.assertEqual(model._decay_policy.decay_rate, 0.2)
                 self.assertEqual(model._decay_policy.decay_warmup_batches, 2)
-                self.assertEqual(model.decay_step.item(), 0.0)
-                self.assertEqual(model.warmup_step.item(), 0.0)
+                self.assertEqual(model._decay_policy.decay_step.item(), 0.0)
+                self.assertEqual(model._decay_policy.warmup_step.item(), 0.0)
 
     def test_policy_snapshots_config_and_owns_decay_attributes(self) -> None:
         source_configs = (
@@ -518,8 +600,8 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
                         active(bias_params, inputs),
                         disabled(bias_params, inputs),
                     )
-                self.assertEqual(active.decay_step.item(), 0.0)
-                self.assertEqual(active.warmup_step.item(), 0.0)
+                self.assertEqual(active._decay_policy.decay_step.item(), 0.0)
+                self.assertEqual(active._decay_policy.warmup_step.item(), 0.0)
 
     def test_generator_failure_and_invalid_schedule_order_are_preserved(self) -> None:
         weight = single_weight_config(
@@ -534,7 +616,7 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "^generator failed$"):
             weight(torch.ones(2, 2), torch.ones(1, 2))
         self.assertEqual(failing_weight_generator.calls, 1)
-        self.assertEqual(weight.decay_step.item(), 0.0)
+        self.assertEqual(weight._decay_policy.decay_step.item(), 0.0)
 
         bias = bias_config(
             AdditiveDynamicBiasConfig,
@@ -551,7 +633,7 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
         ):
             bias(torch.ones(3), torch.ones(1, 2))
         self.assertEqual(failing_bias_generator.calls, 0)
-        self.assertEqual(bias.decay_step.item(), 0.0)
+        self.assertEqual(bias._decay_policy.decay_step.item(), 0.0)
 
         bias._decay_policy.decay_schedule_option = (
             WeightDecayScheduleOptions.MULTIPLICATIVE
@@ -559,7 +641,7 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "^generator failed$"):
             bias(torch.ones(3), torch.ones(1, 2))
         self.assertEqual(failing_bias_generator.calls, 1)
-        self.assertEqual(bias.decay_step.item(), 1.0)
+        self.assertEqual(bias._decay_policy.decay_step.item(), 1.0)
 
     @pytest.mark.training
     def test_active_additive_bias_model_and_adam_state_continue_after_restore(
@@ -666,12 +748,12 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
 
         linear(inputs, row_layout=row_layout)
         self.assertEqual(
-            linear.adaptive_behaviour.bias_model.decay_step.item(),
+            linear.adaptive_behaviour.bias_model._decay_policy.decay_step.item(),
             1.0,
         )
         linear(inputs, row_layout=row_layout)
         self.assertEqual(
-            linear.adaptive_behaviour.bias_model.decay_step.item(),
+            linear.adaptive_behaviour.bias_model._decay_policy.decay_step.item(),
             2.0,
         )
 
