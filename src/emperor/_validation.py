@@ -1,9 +1,96 @@
 import types
 from collections.abc import Callable, Iterator
-from dataclasses import fields
+from dataclasses import dataclass, fields
 from typing import Union, get_args, get_origin
 
 from emperor.config import ConfigBase
+
+
+@dataclass(frozen=True)
+class _ConfigurationVisit:
+    path: str
+    config: ConfigBase
+    expert_path: str | None
+    row_scope: str
+    restored_template: bool = False
+
+
+def _config_validator(config: ConfigBase) -> type | None:
+    try:
+        return config.registry_owner().VALIDATOR
+    except (AttributeError, NotImplementedError):
+        return None
+
+
+def _configuration_visits(
+    value: object,
+    path: str,
+    ancestors: frozenset[int] | None = None,
+    *,
+    expert_path: str | None = None,
+    row_scope: str = "",
+    restored_template: bool = False,
+) -> Iterator[_ConfigurationVisit]:
+    """Visit occurrences, stopping cycles only along the current ancestry."""
+    if not isinstance(value, (ConfigBase, dict, list, tuple)):
+        return
+    ancestors = frozenset() if ancestors is None else ancestors
+    if id(value) in ancestors:
+        return
+    ancestors = ancestors | {id(value)}
+    boundaries = {}
+    if isinstance(value, ConfigBase):
+        yield _ConfigurationVisit(
+            path, value, expert_path, row_scope, restored_template
+        )
+        boundary_hook = getattr(
+            _config_validator(value), "grouping_child_boundaries", None
+        )
+        if callable(boundary_hook):
+            boundaries = boundary_hook(value)
+        children = (
+            (field.name, f"{path}.{field.name}", getattr(value, field.name))
+            for field in fields(value)
+        )
+    elif isinstance(value, dict):
+        children = ((key, f"{path}[{key!r}]", item) for key, item in value.items())
+    else:
+        children = (
+            (index, f"{path}[{index}]", item) for index, item in enumerate(value)
+        )
+    for key, child_path, child in children:
+        boundary = boundaries.get(key)
+        yield from _configuration_visits(
+            child,
+            child_path,
+            ancestors,
+            expert_path=child_path if boundary == "expert" else expert_path,
+            row_scope=child_path if boundary else row_scope,
+            restored_template=boundary == "restored_template",
+        )
+
+
+def _adaptive_grouping_visits(
+    config: object, *, root: str
+) -> Iterator[_ConfigurationVisit]:
+    for visit in _configuration_visits(config, root):
+        enabled = getattr(_config_validator(visit.config), "grouping_is_enabled", None)
+        if callable(enabled) and enabled(visit.config):
+            yield visit
+
+
+def _adaptive_grouping_configs(
+    config: object,
+    *,
+    root: str,
+    predicate: Callable[[ConfigBase], bool] | None = None,
+    direct_only: bool = False,
+) -> Iterator[tuple[str, ConfigBase]]:
+    for visit in _adaptive_grouping_visits(config, root=root):
+        if direct_only and visit.expert_path is not None:
+            continue
+        if predicate is None or predicate(visit.config):
+            yield visit.path, visit.config
 
 
 def _adaptive_grouping_paths(
@@ -11,13 +98,12 @@ def _adaptive_grouping_paths(
     *,
     root: str,
     predicate: Callable[[ConfigBase], bool] | None = None,
+    direct_only: bool = False,
 ) -> tuple[str, ...]:
     return tuple(
-        _iter_adaptive_grouping_paths(
-            config,
-            root,
-            set(),
-            predicate,
+        path
+        for path, _ in _adaptive_grouping_configs(
+            config, root=root, predicate=predicate, direct_only=direct_only
         )
     )
 
@@ -27,81 +113,49 @@ def _first_adaptive_grouping_path(
     *,
     root: str,
     predicate: Callable[[ConfigBase], bool] | None = None,
+    direct_only: bool = False,
 ) -> str | None:
     return next(
-        _iter_adaptive_grouping_paths(
-            config,
-            root,
-            set(),
-            predicate,
+        (
+            path
+            for path, _ in _adaptive_grouping_configs(
+                config, root=root, predicate=predicate, direct_only=direct_only
+            )
         ),
         None,
     )
 
 
-def _iter_adaptive_grouping_paths(
-    value: object,
-    path: str,
-    visited: set[int],
-    predicate: Callable[[ConfigBase], bool] | None,
-) -> Iterator[str]:
-    if isinstance(value, ConfigBase):
-        identity = id(value)
-        if identity in visited:
-            return
-        visited.add(identity)
-        try:
-            config_validator = value.registry_owner().VALIDATOR
-        except (AttributeError, NotImplementedError):
-            config_validator = None
-        grouping_is_enabled = getattr(
-            config_validator,
-            "grouping_is_enabled",
-            None,
+def _validate_adaptive_sequence_input(
+    config: object,
+    *,
+    root: str,
+    sequence_length: int,
+    input_order: str,
+) -> None:
+    for path, augmentation in _adaptive_grouping_configs(
+        config, root=root, direct_only=True
+    ):
+        augmentation.registry_owner().VALIDATOR.validate_grouping_sequence_input(
+            augmentation,
+            sequence_length=sequence_length,
+            input_order=input_order,
+            path=path,
         )
-        if (
-            callable(grouping_is_enabled)
-            and grouping_is_enabled(value)
-            and (predicate is None or predicate(value))
-        ):
-            yield path
-        for config_field in fields(value):
-            field_value = getattr(value, config_field.name)
-            field_path = f"{path}.{config_field.name}"
-            yield from _iter_adaptive_grouping_paths(
-                field_value,
-                field_path,
-                visited,
-                predicate,
-            )
-        return
 
-    if isinstance(value, dict):
-        identity = id(value)
-        if identity in visited:
-            return
-        visited.add(identity)
-        for key, item in value.items():
-            yield from _iter_adaptive_grouping_paths(
-                item,
-                f"{path}[{key!r}]",
-                visited,
-                predicate,
-            )
-        return
 
-    if isinstance(value, (list, tuple)):
-        identity = id(value)
-        if identity in visited:
-            return
-        visited.add(identity)
-        for index, item in enumerate(value):
-            yield from _iter_adaptive_grouping_paths(
-                item,
-                f"{path}[{index}]",
-                visited,
-                predicate,
-            )
+def _validate_grouped_row_preservation(config: object, *, root: str) -> None:
+    scopes = {visit.row_scope for visit in _adaptive_grouping_visits(config, root=root)}
+    if not scopes:
+        return
+    for visit in _configuration_visits(config, root):
+        if visit.row_scope not in scopes or visit.restored_template:
+            continue
+        validate = getattr(
+            _config_validator(visit.config), "validate_grouped_row_preservation", None
+        )
+        if callable(validate):
+            validate(visit.config, path=visit.path)
 
 
 class ValidatorBase:
