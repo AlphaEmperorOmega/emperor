@@ -4180,7 +4180,7 @@ class TestRecurrentLayer(unittest.TestCase):
         schedule_progress_buffer = (
             smooth_model.recurrent_iteration_schedule.forward_call_progress
         )
-        adaptive_decay_step_buffer = adaptive_weight.decay_step
+        adaptive_decay_step_buffer = adaptive_weight._decay_policy.decay_step
         with (
             patch.object(
                 adaptive_linear,
@@ -4200,12 +4200,16 @@ class TestRecurrentLayer(unittest.TestCase):
         ):
             smooth_result = smooth_model(LayerState(hidden=smooth_input))
 
-        torch.testing.assert_close(adaptive_weight.decay_step, torch.tensor([4.0]))
+        torch.testing.assert_close(
+            adaptive_weight._decay_policy.decay_step, torch.tensor([4.0])
+        )
         self.assertIs(
             smooth_model.recurrent_iteration_schedule.forward_call_progress,
             schedule_progress_buffer,
         )
-        self.assertIs(adaptive_weight.decay_step, adaptive_decay_step_buffer)
+        self.assertIs(
+            adaptive_weight._decay_policy.decay_step, adaptive_decay_step_buffer
+        )
         self.assertEqual(adaptive_forward.call_count, 5)
         self.assertEqual(adaptive_weight_forward.call_count, 5)
         self.assertEqual(adaptive_bias_forward.call_count, 5)
