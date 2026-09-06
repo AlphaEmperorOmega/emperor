@@ -1042,15 +1042,19 @@ class TestWeightHandlerForward(unittest.TestCase):
             decay_rate=0.3,
         )
         model = cfg.build()
-        baseline_decay_step = model.decay_step.clone()
-        baseline_warmup_step = model.warmup_step.clone()
+        baseline_decay_step = model._decay_policy.decay_step.clone()
+        baseline_warmup_step = model._decay_policy.warmup_step.clone()
 
         for _ in range(3):
             result = model._maybe_apply_weight_decay(weight_params)
             self.assertTrue(torch.equal(result, weight_params))
 
-        self.assertTrue(torch.equal(model.decay_step, baseline_decay_step))
-        self.assertTrue(torch.equal(model.warmup_step, baseline_warmup_step))
+        self.assertTrue(
+            torch.equal(model._decay_policy.decay_step, baseline_decay_step)
+        )
+        self.assertTrue(
+            torch.equal(model._decay_policy.warmup_step, baseline_warmup_step)
+        )
 
     def test_invalid_decay_parameters_raise(self):
         invalid_cases = [
@@ -1121,23 +1125,25 @@ class TestWeightHandlerForward(unittest.TestCase):
         model.eval()
         for _ in range(3):
             model._maybe_apply_weight_decay(weight_params)
-        self.assertEqual(model.warmup_step.item(), 0)
-        self.assertEqual(model.decay_step.item(), 0)
+        self.assertEqual(model._decay_policy.warmup_step.item(), 0)
+        self.assertEqual(model._decay_policy.decay_step.item(), 0)
 
         model.train()
         for _ in range(warmup_batches):
             model._maybe_apply_weight_decay(weight_params)
         model._maybe_apply_weight_decay(weight_params)
-        frozen_decay_step = model.decay_step.clone()
-        frozen_warmup_step = model.warmup_step.clone()
+        frozen_decay_step = model._decay_policy.decay_step.clone()
+        frozen_warmup_step = model._decay_policy.warmup_step.clone()
 
         model.eval()
         baseline = model._maybe_apply_weight_decay(weight_params)
         for _ in range(3):
             result = model._maybe_apply_weight_decay(weight_params)
             self.assertTrue(torch.equal(result, baseline))
-        self.assertTrue(torch.equal(model.decay_step, frozen_decay_step))
-        self.assertTrue(torch.equal(model.warmup_step, frozen_warmup_step))
+        self.assertTrue(torch.equal(model._decay_policy.decay_step, frozen_decay_step))
+        self.assertTrue(
+            torch.equal(model._decay_policy.warmup_step, frozen_warmup_step)
+        )
 
     def test_weight_decay_schedule_raises_on_unknown_schedule(self):
         input_dim = 12

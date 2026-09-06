@@ -183,8 +183,8 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
         )
         with torch.no_grad():
             option.weight_bank.copy_(bank_values)
-            option.decay_step.fill_(2.0)
-            option.warmup_step.fill_(3.0)
+            option._decay_policy.decay_step.fill_(2.0)
+            option._decay_policy.warmup_step.fill_(3.0)
             option.scale.fill_(4.0)
             option.clamp_limit.fill_(5.0)
         base = torch.tensor([[0.1, 0.2], [0.3, 0.4]])
@@ -346,8 +346,8 @@ class AdaptiveParameterMonitorMutationContractTests(unittest.TestCase):
     ) -> None:
         option = multiplicative_bias()
         with torch.no_grad():
-            option.decay_step.fill_(8.0)
-            option.warmup_step.fill_(9.0)
+            option._decay_policy.decay_step.fill_(8.0)
+            option._decay_policy.warmup_step.fill_(9.0)
         base = torch.tensor([0.25, -0.5])
         output = torch.tensor([[0.5, 1.5], [1.0, -0.25]])
         observation = _AdaptiveParameterObservation.from_forward((base,), output)

@@ -14,6 +14,7 @@ from emperor.augmentations.adaptive_parameters._config import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
 )
+from emperor.augmentations.adaptive_parameters._decay import DecayPolicy
 from emperor.augmentations.adaptive_parameters._diagonals.config import (
     AntiDynamicDiagonalConfig,
     CombinedDynamicDiagonalConfig,
@@ -52,6 +53,7 @@ from emperor.augmentations.adaptive_parameters.monitoring import (
 )
 
 __all__ = (
+    "DecayPolicy",
     "AdaptiveParameterAugmentationConfig",
     "AdaptiveLinearLayerConfig",
     "DynamicWeightConfig",

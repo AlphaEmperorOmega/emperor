@@ -188,13 +188,14 @@ class _AdaptiveParameterDiagnostics:
         if slot != "weight":
             return ()
         metrics: list[_AdaptiveParameterMetric] = []
-        for attribute_name in (
-            "decay_step",
-            "warmup_step",
-            "scale",
-            "clamp_limit",
+        decay_policy = getattr(option, "_decay_policy", None)
+        for metric_owner, attribute_name in (
+            (decay_policy, "decay_step"),
+            (decay_policy, "warmup_step"),
+            (option, "scale"),
+            (option, "clamp_limit"),
         ):
-            value = getattr(option, attribute_name, None)
+            value = getattr(metric_owner, attribute_name, None)
             if torch.is_tensor(value):
                 metrics.append(
                     _AdaptiveParameterMetric(

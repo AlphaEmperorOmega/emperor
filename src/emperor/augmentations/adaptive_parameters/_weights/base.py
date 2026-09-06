@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
-from emperor.augmentations.adaptive_parameters._decay import _DecayPolicy
+from emperor.augmentations.adaptive_parameters._decay import DecayPolicy
 from emperor.augmentations.adaptive_parameters._options import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
@@ -36,9 +36,7 @@ class DynamicWeightAbstract(Module):
         self.generator_depth = self.cfg.generator_depth
         self.scale = nn.Parameter(torch.tensor(1.0))
         self.clamp_limit = nn.Parameter(torch.tensor(1.0))
-        self.register_buffer("decay_step", torch.zeros(1))
-        self.register_buffer("warmup_step", torch.zeros(1))
-        self._decay_policy = _DecayPolicy(self.cfg)
+        self._decay_policy = DecayPolicy(self.cfg)
 
     def _init_model(
         self, overrides: "DepthMappingHandlerConfig"
@@ -228,9 +226,4 @@ class DynamicWeightAbstract(Module):
         )
 
     def _maybe_apply_weight_decay(self, weight_params: Tensor) -> Tensor:
-        return self._decay_policy.apply(
-            weight_params,
-            decay_step=self.decay_step,
-            warmup_step=self.warmup_step,
-            training=self.training,
-        )
+        return self._decay_policy(weight_params)
