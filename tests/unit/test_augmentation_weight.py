@@ -17,6 +17,7 @@ from emperor.augmentations.adaptive_parameters import (
     SoftWeightedBankDynamicWeightConfig,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
+    WeightNormalizationPolicy,
     WeightNormalizationPositionOptions,
 )
 from emperor.augmentations.adaptive_parameters._weights.depth_mapping import (
@@ -413,6 +414,202 @@ class TestWeightHandlerForward(unittest.TestCase):
         result = model._compute_outer_product(input_vectors, output_vectors)
         expected = model._compute_raw_outer_product(input_vectors, output_vectors)
         self.assertTrue(torch.equal(result, expected))
+
+    def test_normalization_placement_matches_explicit_outer_products_and_gradients(
+        self,
+    ):
+        for config_type in (
+            SingleModelDynamicWeightConfig,
+            DualModelDynamicWeightConfig,
+        ):
+            for position in WeightNormalizationPositionOptions:
+                for normalization in (
+                    WeightNormalizationOptions.SIGMOID_SCALE,
+                    WeightNormalizationOptions.SOFT_CLAMP,
+                ):
+                    with self.subTest(
+                        config_type=config_type,
+                        position=position,
+                        normalization=normalization,
+                    ):
+                        model = (
+                            self.preset(
+                                config_cls=config_type,
+                                input_dim=3,
+                                output_dim=3,
+                                normalization_option=normalization,
+                                normalization_position_option=position,
+                            )
+                            .build()
+                            .double()
+                        )
+                        policy = model._normalization_policy
+                        self.assertIs(policy.normalization_position_option, position)
+                        self.assertFalse(
+                            hasattr(model, "normalization_position_option")
+                        )
+                        with torch.no_grad():
+                            policy.scale.fill_(1.7)
+                            policy.clamp_limit.fill_(1.3)
+                        input_vectors = torch.tensor(
+                            [[[0.25, -2.0, 1.5], [3.0, -0.5, 0.75]]],
+                            dtype=torch.float64,
+                            requires_grad=True,
+                        )
+                        if config_type is SingleModelDynamicWeightConfig:
+                            output_vectors = input_vectors
+                            differentiated_vectors = (input_vectors,)
+                        else:
+                            output_vectors = torch.tensor(
+                                [[[2.0, -0.75, 0.1], [-1.5, 0.3, 4.0]]],
+                                dtype=torch.float64,
+                                requires_grad=True,
+                            )
+                            differentiated_vectors = (input_vectors, output_vectors)
+
+                        if normalization is WeightNormalizationOptions.SIGMOID_SCALE:
+                            parameter = policy.scale
+
+                            def normalize(values, parameter=parameter):
+                                return (2 * values.sigmoid() - 1) * parameter
+                        else:
+                            parameter = policy.clamp_limit
+
+                            def normalize(values, parameter=parameter):
+                                return parameter * torch.tanh(values / parameter)
+
+                        expected_input = input_vectors
+                        expected_output = output_vectors
+                        if (
+                            position
+                            is WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT
+                        ):
+                            expected_input = normalize(input_vectors)
+                            expected_output = normalize(output_vectors)
+                        else:
+                            self.assertIs(
+                                policy.normalize_before_outer_product(input_vectors),
+                                input_vectors,
+                            )
+                        expected = expected_input.unsqueeze(
+                            -1
+                        ) * expected_output.unsqueeze(-2)
+                        if (
+                            position
+                            is WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT
+                        ):
+                            expected = normalize(expected)
+                        else:
+                            self.assertIs(
+                                policy.normalize_after_outer_product(expected), expected
+                            )
+                        actual = model._compute_outer_product(
+                            input_vectors, output_vectors
+                        )
+                        torch.testing.assert_close(actual, expected)
+                        differentiated = (*differentiated_vectors, parameter)
+                        actual_gradients = torch.autograd.grad(
+                            actual.square().sum(), differentiated, allow_unused=True
+                        )
+                        expected_gradients = torch.autograd.grad(
+                            expected.square().sum(), differentiated, allow_unused=True
+                        )
+                        for actual_gradient, expected_gradient in zip(
+                            actual_gradients, expected_gradients, strict=True
+                        ):
+                            if expected_gradient is None:
+                                self.assertIsNone(actual_gradient)
+                            else:
+                                torch.testing.assert_close(
+                                    actual_gradient, expected_gradient
+                                )
+                                self.assertTrue(torch.isfinite(actual_gradient).all())
+                                self.assertGreater(
+                                    actual_gradient.abs().sum().item(), 0
+                                )
+
+    def test_normalization_policy_rejects_invalid_positions_at_each_entry(self):
+        for position in (None, False, 0, "invalid_position"):
+            with self.subTest(position=position):
+                config = DualModelDynamicWeightConfig(
+                    normalization_option=WeightNormalizationOptions.L2_SCALE,
+                    normalization_position_option=position,
+                )
+                with self.assertRaisesRegex(
+                    ValueError, "Unsupported normalization_position_option"
+                ):
+                    WeightNormalizationPolicy(config)
+                policy = WeightNormalizationPolicy(self.preset())
+                policy.normalization_position_option = position
+                for stage in (
+                    policy.normalize_before_outer_product,
+                    policy.normalize_after_outer_product,
+                ):
+                    with self.assertRaisesRegex(
+                        ValueError, "Unsupported normalization_position_option"
+                    ):
+                        stage(torch.ones(1, 1, 3))
+
+    def test_fixed_normalization_stages_preserve_low_rank_and_hypernetwork_math(self):
+        for config_type in (
+            LowRankDynamicWeightConfig,
+            HypernetworkDynamicWeightConfig,
+        ):
+            with self.subTest(config_type=config_type):
+                model = (
+                    self.preset(
+                        config_cls=config_type,
+                        input_dim=3,
+                        output_dim=4,
+                        normalization_option=WeightNormalizationOptions.SIGMOID_SCALE,
+                        apply_output_postprocessing_flag=False,
+                        stack_activation=ActivationOptions.DISABLED,
+                        stack_dropout_probability=0.0,
+                    )
+                    .build()
+                    .double()
+                    .eval()
+                )
+                policy = model._normalization_policy
+                self.assertIs(
+                    policy.normalization_position_option,
+                    WeightNormalizationPositionOptions.DISABLED,
+                )
+                with torch.no_grad():
+                    policy.scale.fill_(1.7)
+                context = torch.tensor(
+                    [[-1.5, 0.25, 2.0], [0.5, -3.0, 0.75]],
+                    dtype=torch.float64,
+                    requires_grad=True,
+                )
+                base = torch.ones(3, 4, dtype=torch.float64, requires_grad=True)
+                if config_type is LowRankDynamicWeightConfig:
+                    input_factors = (
+                        2 * model.input_model(context).sigmoid() - 1
+                    ) * policy.scale
+                    output_factors = (
+                        2 * model.output_model(context).sigmoid() - 1
+                    ) * policy.scale
+                    expected = base + input_factors.transpose(-1, -2) @ output_factors
+                else:
+                    flat_components = (
+                        2 * model.model(context).sigmoid() - 1
+                    ) * policy.scale
+                    expected = base + flat_components.sum(dim=1).reshape(2, 3, 4)
+                actual = model(base, context)
+                torch.testing.assert_close(actual, expected)
+                differentiated = (context, base, policy.scale)
+                actual_gradients = torch.autograd.grad(
+                    actual.square().sum(), differentiated
+                )
+                expected_gradients = torch.autograd.grad(
+                    expected.square().sum(), differentiated
+                )
+                for actual_gradient, expected_gradient in zip(
+                    actual_gradients, expected_gradients, strict=True
+                ):
+                    torch.testing.assert_close(actual_gradient, expected_gradient)
+                    self.assertGreater(actual_gradient.abs().sum().item(), 0)
 
     def test_build_creates_model_for_each_leaf_config(self):
         input_dim = 12
@@ -1341,6 +1538,103 @@ class TestWeightHandlerForward(unittest.TestCase):
         vectors = torch.randn(batch_size, generator_depth, input_dim)
         with self.assertRaises(ValueError):
             model._apply_normalization_transform(vectors)
+
+    def test_normalization_submodule_owns_config_parameters_and_module_lifecycle(self):
+        config = self.preset(normalization_option=WeightNormalizationOptions.DISABLED)
+        overrides = DualModelDynamicWeightConfig(
+            normalization_option=WeightNormalizationOptions.SIGMOID_SCALE,
+            normalization_position_option=WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT,
+        )
+        model = DualModelDynamicWeight(config, overrides).double()
+        policy = model._normalization_policy
+        self.assertIsInstance(policy, WeightNormalizationPolicy)
+        self.assertIs(model.get_submodule("_normalization_policy"), policy)
+        self.assertIs(policy.cfg, model.cfg)
+        self.assertIs(
+            policy.normalization_option, WeightNormalizationOptions.SIGMOID_SCALE
+        )
+        self.assertIs(config.normalization_option, WeightNormalizationOptions.DISABLED)
+        self.assertIs(
+            policy.normalization_position_option,
+            WeightNormalizationPositionOptions.AFTER_OUTER_PRODUCT,
+        )
+        self.assertIs(
+            config.normalization_position_option,
+            WeightNormalizationPositionOptions.BEFORE_OUTER_PRODUCT,
+        )
+        self.assertEqual(set(dict(policy.named_parameters())), {"scale", "clamp_limit"})
+        for name, parameter in policy.named_parameters():
+            self.assertFalse(hasattr(model, name))
+            self.assertEqual(parameter.dtype, torch.float64)
+            self.assertIs(
+                dict(model.named_parameters())[f"_normalization_policy.{name}"],
+                parameter,
+            )
+            self.assertEqual(
+                sum(candidate is parameter for candidate in model.parameters()), 1
+            )
+
+        model.eval()
+        self.assertFalse(policy.training)
+        model.train()
+        self.assertTrue(policy.training)
+        visited_modules = []
+        model.apply(visited_modules.append)
+        self.assertIn(policy, visited_modules)
+
+        observed_outputs = []
+        handle = policy.register_forward_hook(
+            lambda _module, _inputs, output: observed_outputs.append(output)
+        )
+        try:
+            vectors = torch.tensor([[-2.0, 0.25, 3.0]], dtype=torch.float64)
+            output = model._apply_normalization_transform(vectors)
+            torch.testing.assert_close(output, 2 * vectors.sigmoid() - 1)
+            self.assertEqual(len(observed_outputs), 1)
+            self.assertIs(observed_outputs[0], output)
+        finally:
+            handle.remove()
+
+    def test_normalization_uses_current_parameters_after_state_assignment(self):
+        model = DualModelDynamicWeight(self.preset()).double()
+        state = copy.deepcopy(model.state_dict())
+        state["_normalization_policy.scale"].fill_(2.5)
+        state["_normalization_policy.clamp_limit"].fill_(1.5)
+        original_scale = model._normalization_policy.scale
+        original_clamp_limit = model._normalization_policy.clamp_limit
+        model.load_state_dict(state, strict=True, assign=True)
+        self.assertIsNot(model._normalization_policy.scale, original_scale)
+        self.assertIsNot(model._normalization_policy.clamp_limit, original_clamp_limit)
+        self.assertEqual(tuple(model.state_dict()), tuple(state))
+
+        for option in (
+            WeightNormalizationOptions.SIGMOID_SCALE,
+            WeightNormalizationOptions.SOFT_CLAMP,
+        ):
+            with self.subTest(option=option):
+                model._normalization_policy.normalization_option = option
+                vectors = torch.tensor(
+                    [[[0.25, 1.5, 3.0]]], dtype=torch.float64, requires_grad=True
+                )
+                if option is WeightNormalizationOptions.SIGMOID_SCALE:
+                    parameter = model._normalization_policy.scale
+                    expected = (2 * vectors.sigmoid() - 1) * parameter
+                else:
+                    parameter = model._normalization_policy.clamp_limit
+                    expected = parameter * torch.tanh(vectors / parameter)
+                actual = model._apply_normalization_transform(vectors)
+                torch.testing.assert_close(actual, expected)
+                actual_gradients = torch.autograd.grad(
+                    actual.sum(), (vectors, parameter)
+                )
+                expected_gradients = torch.autograd.grad(
+                    expected.sum(), (vectors, parameter)
+                )
+                for actual_gradient, expected_gradient in zip(
+                    actual_gradients, expected_gradients, strict=True
+                ):
+                    torch.testing.assert_close(actual_gradient, expected_gradient)
+                    self.assertGreater(actual_gradient.abs().sum().item(), 0)
 
     def test_init_model_accepts_depth_mapping_handler_override(self):
         input_dim = 12
