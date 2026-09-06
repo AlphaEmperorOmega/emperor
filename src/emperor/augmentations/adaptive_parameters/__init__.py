@@ -21,6 +21,17 @@ from emperor.augmentations.adaptive_parameters._diagonals.config import (
     DynamicDiagonalConfig,
     StandardDynamicDiagonalConfig,
 )
+from emperor.augmentations.adaptive_parameters._grouping.config import (
+    AttentionGroupingConfig,
+    GroupingConfig,
+    MeanGroupingConfig,
+    MeanStdGroupingConfig,
+    RMSGroupingConfig,
+    SumGroupingConfig,
+)
+from emperor.augmentations.adaptive_parameters._grouping.options import (
+    SummaryNormalizationOptions,
+)
 from emperor.augmentations.adaptive_parameters._masks.config import (
     AxisMaskConfig,
     DiagonalAxisMaskConfig,
@@ -31,6 +42,7 @@ from emperor.augmentations.adaptive_parameters._masks.config import (
 )
 from emperor.augmentations.adaptive_parameters._options import (
     AdaptiveParameterGroupingScopeOptions,
+    AdaptiveParameterInputOrderOptions,
     BankExpansionFactorOptions,
     DynamicDepthOptions,
     MaskDimensionOptions,
@@ -58,7 +70,15 @@ from emperor.augmentations.adaptive_parameters.monitoring import (
 __all__ = (
     "DecayPolicy",
     "WeightNormalizationPolicy",
+    "AttentionGroupingConfig",
+    "GroupingConfig",
+    "MeanGroupingConfig",
+    "MeanStdGroupingConfig",
+    "RMSGroupingConfig",
+    "SumGroupingConfig",
+    "SummaryNormalizationOptions",
     "AdaptiveParameterAugmentationConfig",
+    "AdaptiveParameterInputOrderOptions",
     "AdaptiveLinearLayerConfig",
     "DynamicWeightConfig",
     "SingleModelDynamicWeightConfig",
