@@ -5,17 +5,16 @@ import inspect
 import io
 import textwrap
 import unittest
-from contextlib import ExitStack
 from unittest.mock import patch
 
 import torch
 
 from emperor.neuron import NeuronCluster, NeuronClusterConfig
-from emperor.neuron._cluster.beam_routes import BeamRoutingDelegate
 from emperor.neuron._cluster.checkpointing import ClusterCheckpointDelegate
 from emperor.neuron._cluster.plasticity import ClusterPlasticityDelegate
-from emperor.neuron._cluster.recurrent_routes import ClusterRoutingDelegate
-from emperor.neuron._cluster.state import (
+from emperor.neuron._cluster.routing.beam import BeamRoutingDelegate
+from emperor.neuron._cluster.routing.delegate import ClusterRoutingDelegate
+from emperor.neuron._cluster.routing.state import (
     RouteStateDelegate,
     _NeuronClusterForwardContext,
 )
@@ -28,46 +27,15 @@ class TestNeuronClusterCollaborationContracts(NeuronTestCase):
     def test_cluster_inherits_only_the_framework_module(self) -> None:
         self.assertEqual(NeuronCluster.__bases__, (Module,))
 
-    def test_routing_package_preserves_legacy_class_lookup_paths(self) -> None:
+    def test_routing_package_exposes_only_the_traversal_delegate(self) -> None:
         routing_package = importlib.import_module("emperor.neuron._cluster.routing")
         self.assertEqual(routing_package.__all__, ("ClusterRoutingDelegate",))
         self.assertIs(routing_package.ClusterRoutingDelegate, ClusterRoutingDelegate)
-        legacy_modules = {
-            "recurrent_routes": ("delegate", ("ClusterRoutingDelegate",)),
-            "beam_routes": ("beam", ("BeamRoutingDelegate",)),
-            "state": (
-                "state",
-                (
-                    "RouteStateDelegate",
-                    "NeuronClusterRouteState",
-                    "_NeuronClusterForwardContext",
-                ),
-            ),
-            "halting_lifecycle": ("halting", ("_NeuronHaltingLifecycle",)),
-        }
-        for legacy_name, (current_name, class_names) in legacy_modules.items():
-            legacy = importlib.import_module(f"emperor.neuron._cluster.{legacy_name}")
-            current = importlib.import_module(
-                f"emperor.neuron._cluster.routing.{current_name}"
-            )
-            for class_name in class_names:
-                with self.subTest(legacy=legacy_name, class_name=class_name):
-                    self.assertIs(
-                        getattr(legacy, class_name), getattr(current, class_name)
-                    )
 
-    def test_pre_package_delegate_pickle_restores_current_routing(self) -> None:
+    def test_pickle_restores_current_routing(self) -> None:
         original = self.cluster_config().build().eval()
-        legacy_paths = {
-            ClusterRoutingDelegate: "emperor.neuron._cluster.recurrent_routes",
-            BeamRoutingDelegate: "emperor.neuron._cluster.beam_routes",
-            RouteStateDelegate: "emperor.neuron._cluster.state",
-        }
         payload = io.BytesIO()
-        with ExitStack() as stack:
-            for delegate, legacy_path in legacy_paths.items():
-                stack.enter_context(patch.object(delegate, "__module__", legacy_path))
-            torch.save(original, payload)
+        torch.save(original, payload)
         payload.seek(0)
         rng_state = torch.get_rng_state().clone()
 
