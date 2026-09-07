@@ -7,8 +7,8 @@ from torch import nn
 
 from emperor.neuron import NeuronCluster
 from emperor.neuron._cluster.plasticity import ClusterPlasticityDelegate
-from emperor.neuron._cluster.recurrent_routes import ClusterRoutingDelegate
-from emperor.neuron._cluster.state import _NeuronClusterForwardContext
+from emperor.neuron._cluster.routing.delegate import ClusterRoutingDelegate
+from emperor.neuron._cluster.routing.state import _NeuronClusterForwardContext
 from emperor.neuron._cluster.topology import ClusterTopologyDelegate
 
 _SYNC_BATCH_COUNTERS = (
