@@ -37,6 +37,7 @@ from emperor.layers import (
 )
 from emperor.linears import LinearLayerConfig
 from emperor.sampler import RouterConfig, SamplerConfig
+from support.adaptive_grouping import grouping_value
 
 
 def _linear_stack(
@@ -59,7 +60,7 @@ def _linear_stack(
                         num_layers=1,
                     ),
                 ),
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
             ),
         )
     return LayerStackConfig(
@@ -604,8 +605,9 @@ class ContextualConfigurationTests(unittest.TestCase):
             ).build()
 
         grouped_augmentation = AdaptiveParameterAugmentationConfig(
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.ROWS,
-            group_count=1,
+            grouping_config=grouping_value(
+                AdaptiveParameterGroupingScopeOptions.ROWS, 1, input_order="BATCH_FIRST"
+            ),
         )
         grouped_layer = replace(
             base.byte_moe_config.expert_model_config.layer_config.layer_model_config,
@@ -710,12 +712,13 @@ class ContextualConfigurationTests(unittest.TestCase):
         layer = stack.layer_config
         adaptive_linear = layer.layer_model_config
         disabled_empty_augmentation = AdaptiveParameterAugmentationConfig(
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=None,
         )
         grouped_augmentation = replace(
             adaptive_linear.adaptive_augmentation_config,
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.ROWS,
-            group_count=1,
+            grouping_config=grouping_value(
+                AdaptiveParameterGroupingScopeOptions.ROWS, 1
+            ),
         )
         invalid_stacks = (
             (
@@ -794,8 +797,7 @@ class ContextualConfigurationTests(unittest.TestCase):
                     ),
                 ),
                 ValueError,
-                "byte_moe_config.expert adaptive grouping must be "
-                "AdaptiveParameterGroupingScopeOptions.DISABLED",
+                "byte_moe_config.expert adaptive grouping must be absent (grouping_config=None)",
             ),
             (
                 replace(
@@ -866,9 +868,7 @@ class ContextualConfigurationTests(unittest.TestCase):
                                 base_linear,
                                 adaptive_augmentation_config=(
                                     AdaptiveParameterAugmentationConfig(
-                                        grouping_scope=(
-                                            AdaptiveParameterGroupingScopeOptions.DISABLED
-                                        ),
+                                        grouping_config=None,
                                     )
                                 ),
                             ),
