@@ -9,6 +9,8 @@ from emperor.augmentations.adaptive_parameters import (
     DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
+    GroupingConfig,
+    LowRankFactorSourceOptions,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
@@ -97,6 +99,23 @@ class GeneratorStackOptions:
 
 
 @dataclass(frozen=True, slots=True)
+class AdaptiveGenerationOptions:
+    weight_input_factor_source: LowRankFactorSourceOptions | None = None
+    weight_output_factor_source: LowRankFactorSourceOptions | None = None
+    weight_mixture_num_experts: int | None = None
+    bias_mixture_num_experts: int | None = None
+    weight_mixture_top_k: int | None = None
+    bias_mixture_top_k: int | None = None
+    weight_mixture_normalize_probabilities_flag: bool | None = None
+    bias_mixture_normalize_probabilities_flag: bool | None = None
+    weight_input_factor_generator_stack: GeneratorStackOptions | None = None
+    weight_output_factor_generator_stack: GeneratorStackOptions | None = None
+    weight_coefficient_generator_stack: GeneratorStackOptions | None = None
+    weight_mixture_router_generator_stack: GeneratorStackOptions | None = None
+    bias_mixture_router_generator_stack: GeneratorStackOptions | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class AdaptiveWeightOptions:
     enabled: bool
     option: type[DynamicWeightConfig] | None
@@ -142,6 +161,10 @@ class AdaptiveMaskOptions:
 
 @dataclass(frozen=True, slots=True)
 class AdaptiveProjectionOptions:
+    grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
+    generation: AdaptiveGenerationOptions = field(
+        default_factory=AdaptiveGenerationOptions, kw_only=True
+    )
     weight_option: type[DynamicWeightConfig] | None
     generator_depth: DynamicDepthOptions
     weight_decay_schedule: WeightDecayScheduleOptions
@@ -166,6 +189,10 @@ class AdaptiveProjectionOptions:
 
 @dataclass(frozen=True, slots=True)
 class RuntimeOptions:
+    grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
+    generation: AdaptiveGenerationOptions = field(
+        default_factory=AdaptiveGenerationOptions, kw_only=True
+    )
     batch_size: int
     learning_rate: float
     input_dim: int
