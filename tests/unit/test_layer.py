@@ -137,8 +137,6 @@ class TestLayer(unittest.TestCase):
             "LayerStack",
             "MirroredLayerStack",
             "RecurrentLayer",
-            "RowLayout",
-            "RowLayoutAwareModule",
             "LayerControllerMonitorCallback",
             "RecurrentLayerMonitorCallback",
         }
@@ -801,7 +799,7 @@ class TestLayer(unittest.TestCase):
 
         self.assertEqual(
             [field.name for field in state_fields],
-            ["hidden", "loss", "halting_state", "residual_state", "row_layout"],
+            ["hidden", "loss", "halting_state", "residual_state"],
         )
         self.assertTrue(state_fields[-1].kw_only)
 

@@ -11,7 +11,6 @@ from emperor.nn import Module
 
 if TYPE_CHECKING:
     from emperor.layers._config import GateConfig, LayerConfig
-    from emperor.layers._row_layout import RowLayout
     from emperor.layers._state import LayerState
 
 
@@ -56,7 +55,7 @@ class LayerPostprocessingDelegate(Module):
 
     def process(self, state: LayerState) -> LayerState:
         hidden = self.__maybe_apply_activation(state.hidden)
-        hidden = self.__maybe_apply_gate(hidden, row_layout=state.row_layout)
+        hidden = self.__maybe_apply_gate(hidden)
         hidden = self.__maybe_apply_dropout(hidden)
         state.hidden = hidden
         return state
@@ -69,10 +68,9 @@ class LayerPostprocessingDelegate(Module):
     def __maybe_apply_gate(
         self,
         hidden: Tensor,
-        row_layout: RowLayout | None,
     ) -> Tensor:
         if self.gate is not None:
-            return self.gate(hidden, row_layout=row_layout)
+            return self.gate(hidden)
         return hidden
 
     def __maybe_apply_dropout(self, hidden: Tensor) -> Tensor:
