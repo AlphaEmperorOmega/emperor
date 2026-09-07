@@ -23,6 +23,7 @@ from models.experts.linear_adaptive._control_defaults import (
     ControlDefaultValues,
     resolve_control_defaults,
 )
+from models.experts.linear_adaptive._grouping import GroupingDefaultValues
 from models.experts.linear_adaptive.runtime_options import (
     ExpertsMixtureOptions,
     ExpertsSamplerOptions,
@@ -126,6 +127,7 @@ class CoreDefaultValues:
 
 @dataclass(frozen=True, kw_only=True)
 class _RuntimeDefaultValues(
+    GroupingDefaultValues,
     ControlDefaultValues,
     AdaptiveDefaultValues,
     CoreDefaultValues,
