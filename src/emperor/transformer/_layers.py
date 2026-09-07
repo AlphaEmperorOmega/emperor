@@ -8,7 +8,6 @@ from emperor.layers import (
     Layer,
     LayerConfig,
     LayerState,
-    RowLayout,
 )
 from emperor.nn import Module
 from emperor.transformer._state import TransformerDecoderLayerState
@@ -107,7 +106,6 @@ class _FeedForwardLayer(_TransformerSubLayer):
     ) -> LayerState:
         output, loss = self.model(
             state.hidden,
-            row_layout=state.row_layout,
         )
         self._accumulate_model_loss(state, loss)
         state.hidden = output
@@ -132,91 +130,6 @@ def _sub_layer_config(
         memory_config=None,
         layer_model_config=model_config,
     )
-
-
-def _transformer_row_layout(
-    hidden: Tensor,
-    key_padding_mask: Tensor | None,
-    attention_mask: Tensor | None,
-    attention_model,
-    *,
-    additional_context_sharing_restriction: bool = False,
-) -> RowLayout:
-    input_is_batched = hidden.dim() == 3
-    input_is_batch_first = False
-    if input_is_batched:
-        batch_first_flag = getattr(attention_model, "batch_first_flag", None)
-        if batch_first_flag is None:
-            configured_batch_size = getattr(attention_model, "batch_size", None)
-            input_is_batch_first = hidden.size(1) != configured_batch_size
-        else:
-            input_is_batch_first = batch_first_flag
-
-    if not input_is_batched:
-        sequence_length = hidden.size(0)
-        batch_size = 1
-        leading_shape = (sequence_length, batch_size)
-        batch_axis = 1
-        sequence_axis = 0
-    elif input_is_batch_first:
-        batch_size, sequence_length = hidden.shape[:2]
-        leading_shape = (batch_size, sequence_length)
-        batch_axis = 0
-        sequence_axis = 1
-    else:
-        sequence_length, batch_size = hidden.shape[:2]
-        leading_shape = (sequence_length, batch_size)
-        batch_axis = 1
-        sequence_axis = 0
-
-    valid_rows = _flatten_transformer_valid_rows(
-        key_padding_mask,
-        input_is_batched=input_is_batched,
-        input_is_batch_first=input_is_batch_first,
-    )
-    if valid_rows is not None:
-        valid_rows = valid_rows.to(device=hidden.device)
-    context_sharing_restricted = (
-        _attention_restricts_context_sharing(attention_mask, attention_model)
-        or additional_context_sharing_restriction
-    )
-    return RowLayout.sequence(
-        leading_shape=leading_shape,
-        batch_axis=batch_axis,
-        sequence_axis=sequence_axis,
-        valid_rows=valid_rows,
-        context_sharing_restricted=context_sharing_restricted,
-    )
-
-
-def _attention_restricts_context_sharing(
-    attention_mask: Tensor | None,
-    attention_model,
-) -> bool:
-    if attention_model is None:
-        return False
-    return attention_mask is not None or bool(
-        getattr(attention_model, "causal_attention_mask_flag", False)
-    )
-
-
-def _flatten_transformer_valid_rows(
-    key_padding_mask: Tensor | None,
-    *,
-    input_is_batched: bool,
-    input_is_batch_first: bool,
-) -> Tensor | None:
-    if key_padding_mask is None:
-        return None
-    if key_padding_mask.is_floating_point():
-        valid_batch_major_rows = ~key_padding_mask.isneginf()
-    else:
-        valid_batch_major_rows = key_padding_mask == 0
-    if not input_is_batched:
-        return valid_batch_major_rows.reshape(-1)
-    if input_is_batch_first:
-        return valid_batch_major_rows.reshape(-1)
-    return valid_batch_major_rows.transpose(0, 1).reshape(-1)
 
 
 class TransformerEncoderLayer(Module):
@@ -272,16 +185,13 @@ class TransformerEncoderLayer(Module):
             source_token_embeddings,
             source_key_padding_mask,
         )
+        self.VALIDATOR.validate_grouped_consumers(
+            self, source_token_embeddings, source_key_padding_mask, attention_mask
+        )
         state = AttentionLayerState(
             hidden=source_token_embeddings,
             key_padding_mask=source_key_padding_mask,
             attention_mask=attention_mask,
-            row_layout=_transformer_row_layout(
-                source_token_embeddings,
-                source_key_padding_mask,
-                attention_mask,
-                self.self_attention_model,
-            ),
         )
         state = self.self_attention_layer(state)
         state = self.feed_forward_layer(state)
@@ -416,6 +326,15 @@ class TransformerDecoderLayer(Module):
             encoder_output,
             key_padding_mask,
         )
+        self.VALIDATOR.validate_grouped_consumers(
+            self,
+            target_token_embeddings,
+            key_padding_mask,
+            attention_mask,
+            encoder_attention_mask,
+            encoder_output=encoder_output,
+            encoder_padding_mask=encoder_padding_mask,
+        )
         state = TransformerDecoderLayerState(
             hidden=target_token_embeddings,
             target_key_padding_mask=key_padding_mask,
@@ -423,18 +342,6 @@ class TransformerDecoderLayer(Module):
             encoder_output=encoder_output,
             encoder_padding_mask=encoder_padding_mask,
             cross_attention_mask=encoder_attention_mask,
-            row_layout=_transformer_row_layout(
-                target_token_embeddings,
-                key_padding_mask,
-                attention_mask,
-                self.self_attention_model,
-                additional_context_sharing_restriction=(
-                    _attention_restricts_context_sharing(
-                        encoder_attention_mask,
-                        self.cross_attention_model,
-                    )
-                ),
-            ),
         )
         state = self.self_attention_layer(state)
         if self.cross_attention_layer is not None:

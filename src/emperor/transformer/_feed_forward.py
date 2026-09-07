@@ -16,7 +16,6 @@ from emperor.transformer._validation import FeedForwardValidator
 
 if TYPE_CHECKING:
     from emperor.experts import MixtureOfExpertsModelConfig
-    from emperor.layers import RowLayout
 
 
 @dataclass
@@ -109,16 +108,13 @@ class FeedForward(Module):
     def forward(
         self,
         input_batch: Tensor,
-        *,
-        row_layout: "RowLayout | None" = None,
     ) -> tuple[Tensor, Tensor]:
+        self.VALIDATOR.validate_forward_inputs(self, input_batch)
         original_shape = input_batch.shape
         flattened_input = input_batch.reshape(-1, self.input_dim)
-        self.VALIDATOR.validate_forward_inputs(flattened_input, row_layout)
         feed_forward_state = Layer.run_model_from_hidden(
             self.model,
             flattened_input,
-            row_layout=row_layout,
         )
         output = feed_forward_state.hidden.view(*original_shape[:-1], self.output_dim)
         loss = (
