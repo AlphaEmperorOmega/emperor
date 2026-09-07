@@ -3,7 +3,7 @@ from __future__ import annotations
 from math import isfinite
 from typing import TYPE_CHECKING, TypeGuard
 
-from emperor._validation import ValidatorBase
+from emperor._validation import ValidatorBase, _validate_grouped_row_preservation
 from emperor.config import ConfigBase
 from emperor.layers._composition.gate.validation import LayerGateValidator
 from emperor.layers._composition.residual.validation import (
@@ -249,6 +249,7 @@ class LayerValidator(ValidatorBase):
         cls._validate_residual_with_strided_model(cfg)
         cls._validate_halting_config(cfg.halting_config)
         cls._validate_memory_config(cfg.memory_config)
+        _validate_grouped_row_preservation(cfg, root=type(cfg).__name__)
         cls._validate_halting_dimensions(
             cfg.input_dim, cfg.output_dim, cfg.halting_config
         )
