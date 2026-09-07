@@ -25,6 +25,7 @@ from emperor.parametric._handlers import (
 )
 from emperor.sampler import RouterConfig
 from unit.test_parametric_behavioral_contracts import (
+    _bank_kwargs,
     _generator_config,
     _mixture_kwargs,
     _parametric_config,
@@ -179,7 +180,7 @@ class ParametricHandlerMutationContractTests(unittest.TestCase):
     ) -> None:
         parametric_config = _parametric_config(
             weight_config=MatrixWeightsMixtureConfig(
-                **_mixture_kwargs(top_k=2, num_experts=3)
+                **_bank_kwargs(top_k=2, num_experts=3)
             ),
             top_k=2,
             num_experts=3,
@@ -247,7 +248,7 @@ class ParametricHandlerMutationContractTests(unittest.TestCase):
                     **_mixture_kwargs(top_k=2, num_experts=2)
                 ),
                 bias_config=MatrixBiasMixtureConfig(
-                    **_mixture_kwargs(top_k=2, num_experts=2)
+                    **_bank_kwargs(top_k=2, num_experts=2)
                 ),
                 routing_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
             )
@@ -301,7 +302,7 @@ class ParametricHandlerMutationContractTests(unittest.TestCase):
                     generator_config=_owned_linear_generator_config(),
                 ),
                 bias_config=MatrixBiasMixtureConfig(
-                    **_mixture_kwargs(top_k=1, num_experts=2)
+                    **_bank_kwargs(top_k=1, num_experts=2)
                 ),
                 routing_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
                 top_k=1,
