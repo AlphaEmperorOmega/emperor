@@ -4,9 +4,9 @@ from emperor.attention import MixerAttentionConfig
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
     AxisMaskConfig,
     DiagonalAxisMaskConfig,
+    DiagonallyModulatedLowRankDynamicWeightConfig,
     DualModelDynamicWeightConfig,
     DynamicBiasConfig,
     DynamicDiagonalConfig,
@@ -14,6 +14,8 @@ from emperor.augmentations.adaptive_parameters import (
     HypernetworkDynamicWeightConfig,
     LayeredWeightedBankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
+    MatrixBiasMixtureConfig,
+    MatrixWeightsMixtureConfig,
     PerAxisScoreMaskConfig,
     SingleModelDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
@@ -67,6 +69,7 @@ from ._control_options import (
     submodule_stack_options,
     token_mixer_control_options,
 )
+from ._grouping import grouping_from_runtime
 from ._residual import (
     ResidualStackSource,
     build_residual_config,
@@ -130,6 +133,14 @@ _WEIGHT_OPTION_FIELDS: dict[type[DynamicWeightConfig], tuple[str, ...]] = {
         "normalization_position_option",
     ),
     LowRankDynamicWeightConfig: ("normalization_option",),
+    DiagonallyModulatedLowRankDynamicWeightConfig: (
+        "normalization_option",
+        "input_factor_source",
+        "output_factor_source",
+        "input_factor_model_config",
+        "output_factor_model_config",
+        "coefficient_model_config",
+    ),
     HypernetworkDynamicWeightConfig: ("normalization_option",),
     LayeredWeightedBankDynamicWeightConfig: ("bank_expansion_factor",),
     SoftWeightedBankDynamicWeightConfig: ("bank_expansion_factor",),
@@ -200,6 +211,48 @@ def _selected_kwargs(
     return {name: optional_kwargs[name] for name in field_table.get(option, ())}
 
 
+def _component_generator_stack(runtime, prefix, defaults):
+    source = GeneratorStackSource(
+        **{
+            name: getattr(runtime, prefix + "_" + name)
+            for name in GeneratorStackSource.__dataclass_fields__
+        }
+    )
+    return _independent_generator_stack(runtime, source, defaults)
+
+
+def _mixture_generation_fields(runtime, family, defaults):
+    router_model_config = _component_generator_stack(
+        runtime, family + "_mixture_router_generator_stack", defaults
+    )
+    return {
+        "num_experts": getattr(runtime, family + "_mixture_num_experts"),
+        "top_k": getattr(runtime, family + "_mixture_top_k"),
+        "sampler_config": SamplerConfig(
+            normalize_probabilities_flag=getattr(
+                runtime, family + "_mixture_normalize_probabilities_flag"
+            ),
+            router_config=RouterConfig(model_config=router_model_config),
+        ),
+    }
+
+
+def _factor_generation_fields(runtime, defaults):
+    return {
+        "input_factor_source": runtime.weight_input_factor_source,
+        "output_factor_source": runtime.weight_output_factor_source,
+        "input_factor_model_config": _component_generator_stack(
+            runtime, "weight_input_factor_generator_stack", defaults
+        ),
+        "output_factor_model_config": _component_generator_stack(
+            runtime, "weight_output_factor_generator_stack", defaults
+        ),
+        "coefficient_model_config": _component_generator_stack(
+            runtime, "weight_coefficient_generator_stack", defaults
+        ),
+    }
+
+
 def _weight_config(
     runtime: RuntimeOptions,
     options: WeightOptions,
@@ -221,11 +274,21 @@ def _weight_config(
             generator_defaults,
         ),
     }
+    if option is MatrixWeightsMixtureConfig:
+        kwargs.pop("generator_depth")
+        return option(
+            **kwargs,
+            **_mixture_generation_fields(runtime, "weight", generator_defaults),
+        )
     optional_kwargs = {
         "normalization_option": options.normalization_option,
         "normalization_position_option": options.normalization_position_option,
         "bank_expansion_factor": options.bank_expansion_factor,
     }
+    factor_defaults = (
+        options.generator_stack.resolve(generator_defaults) or generator_defaults
+    )
+    optional_kwargs.update(_factor_generation_fields(runtime, factor_defaults))
     kwargs.update(_selected_kwargs(_WEIGHT_OPTION_FIELDS, option, optional_kwargs))
     return option(**kwargs)
 
@@ -250,6 +313,10 @@ def _bias_config(
             generator_defaults,
         ),
     }
+    if option is MatrixBiasMixtureConfig:
+        return option(
+            **kwargs, **_mixture_generation_fields(runtime, "bias", generator_defaults)
+        )
     optional_kwargs = {
         "bank_expansion_factor": options.bank_expansion_factor,
     }
@@ -310,13 +377,14 @@ def _backend_linear_config(
     runtime: RuntimeOptions,
     *,
     bias_flag: bool,
+    grouping_prefix: str = "",
 ):
     options = adaptive_options(runtime)
     bias_config = _bias_config(runtime, options.bias, options.generator_stack)
     return AdaptiveLinearLayerConfig(
         bias_flag=bias_flag or bias_config is not None,
         adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=grouping_from_runtime(runtime, grouping_prefix),
             diagonal_config=_diagonal_config(
                 runtime,
                 options.diagonal,
@@ -351,6 +419,7 @@ def _affine_stack(
     bias_flag: bool,
     mirrored: bool = False,
     backend: bool = True,
+    grouping_prefix: str = "",
     control_options: ControlOptions | None = None,
     control_name: str | None = None,
 ):
@@ -364,7 +433,9 @@ def _affine_stack(
             )
         stack_depth = num_layers // 2
     linear_config = (
-        _backend_linear_config(runtime, bias_flag=bias_flag)
+        _backend_linear_config(
+            runtime, bias_flag=bias_flag, grouping_prefix=grouping_prefix
+        )
         if backend
         else _plain_linear_config(bias_flag=bias_flag)
     )
@@ -494,9 +565,11 @@ def _sampler_config(runtime: RuntimeOptions) -> SamplerConfig:
 
 def _expert_stack(
     runtime: RuntimeOptions,
+    grouping_prefix: str = "",
 ) -> LayerStackConfig | RecurrentLayerConfig:
     stack = _affine_stack(
         runtime,
+        grouping_prefix=grouping_prefix,
         input_dim=None,
         hidden_dim=runtime.expert_stack_hidden_dim,
         output_dim=None,
@@ -542,6 +615,7 @@ def _expert_stack(
 def _mixture_model_config(
     runtime: RuntimeOptions,
     *,
+    grouping_prefix: str = "",
     input_dim: int,
     hidden_dim: int,
     output_dim: int,
@@ -581,7 +655,7 @@ def _mixture_model_config(
         weighting_position_option=runtime.weighting_position_option,
         routing_initialization_mode=runtime.routing_initialization_mode,
         sampler_config=layer_sampler_config,
-        expert_model_config=_expert_stack(runtime),
+        expert_model_config=_expert_stack(runtime, grouping_prefix),
     )
     stack_type = MirroredLayerStackConfig if mirrored else LayerStackConfig
     stack_depth = num_layers
@@ -675,6 +749,7 @@ def _token_mixing_model(runtime: RuntimeOptions, tokens: int):
 def _channel_mixing_model(runtime: RuntimeOptions):
     return _mixture_model_config(
         runtime,
+        grouping_prefix="channel_mixer_",
         input_dim=runtime.hidden_dim,
         hidden_dim=runtime.channel_mixer_stack_hidden_dim,
         output_dim=runtime.hidden_dim,
