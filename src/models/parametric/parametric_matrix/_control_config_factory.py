@@ -66,8 +66,6 @@ def build_parametric_stack_config(
         top_k=mixture_options.top_k,
         num_experts=mixture_options.num_experts,
         weighted_parameters_flag=mixture_options.weighted_parameters_flag,
-        clip_parameter_option=mixture_options.clip_parameter_option,
-        clip_range=mixture_options.clip_range,
     )
     bias_mixture_config = build_matrix_bias_config(
         adaptive_bias_option,
@@ -76,8 +74,6 @@ def build_parametric_stack_config(
         top_k=mixture_options.top_k,
         num_experts=mixture_options.num_experts,
         weighted_parameters_flag=mixture_options.weighted_parameters_flag,
-        clip_parameter_option=mixture_options.clip_parameter_option,
-        clip_range=mixture_options.clip_range,
     )
     parametric_layer_config = ParametricLayerConfig(
         input_dim=input_dim,

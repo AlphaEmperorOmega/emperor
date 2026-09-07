@@ -8,7 +8,7 @@ from emperor.layers import (
     WeightedBlendResidualConfig,  # noqa: F401
     WeightedResidualConfig,  # noqa: F401
 )
-from emperor.parametric import ClipParameterOptions, MatrixBiasMixtureConfig
+from emperor.parametric import MatrixBiasMixtureConfig
 from model_runtime.packages.runtime_values import positive_runtime_fields
 
 # Trainer
@@ -88,10 +88,6 @@ RESIDUAL_STACK_BIAS_FLAG: bool | None = None
 ADAPTIVE_MIXTURE_TOP_K: int = 1
 ADAPTIVE_MIXTURE_NUM_EXPERTS: int = 2
 ADAPTIVE_MIXTURE_WEIGHTED_PARAMETERS_FLAG: bool = False
-ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION: ClipParameterOptions = (
-    ClipParameterOptions.DISABLED
-)
-ADAPTIVE_MIXTURE_CLIP_RANGE: float = 5.0
 ADAPTIVE_BIAS_OPTION: type[MatrixBiasMixtureConfig] | None = None
 
 # Sampler Model Options

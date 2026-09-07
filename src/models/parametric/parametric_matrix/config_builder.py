@@ -7,7 +7,7 @@ from emperor.layers import (
     ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
-from emperor.parametric import ClipParameterOptions, MatrixBiasMixtureConfig
+from emperor.parametric import MatrixBiasMixtureConfig
 from models.parametric.parametric_matrix import config
 from models.parametric.parametric_matrix._control_config_factory import (
     build_parametric_stack_config,
@@ -74,10 +74,6 @@ class _ParametricMatrixConfigBuilderImplementation:
         adaptive_mixture_weighted_parameters_flag: bool = (
             config.ADAPTIVE_MIXTURE_WEIGHTED_PARAMETERS_FLAG
         ),
-        adaptive_mixture_clip_parameter_option: ClipParameterOptions = (
-            config.ADAPTIVE_MIXTURE_CLIP_PARAMETER_OPTION
-        ),
-        adaptive_mixture_clip_range: float = config.ADAPTIVE_MIXTURE_CLIP_RANGE,
         adaptive_bias_option: type[MatrixBiasMixtureConfig] | None = (
             config.ADAPTIVE_BIAS_OPTION
         ),
@@ -139,8 +135,6 @@ class _ParametricMatrixConfigBuilderImplementation:
             top_k=adaptive_mixture_top_k,
             num_experts=adaptive_mixture_num_experts,
             weighted_parameters_flag=adaptive_mixture_weighted_parameters_flag,
-            clip_parameter_option=adaptive_mixture_clip_parameter_option,
-            clip_range=adaptive_mixture_clip_range,
         )
         sampler_options = sampler_options or ParametricSamplerOptions(
             threshold=sampler_threshold,
@@ -176,10 +170,6 @@ class _ParametricMatrixConfigBuilderImplementation:
         self.adaptive_mixture_weighted_parameters_flag = (
             mixture_options.weighted_parameters_flag
         )
-        self.adaptive_mixture_clip_parameter_option = (
-            mixture_options.clip_parameter_option
-        )
-        self.adaptive_mixture_clip_range = mixture_options.clip_range
         self.adaptive_bias_option = adaptive_bias_option
         self.sampler_options = sampler_options
         self.sampler_threshold = sampler_options.threshold
