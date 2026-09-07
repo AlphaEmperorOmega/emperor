@@ -31,10 +31,8 @@ from emperor.layers._options import (
     LayerGateOptions,
     LayerNormPositionOptions,
 )
-from emperor.layers._row_layout import RowLayout
 from emperor.layers._stack import LayerStack, MirroredLayerStack
 from emperor.layers._state import LayerState
-from emperor.layers._support import RowLayoutAwareModule
 
 __all__ = (
     "ActivationOptions",
@@ -59,8 +57,6 @@ __all__ = (
     "LayerStack",
     "MirroredLayerStack",
     "RecurrentLayer",
-    "RowLayout",
-    "RowLayoutAwareModule",
     "LayerControllerMonitorCallback",
     "RecurrentLayerMonitorCallback",
 )

@@ -57,8 +57,6 @@ class LayerMemoryDelegate(Module):
     ) -> LayerState:
         if self.model is None:
             return state
-        if state.row_layout is not None:
-            state.row_layout = state.row_layout.with_context_sharing_restricted()
         if self.model.memory_position_option != position:
             return state
         state.hidden = self.model(state.hidden)
