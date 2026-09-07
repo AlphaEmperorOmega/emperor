@@ -4,7 +4,6 @@ import torch
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.layers import (
     ActivationOptions,
@@ -16,7 +15,6 @@ from emperor.layers import (
 from emperor.linears import LinearLayerConfig
 from emperor.parametric import (
     AdaptiveRouterOptions,
-    ClipParameterOptions,
     MatrixBiasMixtureConfig,
     MatrixWeightsMixtureConfig,
     ParametricLayer,
@@ -109,8 +107,6 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
             top_k=top_k,
             num_experts=num_experts,
             weighted_parameters_flag=True,
-            clip_parameter_option=ClipParameterOptions.DISABLED,
-            clip_range=1.0,
         )
         router_config = RouterConfig(
             input_dim=input_dim,
@@ -145,7 +141,7 @@ class TestParametricLayerMonitorCallback(unittest.TestCase):
             adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
                 weight_config=None,
                 bias_config=None,
                 diagonal_config=None,
