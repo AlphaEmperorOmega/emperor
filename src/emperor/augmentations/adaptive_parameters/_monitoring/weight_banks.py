@@ -90,9 +90,7 @@ class _WeightBankDiagnostics:
         if include_per_slot_scalars:
             scalar_facts.extend(
                 _WeightBankMetric(f"slot_{slot_index}/utilization", utilization)
-                for slot_index, utilization in enumerate(
-                    metrics.per_slot_utilization
-                )
+                for slot_index, utilization in enumerate(metrics.per_slot_utilization)
             )
         return _WeightBankDiagnosticFacts(
             scalars=tuple(scalar_facts),
@@ -108,13 +106,23 @@ class _WeightBankDiagnostics:
             WeightedBankDynamicBias,
         )
 
+        from .._biases.variants.matrix_mixture import MatrixBiasMixture
         from .._weights.variants.layered_weighted_bank import (
             LayeredWeightedBankDynamicWeight,
         )
+        from .._weights.variants.matrix_mixture import MatrixWeightsMixture
         from .._weights.variants.soft_weighted_bank import (
             SoftWeightedBankDynamicWeight,
         )
 
+        if isinstance(bank_module, (MatrixWeightsMixture, MatrixBiasMixture)):
+            # The observation already contains the selected probability mass.
+            return _BankDistributionSummary(
+                per_slot_utilization=bank_logits.mean(dim=0),
+                mean_per_sample_entropy=self.__distribution_entropy(
+                    bank_logits, -1
+                ).mean(),
+            )
         if isinstance(bank_module, SoftWeightedBankDynamicWeight):
             return self.__summarize_soft_weighted_bank(bank_module, bank_logits)
         if isinstance(bank_module, LayeredWeightedBankDynamicWeight):
@@ -233,6 +241,7 @@ class WeightBankUtilizationMonitorCallback(Callback):
         self.history_size = history_size
         self.log_per_slot_scalars = log_per_slot_scalars
         self._hooks: list[RemovableHandle] = []
+        self._method_restorers: list[Callable[[], None]] = []
         self._bank_modules: list[tuple[str, Module]] = []
         self._utilization_history: dict[str, MonitorTensorHistory] = {}
         self._last_bank_logits: dict[str, Tensor] = {}
@@ -253,6 +262,19 @@ class WeightBankUtilizationMonitorCallback(Callback):
             self._utilization_history[module_name] = MonitorTensorHistory(
                 self.history_size
             )
+            from .._biases.variants.matrix_mixture import MatrixBiasMixture
+            from .._weights.variants.matrix_mixture import MatrixWeightsMixture
+
+            if isinstance(bank_module, (MatrixWeightsMixture, MatrixBiasMixture)):
+                reduction_method = (
+                    "_MatrixWeightsMixture__reduce_mixture"
+                    if isinstance(bank_module, MatrixWeightsMixture)
+                    else "_MatrixBiasMixture__reduce_mixture"
+                )
+                self.__wrap_mixture_reduction(
+                    module_name, bank_module, reduction_method
+                )
+                continue
             generator_model = bank_module.model
             self._hooks.append(
                 generator_model.register_forward_hook(
@@ -266,9 +288,11 @@ class WeightBankUtilizationMonitorCallback(Callback):
             WeightedBankDynamicBias,
         )
 
+        from .._biases.variants.matrix_mixture import MatrixBiasMixture
         from .._weights.variants.layered_weighted_bank import (
             LayeredWeightedBankDynamicWeight,
         )
+        from .._weights.variants.matrix_mixture import MatrixWeightsMixture
         from .._weights.variants.soft_weighted_bank import (
             SoftWeightedBankDynamicWeight,
         )
@@ -276,11 +300,56 @@ class WeightBankUtilizationMonitorCallback(Callback):
         return isinstance(
             module,
             (
+                MatrixWeightsMixture,
+                MatrixBiasMixture,
                 LayeredWeightedBankDynamicWeight,
                 SoftWeightedBankDynamicWeight,
                 WeightedBankDynamicBias,
             ),
         )
+
+    def __wrap_mixture_reduction(
+        self, module_name: str, bank_module: Module, method_name: str
+    ) -> None:
+        original_method = getattr(bank_module, method_name)
+        had_instance_override = method_name in vars(bank_module)
+
+        def monitored_reduction(probabilities, indices):
+            output = original_method(probabilities, indices)
+            self.__capture_selected_route(
+                module_name, bank_module, probabilities, indices
+            )
+            return output
+
+        def restore_method() -> None:
+            if had_instance_override:
+                setattr(bank_module, method_name, original_method)
+            else:
+                delattr(bank_module, method_name)
+
+        setattr(bank_module, method_name, monitored_reduction)
+        self._method_restorers.append(restore_method)
+
+    def __capture_selected_route(
+        self,
+        module_name: str,
+        bank_module: Module,
+        probabilities: Tensor | None,
+        indices: Tensor | None,
+    ) -> None:
+        if probabilities is None:
+            return
+        coefficients = probabilities.detach().reshape(-1, bank_module.top_k)
+        if indices is None:
+            distribution = coefficients
+        else:
+            distribution = coefficients.new_zeros(
+                (coefficients.shape[0], bank_module.parameter_bank.size(0))
+            )
+            distribution.scatter_add_(
+                1, indices.detach().reshape_as(coefficients), coefficients
+            )
+        self._last_bank_logits[module_name] = distribution
 
     def __make_bank_logits_capture_hook(
         self,
@@ -379,6 +448,9 @@ class WeightBankUtilizationMonitorCallback(Callback):
         for hook_handle in self._hooks:
             hook_handle.remove()
         self._hooks.clear()
+        for restore_method in reversed(self._method_restorers):
+            restore_method()
+        self._method_restorers.clear()
         self._bank_modules.clear()
         self._utilization_history.clear()
         self._last_bank_logits.clear()
