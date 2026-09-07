@@ -13,7 +13,6 @@ from emperor.layers import (
     HierarchicalReasoningModelRecurrentConfig,
     LayerNormPositionOptions,
     LayerState,
-    RowLayout,
     TinyRecursiveModelRecurrentConfig,
 )
 from emperor.layers._composition.recurrent.base import RecurrentCompositionAbstract
@@ -53,12 +52,10 @@ class _IncrementBlock(Module):
         self.scale = torch.nn.Parameter(torch.tensor(1.0))
         self.inputs: list[torch.Tensor] = []
         self.grad_modes: list[bool] = []
-        self.row_layouts: list[RowLayout | None] = []
 
     def forward(self, state: LayerState) -> LayerState:
         self.inputs.append(state.hidden.detach().clone())
         self.grad_modes.append(torch.is_grad_enabled())
-        self.row_layouts.append(state.row_layout)
         state.hidden = state.hidden * self.scale + self.cfg.increment
         if self.cfg.auxiliary_loss is not None:
             state.loss = state.hidden.new_tensor(self.cfg.auxiliary_loss)
@@ -531,7 +528,6 @@ class TestHierarchicalReasoningModelRecurrentValidation(unittest.TestCase):
         self,
     ) -> None:
         transition_input = torch.ones(2, 1)
-        row_layout = RowLayout.rows(2, context_sharing_restricted=False)
         cases = (
             (
                 object(),
@@ -539,36 +535,19 @@ class TestHierarchicalReasoningModelRecurrentValidation(unittest.TestCase):
                 "Hierarchical Reasoning Model transition block must return LayerState",
             ),
             (
-                LayerState(hidden=torch.ones(1, 1), row_layout=row_layout),
+                LayerState(hidden=torch.ones(1, 1)),
                 ValueError,
                 "Hierarchical Reasoning Model transition block must preserve hidden shape",
             ),
             (
-                LayerState(
-                    hidden=torch.ones(2, 1, dtype=torch.float64),
-                    row_layout=row_layout,
-                ),
+                LayerState(hidden=torch.ones(2, 1, dtype=torch.float64)),
                 ValueError,
                 "Hierarchical Reasoning Model transition block must preserve hidden dtype",
             ),
             (
-                LayerState(
-                    hidden=torch.empty(2, 1, device="meta"),
-                    row_layout=row_layout,
-                ),
+                LayerState(hidden=torch.empty(2, 1, device="meta")),
                 ValueError,
                 "Hierarchical Reasoning Model transition block must preserve hidden device",
-            ),
-            (
-                LayerState(
-                    hidden=torch.ones(2, 1),
-                    row_layout=RowLayout.rows(
-                        2,
-                        context_sharing_restricted=False,
-                    ),
-                ),
-                ValueError,
-                "Hierarchical Reasoning Model transition block must preserve the exact row_layout",
             ),
         )
 
@@ -578,7 +557,6 @@ class TestHierarchicalReasoningModelRecurrentValidation(unittest.TestCase):
                     HierarchicalReasoningModelRecurrentValidator.validate_transition_output(
                         output_state,
                         transition_input,
-                        row_layout,
                         expected_feature_dim=1,
                     )
 
@@ -1104,17 +1082,11 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             no_gradient_transition_count=0,
             halting_config=_RecordingHaltingConfig(halt_after_updates=2),
         ).build()
-        owner_layout = RowLayout.rows(1, context_sharing_restricted=False)
-        state = LayerState(hidden=torch.ones(1, 1), row_layout=owner_layout)
+        state = LayerState(hidden=torch.ones(1, 1))
 
         result = recurrent(state)
-
-        low_layout = recurrent.low_model.row_layouts[0]
-        high_layout = recurrent.high_model.row_layouts[0]
-        self.assertIsNot(low_layout, owner_layout)
-        self.assertIs(low_layout, high_layout)
-        self.assertTrue(low_layout.context_sharing_restricted)
-        self.assertIs(result.row_layout, owner_layout)
+        self.assertEqual(result.hidden.shape, (1, 1))
+        self.assertTrue(torch.isfinite(result.hidden).all())
 
     def test_memory_config_is_shared_by_both_clocks_and_receives_gradients(
         self,
@@ -1296,18 +1268,11 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             forward_calls_before_iteration_increment=1,
             initialization_standard_deviation=0.0,
         ).build()
-        row_layout = RowLayout.sequence(
-            leading_shape=(1, 2),
-            batch_axis=0,
-            sequence_axis=1,
-            context_sharing_restricted=False,
-        )
         key_padding_mask = torch.tensor([[False, True]])
         attention_mask = torch.zeros(2, 2)
         state = AttentionLayerState(
             hidden=torch.ones(1, 2, 1),
             loss=torch.tensor(5.0),
-            row_layout=row_layout,
             key_padding_mask=key_padding_mask,
             attention_mask=attention_mask,
         )
@@ -1316,16 +1281,9 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
 
         self.assertIs(output, state)
         self.assertIsInstance(output, AttentionLayerState)
-        self.assertIs(output.row_layout, row_layout)
         self.assertIs(output.key_padding_mask, key_padding_mask)
         self.assertIs(output.attention_mask, attention_mask)
         torch.testing.assert_close(output.loss, torch.tensor(21.0))
-        self.assertTrue(
-            all(layout is row_layout for layout in recurrent.high_model.row_layouts)
-        )
-        self.assertTrue(
-            all(layout is row_layout for layout in recurrent.low_model.row_layouts)
-        )
 
     def test_initial_states_and_transition_parameters_round_trip_directly(self) -> None:
         config = HierarchicalReasoningModelRecurrentConfig(
@@ -1524,7 +1482,6 @@ class TestHierarchicalReasoningModelRecurrentRuntime(unittest.TestCase):
             initial_loss=None,
             auxiliary_losses=(),
             context_state=LayerState(hidden=fixed_input),
-            row_layout=None,
             transition_index=2,
         )
 
