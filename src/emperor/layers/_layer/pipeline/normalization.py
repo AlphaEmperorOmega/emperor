@@ -47,22 +47,21 @@ class LayerNormalizationDelegate(Module):
         return output_dim
 
     def before_model(self, state: LayerState) -> LayerState:
-        module = self.module
-        if self.position != LayerNormPositionOptions.BEFORE or module is None:
-            return state
-        state.hidden = module(state.hidden)
-        return state
+        return self.__normalize_at_position(state, LayerNormPositionOptions.BEFORE)
 
     def after_model(self, state: LayerState) -> LayerState:
-        module = self.module
-        if self.position != LayerNormPositionOptions.DEFAULT or module is None:
-            return state
-        state.hidden = module(state.hidden)
-        return state
+        return self.__normalize_at_position(state, LayerNormPositionOptions.DEFAULT)
 
     def after_residual(self, state: LayerState) -> LayerState:
+        return self.__normalize_at_position(state, LayerNormPositionOptions.AFTER)
+
+    def __normalize_at_position(
+        self,
+        state: LayerState,
+        position: LayerNormPositionOptions,
+    ) -> LayerState:
         module = self.module
-        if self.position != LayerNormPositionOptions.AFTER or module is None:
+        if self.position != position or module is None:
             return state
         state.hidden = module(state.hidden)
         return state
