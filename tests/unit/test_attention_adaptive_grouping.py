@@ -1,20 +1,13 @@
 import unittest
 from dataclasses import replace
 
+import pytest
 import torch
-import torch.nn as nn
 
 from emperor.attention import (
     IndependentAttentionConfig,
     SelfAttentionConfig,
     SelfAttentionProjectionStrategy,
-)
-from emperor.attention._runtime import (
-    AttentionRuntimeLayout,
-    MultiHeadAttentionInputs,
-)
-from emperor.attention._variants.self_attention.projection import (
-    SelfAttentionProjector,
 )
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
@@ -28,6 +21,9 @@ from emperor.augmentations.adaptive_parameters import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveParameterInputOrderOptions as Order,
+)
 from emperor.augmentations.adaptive_parameters._linear_adapter import (
     AdaptiveLinearLayer,
 )
@@ -37,8 +33,8 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
-    RowLayout,
 )
+from support.adaptive_grouping import grouping_value
 from support.attention import build_attention_config, make_projection_model_config
 
 
@@ -59,8 +55,11 @@ def grouped_projection_model_config(group_count: int = 2) -> LayerStackConfig:
             layer_model_config=AdaptiveLinearLayerConfig(
                 bias_flag=True,
                 adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-                    group_count=group_count,
+                    grouping_config=grouping_value(
+                        AdaptiveParameterGroupingScopeOptions.SEQUENCE,
+                        group_count,
+                        input_order="SEQUENCE_FIRST",
+                    ),
                     bias_config=AdditiveDynamicBiasConfig(
                         decay_schedule=WeightDecayScheduleOptions.DISABLED,
                         decay_rate=0.0,
@@ -90,8 +89,11 @@ def grouped_weight_projection_model_config(group_count: int = 2) -> LayerStackCo
             layer_model_config=AdaptiveLinearLayerConfig(
                 bias_flag=False,
                 adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-                    group_count=group_count,
+                    grouping_config=grouping_value(
+                        AdaptiveParameterGroupingScopeOptions.SEQUENCE,
+                        group_count,
+                        input_order="SEQUENCE_FIRST",
+                    ),
                     weight_config=DualModelDynamicWeightConfig(
                         generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
                         decay_schedule=WeightDecayScheduleOptions.DISABLED,
@@ -128,155 +130,11 @@ def grouped_single_weight_projection_model_config(
     return config
 
 
-class ProjectionStateSpy(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        self.layouts = []
-
-    def forward(self, state):
-        self.layouts.append(state.row_layout)
-        return replace(state, hidden=state.hidden)
-
-
 def adaptive_leaf(projection_model):
     return projection_model[0].model
 
 
 class AttentionAdaptiveGroupingTests(unittest.TestCase):
-    def test_projector_extracts_layout_from_runtime_context_for_all_projections(self):
-        config = build_attention_config(
-            config_class=SelfAttentionConfig,
-            batch_size=2,
-            num_heads=2,
-            embedding_dim=4,
-            target_sequence_length=4,
-            source_sequence_length=4,
-            self_attention_projection_strategy=(
-                SelfAttentionProjectionStrategy.SEPARATE
-            ),
-        )
-        projector = SelfAttentionProjector(config)
-        query_spy = ProjectionStateSpy()
-        key_spy = ProjectionStateSpy()
-        value_spy = ProjectionStateSpy()
-        output_spy = ProjectionStateSpy()
-        projector.query_model = query_spy
-        projector.key_model = key_spy
-        projector.value_model = value_spy
-        projector.output_model = output_spy
-        layout = RowLayout.sequence(
-            leading_shape=(4, 2),
-            batch_axis=1,
-            sequence_axis=0,
-            context_sharing_restricted=False,
-        )
-        runtime_layout = AttentionRuntimeLayout(
-            batch_size=2,
-            target_sequence_length=4,
-            source_sequence_length=4,
-            row_layout=layout,
-        )
-        tensor = torch.randn(4, 2, 4)
-
-        projector.compute_qkv_projections(
-            MultiHeadAttentionInputs(
-                query=tensor,
-                key=tensor,
-                value=tensor,
-                runtime_layout=runtime_layout,
-            )
-        )
-        projector.compute_output_projection(tensor, runtime_layout=runtime_layout)
-
-        for spy in (query_spy, key_spy, value_spy, output_spy):
-            self.assertEqual(spy.layouts, [layout])
-
-    def test_self_attention_builds_sequence_major_layout_and_inverts_padding_mask(self):
-        config = build_attention_config(
-            config_class=SelfAttentionConfig,
-            batch_size=2,
-            num_heads=2,
-            embedding_dim=4,
-            target_sequence_length=4,
-            source_sequence_length=4,
-            self_attention_projection_strategy=(
-                SelfAttentionProjectionStrategy.SEPARATE
-            ),
-        )
-        config.batch_first_flag = True
-        model = config.build().eval()
-        spies = [ProjectionStateSpy() for _ in range(4)]
-        (
-            model.projector.query_model,
-            model.projector.key_model,
-            model.projector.value_model,
-            model.projector.output_model,
-        ) = spies
-        inputs = torch.randn(2, 4, 4)
-        padding_mask = torch.tensor(
-            [[False, False, True, True], [False, True, False, True]]
-        )
-
-        output, _weights, _loss = model(
-            inputs,
-            inputs,
-            inputs,
-            k_padding_mask=padding_mask,
-        )
-
-        self.assertEqual(tuple(output.shape), (2, 4, 4))
-        expected_valid_rows = torch.tensor(
-            [True, True, True, False, False, True, False, False]
-        )
-        for spy in spies:
-            self.assertEqual(len(spy.layouts), 1)
-            layout = spy.layouts[0]
-            self.assertEqual(layout.leading_shape, (4, 2))
-            self.assertEqual(layout.batch_axis, 1)
-            self.assertEqual(layout.sequence_axis, 0)
-            self.assertFalse(layout.context_sharing_restricted)
-            torch.testing.assert_close(layout.valid_rows, expected_valid_rows)
-
-    def test_float_padding_layout_excludes_only_hard_negative_infinity(self):
-        config = build_attention_config(
-            config_class=SelfAttentionConfig,
-            batch_size=1,
-            num_heads=2,
-            embedding_dim=4,
-            target_sequence_length=4,
-            source_sequence_length=4,
-            self_attention_projection_strategy=(
-                SelfAttentionProjectionStrategy.SEPARATE
-            ),
-        )
-        config.batch_first_flag = True
-        model = config.build().eval()
-        spies = [ProjectionStateSpy() for _ in range(4)]
-        (
-            model.projector.query_model,
-            model.projector.key_model,
-            model.projector.value_model,
-            model.projector.output_model,
-        ) = spies
-        inputs = torch.randn(1, 4, 4)
-        padding_mask = torch.tensor([[0.0, -0.25, -torch.inf, 0.0]])
-
-        output, _weights, _loss = model(
-            inputs,
-            inputs,
-            inputs,
-            k_padding_mask=padding_mask,
-        )
-
-        self.assertEqual(tuple(output.shape), (1, 4, 4))
-        expected_valid_rows = torch.tensor([True, True, False, True])
-        for spy in spies:
-            self.assertEqual(len(spy.layouts), 1)
-            torch.testing.assert_close(
-                spy.layouts[0].valid_rows,
-                expected_valid_rows,
-            )
-
     def test_grouped_self_attention_generates_batch_times_group_count_contexts(self):
         config = build_attention_config(
             config_class=SelfAttentionConfig,
@@ -364,7 +222,10 @@ class AttentionAdaptiveGroupingTests(unittest.TestCase):
                     ).adaptive_behaviour.bias_model
                     hooks.append(
                         bias_model.register_forward_hook(
-                            lambda _module, args, _output, generated_context_shapes=generated_context_shapes: (
+                            lambda _module,
+                            args,
+                            _output,
+                            generated_context_shapes=generated_context_shapes: (
                                 generated_context_shapes.append(tuple(args[1].shape))
                             )
                         )
@@ -386,75 +247,6 @@ class AttentionAdaptiveGroupingTests(unittest.TestCase):
                     objective = objective + loss
                 objective.backward()
                 self.assertTrue(torch.isfinite(inputs.grad).all())
-
-    def test_padding_values_do_not_enter_group_contexts_or_valid_outputs(self):
-        config = build_attention_config(
-            config_class=SelfAttentionConfig,
-            batch_size=2,
-            num_heads=2,
-            embedding_dim=4,
-            target_sequence_length=4,
-            source_sequence_length=4,
-            self_attention_projection_strategy=(
-                SelfAttentionProjectionStrategy.SEPARATE
-            ),
-        )
-        config.batch_first_flag = True
-        config.projection_model_config = grouped_projection_model_config()
-        model = config.build().eval()
-        padding_mask = torch.tensor(
-            [[False, False, True, True], [False, True, False, True]]
-        )
-        base_values = torch.tensor(
-            [
-                [[1.0] * 4, [2.0] * 4, [0.0] * 4, [0.0] * 4],
-                [[10.0] * 4, [0.0] * 4, [20.0] * 4, [0.0] * 4],
-            ]
-        )
-        altered_values = base_values.clone()
-        altered_values[padding_mask] = torch.tensor(
-            [[1000.0] * 4, [-1000.0] * 4, [500.0] * 4, [-500.0] * 4]
-        )
-        altered_values.requires_grad_()
-        observed_query_contexts = []
-        query_bias_model = adaptive_leaf(
-            model.projector.query_model
-        ).adaptive_behaviour.bias_model
-        hook = query_bias_model.register_forward_hook(
-            lambda _module, args, _output: observed_query_contexts.append(
-                args[1].detach().clone()
-            )
-        )
-
-        try:
-            base_output, _weights, _loss = model(
-                base_values,
-                base_values,
-                base_values,
-                k_padding_mask=padding_mask,
-            )
-            altered_output, _weights, loss = model(
-                altered_values,
-                altered_values,
-                altered_values,
-                k_padding_mask=padding_mask,
-            )
-        finally:
-            hook.remove()
-
-        expected_contexts = torch.tensor([[3.0] * 4, [0.0] * 4, [10.0] * 4, [20.0] * 4])
-        self.assertEqual(len(observed_query_contexts), 2)
-        torch.testing.assert_close(observed_query_contexts[0], expected_contexts)
-        torch.testing.assert_close(observed_query_contexts[1], expected_contexts)
-        torch.testing.assert_close(
-            base_output[~padding_mask],
-            altered_output[~padding_mask],
-        )
-        objective = altered_output[~padding_mask].square().mean()
-        if loss is not None:
-            objective = objective + loss
-        objective.backward()
-        self.assertTrue(torch.isfinite(altered_values.grad).all())
 
     def test_post_projection_key_value_extensions_preserve_grouping_contract(self):
         config = build_attention_config(
@@ -544,7 +336,10 @@ class AttentionAdaptiveGroupingTests(unittest.TestCase):
                         continue
                     hooks.append(
                         leaf.adaptive_behaviour.weight_model.register_forward_hook(
-                            lambda _module, _args, output, generated_weight_shapes=generated_weight_shapes: (
+                            lambda _module,
+                            _args,
+                            output,
+                            generated_weight_shapes=generated_weight_shapes: (
                                 generated_weight_shapes.append(tuple(output.shape))
                             )
                         )
@@ -608,7 +403,8 @@ class AttentionAdaptiveGroupingTests(unittest.TestCase):
         )
         causal_config.batch_first_flag = True
         causal_config.projection_model_config = grouped_projection_model_config()
-        cases.append(("causal", causal_config.build(), inputs, inputs, None))
+        with self.assertRaisesRegex(ValueError, "causal"):
+            causal_config.build()
 
         masked_config = build_attention_config(
             config_class=SelfAttentionConfig,
@@ -757,3 +553,117 @@ class AttentionAdaptiveGroupingTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def grouping_attention(
+    *, sequence_length=4, input_order=Order.SEQUENCE_FIRST, batch_first=True
+):
+    config = build_attention_config(
+        config_class=SelfAttentionConfig,
+        embedding_dim=4,
+        num_heads=2,
+        batch_size=4,
+        target_sequence_length=4,
+        source_sequence_length=4,
+    )
+    config.batch_first_flag = batch_first
+    config.projection_model_config = grouped_projection_model_config()
+    augmentation = config.projection_model_config.layer_config.layer_model_config.adaptive_augmentation_config
+    augmentation.grouping_config = replace(
+        augmentation.grouping_config,
+        sequence_length=sequence_length,
+        input_order=input_order,
+    )
+    return config
+
+
+@pytest.mark.parametrize(
+    "mask",
+    [
+        torch.tensor([[False, False, False, True], [False] * 4]),
+        torch.tensor([[0.0, 0.0, 0.0, -torch.inf], [0.0] * 4]),
+    ],
+)
+def test_attention_all_valid_policy_rejects_exclusion_before_any_generator(mask):
+    model = grouping_attention().build()
+    calls = []
+    hooks = [
+        leaf.adaptive_behaviour.bias_model.register_forward_pre_hook(
+            lambda *_: calls.append(True)
+        )
+        for leaf in model.modules()
+        if isinstance(leaf, AdaptiveLinearLayer)
+    ]
+    inputs = torch.randn(2, 4, 4)
+    try:
+        with pytest.raises(ValueError, match="all-valid"):
+            model(inputs, inputs, inputs, k_padding_mask=mask)
+        assert not calls
+        output, _, _ = model(inputs, inputs, inputs)
+        assert output.shape == inputs.shape and calls
+    finally:
+        for hook in hooks:
+            hook.remove()
+
+
+@pytest.mark.parametrize(
+    "mask",
+    [
+        torch.zeros(2, 4, dtype=torch.bool),
+        torch.full((2, 4), -0.25),
+        torch.full((2, 4), -1e100, dtype=torch.float64),
+    ],
+)
+def test_attention_all_valid_padding_biases_remain_eligible(mask):
+    model = grouping_attention().build()
+    inputs = torch.randn(2, 4, 4)
+    output, _, _ = model(inputs, inputs, inputs, k_padding_mask=mask)
+    assert output.shape == inputs.shape
+
+
+@pytest.mark.parametrize(
+    "shape,declared_length", [((2, 4, 4), 2), ((4, 4, 4), 8), ((4, 2, 4), 4)]
+)
+def test_attention_checks_actual_length_even_when_flat_rows_are_divisible(
+    shape, declared_length
+):
+    model = grouping_attention(sequence_length=declared_length).build()
+    calls = []
+    hooks = [
+        leaf.adaptive_behaviour.bias_model.register_forward_pre_hook(
+            lambda *_: calls.append(True)
+        )
+        for leaf in model.modules()
+        if isinstance(leaf, AdaptiveLinearLayer)
+    ]
+    inputs = torch.randn(shape)
+    try:
+        with pytest.raises(ValueError, match="sequence_length"):
+            model(inputs, inputs, inputs)
+        assert not calls
+    finally:
+        for hook in hooks:
+            hook.remove()
+
+
+def test_attention_rejects_wrong_declared_order_before_rng_even_when_dimensions_equal():
+    config = grouping_attention(input_order=Order.BATCH_FIRST)
+    config.batch_size = 4
+    before = torch.get_rng_state().clone()
+    with pytest.raises(ValueError, match="SEQUENCE_FIRST"):
+        config.build()
+    torch.testing.assert_close(torch.get_rng_state(), before)
+
+
+@pytest.mark.parametrize(
+    "mask,diagnostic",
+    [
+        (torch.zeros(2, 3, dtype=torch.bool), "shape"),
+        (torch.zeros(2, 4, dtype=torch.int64), "bool"),
+    ],
+)
+def test_attention_ordinary_mask_errors_precede_grouping(mask, diagnostic):
+    model = grouping_attention().build()
+    inputs = torch.randn(2, 4, 4)
+    with pytest.raises((RuntimeError, TypeError), match=diagnostic):
+        model(inputs, inputs, inputs, k_padding_mask=mask)
