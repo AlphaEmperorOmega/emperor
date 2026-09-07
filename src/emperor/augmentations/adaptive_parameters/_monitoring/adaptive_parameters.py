@@ -214,6 +214,8 @@ class _AdaptiveParameterDiagnostics:
         if slot not in ("weight", "bias"):
             return ()
         weight_bank = getattr(option, "weight_bank", None)
+        if weight_bank is None:
+            weight_bank = getattr(option, "parameter_bank", None)
         if not torch.is_tensor(weight_bank):
             return ()
         weight_bank_values = weight_bank.detach().float()
