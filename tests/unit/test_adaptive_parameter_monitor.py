@@ -33,9 +33,9 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
-    RowLayout,
 )
 from emperor.linears import LinearLayerConfig
+from support.adaptive_grouping import grouping_value
 
 
 class FakeExperiment:
@@ -169,7 +169,7 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
             AdaptiveParameterAugmentationConfig(
                 input_dim=2,
                 output_dim=3,
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
                 weight_config=None,
                 diagonal_config=None,
                 bias_config=None,
@@ -238,7 +238,7 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
         return AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=None,
             weight_config=DualModelDynamicWeightConfig(
                 input_dim=input_dim,
                 output_dim=output_dim,
@@ -620,7 +620,7 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
             AdaptiveParameterAugmentationConfig(
                 input_dim=2,
                 output_dim=3,
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
                 bias_config=MultiplicativeDynamicBiasConfig(
                     input_dim=2,
                     output_dim=3,
@@ -805,8 +805,11 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
                 output_dim=2,
                 bias_flag=True,
                 adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.ROWS,
-                    group_count=2,
+                    grouping_config=grouping_value(
+                        AdaptiveParameterGroupingScopeOptions.ROWS,
+                        2,
+                        input_order="BATCH_FIRST",
+                    ),
                     bias_config=AdditiveDynamicBiasConfig(
                         decay_schedule=WeightDecayScheduleOptions.DISABLED,
                         decay_rate=0.0,
@@ -824,10 +827,6 @@ class TestAdaptiveParameterMonitorCallback(unittest.TestCase):
 
         adaptive(
             torch.ones(4, 2),
-            row_layout=RowLayout.rows(
-                4,
-                context_sharing_restricted=False,
-            ),
         )
 
         prefix = "adaptive.adaptive_behaviour/bias/batch"
