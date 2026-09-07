@@ -6,9 +6,9 @@ import torch
 from lightning import LightningModule
 
 from emperor.parametric import (
-    MatrixWeightsMixtureConfig,
     ParametricLayer,
     ParametricLayerMonitorCallback,
+    VectorWeightsMixtureConfig,
 )
 from emperor.parametric._monitoring import (
     _ParametricDiagnostics,
@@ -96,7 +96,7 @@ class ParametricMonitorMutationContractTests(unittest.TestCase):
                     self.assertEqual(getattr(valid_callback, option_name), value)
 
     def test_clip_saturation_includes_the_exact_boundary(self) -> None:
-        config = MatrixWeightsMixtureConfig(**_mixture_kwargs())
+        config = VectorWeightsMixtureConfig(**_mixture_kwargs())
         config.clip_range = 2.0
         mixture = config.build()
         values = torch.tensor([-3.0, -2.0, 1.999, 2.0])
