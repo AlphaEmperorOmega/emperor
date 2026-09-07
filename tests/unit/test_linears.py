@@ -10,7 +10,6 @@ import emperor.linears as linears
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
     DualModelDynamicWeightConfig,
     DynamicDepthOptions,
     GeneratorDynamicBiasConfig,
@@ -975,7 +974,7 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
             output_dim=output_dim,
             bias_flag=bias_flag,
             adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
                 weight_config=weight_config,
                 bias_config=bias_config,
                 diagonal_config=diagonal_config,
@@ -1391,7 +1390,7 @@ class TestAdaptiveLinearLayer(unittest.TestCase):
             output_dim=2,
             bias_flag=False,
             adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
                 weight_config=None,
                 bias_config=None,
                 diagonal_config=None,
@@ -1459,7 +1458,7 @@ class TestLinearLayerAdaptiveStack(unittest.TestCase):
                 layer_model_config=AdaptiveLinearLayerConfig(
                     bias_flag=bias_flag,
                     adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                        grouping_scope=(AdaptiveParameterGroupingScopeOptions.DISABLED),
+                        grouping_config=None,
                         weight_config=weight_config,
                         bias_config=bias_config,
                         diagonal_config=diagonal_config,

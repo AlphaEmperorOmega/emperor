@@ -10,7 +10,6 @@ import torch
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
     AdditiveDynamicBiasConfig,
     BankExpansionFactorOptions,
     DynamicDepthOptions,
@@ -124,7 +123,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
             AdaptiveParameterAugmentationConfig(
                 input_dim=2,
                 output_dim=3,
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
             )
         )
 
@@ -241,7 +240,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
             AdaptiveParameterAugmentationConfig(
                 input_dim=2,
                 output_dim=5,
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
             )
         )
         rectangular_inputs = torch.tensor(
@@ -280,7 +279,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 dimensions = {"input_dim": 2, "output_dim": 3}
                 dimensions[field_name] = value
                 config = AdaptiveParameterAugmentationConfig(
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                    grouping_config=None,
                     **dimensions,
                 )
                 self.assert_exact_error(
@@ -293,7 +292,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
             AdaptiveParameterAugmentationConfig(
                 input_dim=2,
                 output_dim=3,
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
             )
         )
         for field_name, value in (
@@ -322,7 +321,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
             AdaptiveParameterAugmentationConfig(
                 input_dim=1,
                 output_dim=1,
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
             )
         )
         unit_inputs = torch.tensor([[2.0], [-3.0]])
@@ -353,7 +352,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 AdaptiveParameterAugmentationConfig(
                     input_dim=2,
                     output_dim=3,
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                    grouping_config=None,
                     model_config=wrong_model_config,
                 )
             ),
@@ -364,7 +363,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
             AdaptiveParameterAugmentationConfig(
                 input_dim=2,
                 output_dim=3,
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
             )
         )
         wrong_config = LinearLayerConfig(
@@ -412,7 +411,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 AdaptiveParameterAugmentationConfig(
                     input_dim=2,
                     output_dim=2,
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                    grouping_config=None,
                     weight_config=invalid_nested_model,
                 )
             ),
@@ -429,7 +428,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                 config = AdaptiveParameterAugmentationConfig(
                     input_dim=2,
                     output_dim=3,
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                    grouping_config=None,
                     **{field_name: sub_config},
                 )
                 self.assert_exact_error(
@@ -898,9 +897,7 @@ class AdaptiveParameterValidationMutationContractTests(unittest.TestCase):
                     bias_flag=True,
                     adaptive_augmentation_config=(
                         AdaptiveParameterAugmentationConfig(
-                            grouping_scope=(
-                                AdaptiveParameterGroupingScopeOptions.DISABLED
-                            ),
+                            grouping_config=None,
                         )
                     ),
                 )

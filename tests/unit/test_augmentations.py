@@ -7,7 +7,6 @@ import emperor.augmentations as augmentations
 import emperor.augmentations.adaptive_parameters as adaptive_parameters
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
     AdditiveDynamicBiasConfig,
     AffineTransformDynamicBiasConfig,
     AntiDynamicDiagonalConfig,
@@ -132,7 +131,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         return AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=None,
             weight_config=weight_config,
             diagonal_config=diagonal_config,
             bias_config=bias_config,
@@ -724,7 +723,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
         for case, config_kwargs in invalid_configs:
             with self.subTest(case=case):
                 cfg = AdaptiveParameterAugmentationConfig(
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                    grouping_config=None,
                     **config_kwargs,
                 )
                 with self.assertRaises(ValueError):
@@ -891,7 +890,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                     cfg = AdaptiveParameterAugmentationConfig(
                         input_dim=12,
                         output_dim=24,
-                        grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                        grouping_config=None,
                         **{f"{config_name}_config": sub_config},
                     )
                     with self.assertRaises(ValueError):
@@ -1013,7 +1012,7 @@ class TestAdaptiveParameterAugmentation(unittest.TestCase):
                     cfg = AdaptiveParameterAugmentationConfig(
                         input_dim=input_dim,
                         output_dim=output_dim,
-                        grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                        grouping_config=None,
                         model_config=parent_model_config,
                         **{f"{config_name}_config": sub_config},
                     )

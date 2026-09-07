@@ -12,6 +12,7 @@ from emperor.augmentations.adaptive_parameters._augmentation import (
 from emperor.augmentations.adaptive_parameters._validation import (
     AdaptiveParameterAugmentationValidator,
 )
+from support.adaptive_grouping import grouping_value
 
 
 class TestAdaptiveParameterAugmentationValidatorAdapter(unittest.TestCase):
@@ -33,7 +34,7 @@ class TestAdaptiveParameterAugmentationValidatorAdapter(unittest.TestCase):
         cfg = AdaptiveParameterAugmentationConfig(
             input_dim=3,
             output_dim=4,
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=None,
         )
 
         with self.assertRaisesRegex(
@@ -77,11 +78,11 @@ class TestAdaptiveParameterAugmentationValidatorAdapter(unittest.TestCase):
         model = RejectingAugmentation.__new__(RejectingAugmentation)
         torch.nn.Module.__init__(model)
         model.cfg = AdaptiveParameterAugmentationConfig(
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.ROWS,
-            group_count=1,
+            grouping_config=grouping_value(
+                AdaptiveParameterGroupingScopeOptions.ROWS, 1, input_order="BATCH_FIRST"
+            ),
         )
-        model.grouping_scope = AdaptiveParameterGroupingScopeOptions.ROWS
-        model.group_count = 1
+        model.grouping_config = model.cfg.grouping_config
         model.input_dim = 3
         model.output_dim = 4
 
