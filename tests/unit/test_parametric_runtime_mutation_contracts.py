@@ -12,9 +12,7 @@ from emperor.parametric import (
     GeneratorBiasMixtureConfig,
     GeneratorWeightsMixture,
     GeneratorWeightsMixtureConfig,
-    MatrixBiasMixture,
     MatrixBiasMixtureConfig,
-    MatrixWeightsMixture,
     MatrixWeightsMixtureConfig,
     ParametricLayer,
     ParametricLayerConfig,
@@ -27,6 +25,7 @@ from emperor.parametric._mixtures.vector import VectorMixtureBase
 from emperor.sampler import RouterConfig
 from unit.test_expert_mutation_contracts import _halting_expert_stack
 from unit.test_parametric_behavioral_contracts import (
+    _bank_kwargs,
     _generator_config,
     _mixture_kwargs,
     _parametric_config,
@@ -73,14 +72,14 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
         )
         for clipping_mode in clipping_modes:
             with self.subTest(clipping_mode=clipping_mode):
-                unbounded_config = MatrixWeightsMixtureConfig(**_mixture_kwargs())
+                unbounded_config = VectorWeightsMixtureConfig(**_mixture_kwargs())
                 unbounded_config.clip_parameter_option = clipping_mode
                 unbounded_config.clip_range = float("inf")
                 AdaptiveMixtureValidator._validate_clip_range(unbounded_config)
 
                 torch.manual_seed(1901)
                 rng_state = torch.random.get_rng_state()
-                nan_config = MatrixWeightsMixtureConfig(**_mixture_kwargs())
+                nan_config = VectorWeightsMixtureConfig(**_mixture_kwargs())
                 nan_config.clip_parameter_option = clipping_mode
                 nan_config.clip_range = float("nan")
 
@@ -96,72 +95,35 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
                     atol=0,
                 )
 
-        negative_infinity = MatrixWeightsMixtureConfig(**_mixture_kwargs())
+        negative_infinity = VectorWeightsMixtureConfig(**_mixture_kwargs())
         negative_infinity.clip_range = float("-inf")
         self.assert_exact_error(
             ValueError,
             "clip_range must be non-negative, received -inf.",
-            lambda: AdaptiveMixtureValidator._validate_clip_range(
-                negative_infinity
-            ),
+            lambda: AdaptiveMixtureValidator._validate_clip_range(negative_infinity),
         )
 
     def test_mixture_constructors_honor_wrappers_overrides_and_exact_state(
         self,
     ) -> None:
         base_weights = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(
+            **_bank_kwargs(
                 input_dim=2,
                 output_dim=2,
                 top_k=1,
                 num_experts=2,
             )
         )
-        wrapper = ModelConfig()
-        wrapper.mixture_model_config = base_weights
-        weights = MatrixWeightsMixture(
-            wrapper,
-            AdaptiveMixtureConfig(input_dim=3, output_dim=4),
+        weights = base_weights.build(
+            MatrixWeightsMixtureConfig(input_dim=3, output_dim=4)
         )
-
-        self.assertIs(weights.main_cfg, wrapper)
-        self.assertEqual(weights.input_dim, 3)
-        self.assertEqual(weights.output_dim, 4)
-        self.assertEqual(weights.top_k, 1)
-        self.assertEqual(weights.num_experts, 2)
-        self.assertTrue(weights.weighted_parameters_flag)
-        self.assertEqual(
-            weights.clip_parameter_option,
-            ClipParameterOptions.DISABLED,
-        )
-        self.assertEqual(weights.clip_range, 1.0)
-        self.assertEqual(weights.depth_dim, 2)
-        self.assertEqual(weights.parameter_mixture_dim, -2)
-        self.assertEqual(weights.probability_shape, (-1, 1, 1))
-        self.assertEqual(weights.parameter_bank_shape, (2, 3, 4))
+        self.assertEqual((weights.input_dim, weights.output_dim), (3, 4))
+        self.assertEqual((base_weights.input_dim, base_weights.output_dim), (2, 2))
         self.assertEqual(tuple(weights.parameter_bank.shape), (2, 3, 4))
-
-        explicit_main = ModelConfig(input_dim=91)
-        base_with_main = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(top_k=1, num_experts=2)
-        )
-        base_with_main.override_config = explicit_main
-        wrapper_with_main = ModelConfig()
-        wrapper_with_main.mixture_model_config = base_with_main
-        with_main = MatrixWeightsMixture(wrapper_with_main)
-        self.assertIs(with_main.main_cfg, explicit_main)
-
-        bias = MatrixBiasMixture(
-            MatrixBiasMixtureConfig(
-                **_mixture_kwargs(output_dim=2, top_k=1, num_experts=2)
-            ),
-            AdaptiveMixtureConfig(output_dim=4),
-        )
-        self.assertEqual(bias.output_dim, 4)
-        self.assertEqual(bias.depth_dim, 2)
-        self.assertEqual(bias.parameter_mixture_dim, -1)
-        self.assertEqual(bias.probability_shape, (-1, 1))
-        self.assertEqual(bias.parameter_bank_shape, (2, 4))
+        self.assertEqual(set(weights.state_dict()), {"parameter_bank"})
+        bias = MatrixBiasMixtureConfig(
+            **_bank_kwargs(output_dim=2, top_k=1, num_experts=2)
+        ).build(MatrixBiasMixtureConfig(output_dim=4))
         self.assertEqual(tuple(bias.parameter_bank.shape), (2, 4))
 
         vector = VectorWeightsMixture(
@@ -417,7 +379,7 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
     ) -> None:
         base_config = _parametric_config(
             weight_config=MatrixWeightsMixtureConfig(
-                **_mixture_kwargs(
+                **_bank_kwargs(
                     input_dim=2,
                     output_dim=2,
                     top_k=2,
@@ -425,7 +387,7 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
                 )
             ),
             bias_config=MatrixBiasMixtureConfig(
-                **_mixture_kwargs(
+                **_bank_kwargs(
                     input_dim=2,
                     output_dim=2,
                     top_k=2,
@@ -757,11 +719,9 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
     def test_independent_bias_router_adds_its_real_auxiliary_loss(self) -> None:
         config = _parametric_config(
             weight_config=MatrixWeightsMixtureConfig(
-                **_mixture_kwargs(top_k=2, num_experts=3)
+                **_bank_kwargs(top_k=2, num_experts=3)
             ),
-            bias_config=MatrixBiasMixtureConfig(
-                **_mixture_kwargs(top_k=2, num_experts=3)
-            ),
+            bias_config=MatrixBiasMixtureConfig(**_bank_kwargs(top_k=2, num_experts=3)),
             routing_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
             top_k=2,
             num_experts=3,
@@ -782,9 +742,7 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
             expected_loss,
         ) = model.sampler.sample_probabilities_and_indices(logits, None)
         expected_bias = model.bias_mixture_model.compute_mixture(
-            expected_probabilities,
-            expected_indices,
-            inputs,
+            expected_probabilities, expected_indices
         )
 
         bias, skip_mask, loss = model._ParametricLayer__generate_bias_parameters(
@@ -805,10 +763,10 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
         model = ParametricLayer(
             _parametric_config(
                 weight_config=MatrixWeightsMixtureConfig(
-                    **_mixture_kwargs(top_k=2, num_experts=2)
+                    **_bank_kwargs(top_k=2, num_experts=2)
                 ),
                 bias_config=MatrixBiasMixtureConfig(
-                    **_mixture_kwargs(top_k=2, num_experts=2)
+                    **_bank_kwargs(top_k=2, num_experts=2)
                 ),
                 routing_mode=AdaptiveRouterOptions.INDEPENDENT_ROUTER,
             )
@@ -967,13 +925,12 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
 
     def test_mixture_weighting_decisions_and_exact_errors(self) -> None:
         matrix = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(top_k=2, num_experts=3)
+            **_bank_kwargs(top_k=2, num_experts=3)
         ).build()
         matrix_indices = torch.tensor([[0, 1]])
         self.assert_exact_error(
             ValueError,
-            "Probabilities must be provided when 'weighted_parameters_flag' "
-            "is set to True.",
+            "Probabilities must be provided when weighted_parameters_flag is True.",
             lambda: matrix.compute_mixture(None, matrix_indices),
         )
 
@@ -1004,7 +961,7 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
         )
 
         unweighted_matrix = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(
+            **_bank_kwargs(
                 top_k=2,
                 num_experts=3,
                 weighted=False,
@@ -1016,8 +973,7 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
         ignored_matrix_probabilities = torch.tensor([[0.99, 0.01]])
         torch.testing.assert_close(
             unweighted_matrix.compute_mixture(
-                ignored_matrix_probabilities,
-                matrix_indices,
+                ignored_matrix_probabilities, matrix_indices
             ),
             (matrix_bank[0] + matrix_bank[1]).unsqueeze(0),
         )
@@ -1065,7 +1021,7 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
                 torch.ones(1, 2, 3)
             ),
         )
-        weighted_config = MatrixWeightsMixtureConfig(**_mixture_kwargs())
+        weighted_config = VectorWeightsMixtureConfig(**_mixture_kwargs())
         self.assert_exact_error(
             ValueError,
             "Probabilities must be provided when weighted_parameters_flag is True.",
@@ -1083,11 +1039,11 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
             ),
         )
 
-        equal_top_k = MatrixWeightsMixtureConfig(
+        equal_top_k = VectorWeightsMixtureConfig(
             **_mixture_kwargs(top_k=2, num_experts=2)
         )
         AdaptiveMixtureValidator._validate_top_k(equal_top_k)
-        invalid_top_k = MatrixWeightsMixtureConfig(
+        invalid_top_k = VectorWeightsMixtureConfig(
             **_mixture_kwargs(top_k=3, num_experts=2)
         )
         self.assert_exact_error(
@@ -1097,10 +1053,10 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
             lambda: AdaptiveMixtureValidator._validate_top_k(invalid_top_k),
         )
 
-        zero_clip = MatrixWeightsMixtureConfig(**_mixture_kwargs())
+        zero_clip = VectorWeightsMixtureConfig(**_mixture_kwargs())
         zero_clip.clip_range = 0.0
         AdaptiveMixtureValidator._validate_clip_range(zero_clip)
-        negative_clip = MatrixWeightsMixtureConfig(**_mixture_kwargs())
+        negative_clip = VectorWeightsMixtureConfig(**_mixture_kwargs())
         negative_clip.clip_range = -0.25
         self.assert_exact_error(
             ValueError,
@@ -1118,7 +1074,7 @@ class ParametricRuntimeMutationContractTests(unittest.TestCase):
             lambda: invalid_vector.build(),
         )
 
-        valid_model = MatrixWeightsMixtureConfig(**_mixture_kwargs()).build()
+        valid_model = VectorWeightsMixtureConfig(**_mixture_kwargs()).build()
         for name in ("input_dim", "output_dim", "top_k", "num_experts"):
             with self.subTest(dimension=name, value=0):
                 original = getattr(valid_model, name)
