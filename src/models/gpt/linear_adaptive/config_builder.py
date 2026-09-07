@@ -71,6 +71,7 @@ class _GptLinearAdaptiveConfigBuilderImplementation:
         self.decoder_recurrent_controller_options = options.recurrent_controller_options
         self.adaptive_generator_stack_options = options.adaptive_generator_stack_options
         self.hidden_adaptive_weight_options = options.hidden_adaptive_weight_options
+        self.grouping_config = options.grouping_config
         self.hidden_adaptive_bias_options = options.hidden_adaptive_bias_options
         self.hidden_adaptive_diagonal_options = options.hidden_adaptive_diagonal_options
         self.hidden_adaptive_mask_options = options.hidden_adaptive_mask_options
@@ -80,6 +81,7 @@ class _GptLinearAdaptiveConfigBuilderImplementation:
         self.attention_hidden_adaptive_weight_options = (
             options.attention_hidden_adaptive_weight_options
         )
+        self.attention_grouping_config = options.attention_grouping_config
         self.attention_hidden_adaptive_bias_options = (
             options.attention_hidden_adaptive_bias_options
         )
@@ -95,6 +97,7 @@ class _GptLinearAdaptiveConfigBuilderImplementation:
         self.feed_forward_hidden_adaptive_weight_options = (
             options.feed_forward_hidden_adaptive_weight_options
         )
+        self.feed_forward_grouping_config = options.feed_forward_grouping_config
         self.feed_forward_hidden_adaptive_bias_options = (
             options.feed_forward_hidden_adaptive_bias_options
         )
@@ -126,6 +129,7 @@ class _GptLinearAdaptiveConfigBuilderImplementation:
             hidden_dim=self.hidden_dim,
             output_dim=self.output_dim,
             adaptive_generator_stack_options=self.adaptive_generator_stack_options,
+            grouping_config=self.grouping_config,
             hidden_adaptive_weight_options=self.hidden_adaptive_weight_options,
             hidden_adaptive_bias_options=self.hidden_adaptive_bias_options,
             hidden_adaptive_diagonal_options=self.hidden_adaptive_diagonal_options,
@@ -148,6 +152,9 @@ class _GptLinearAdaptiveConfigBuilderImplementation:
                 if self.attention_adaptive_generator_stack_options is not None
                 else self.adaptive_generator_stack_options
             ),
+            grouping_config=self.attention_grouping_config
+            if self.attention_grouping_config is not None
+            else self.grouping_config,
             hidden_adaptive_weight_options=(
                 self.attention_hidden_adaptive_weight_options
                 if self.attention_hidden_adaptive_weight_options is not None
@@ -186,6 +193,9 @@ class _GptLinearAdaptiveConfigBuilderImplementation:
                 if self.feed_forward_adaptive_generator_stack_options is not None
                 else self.adaptive_generator_stack_options
             ),
+            grouping_config=self.feed_forward_grouping_config
+            if self.feed_forward_grouping_config is not None
+            else self.grouping_config,
             hidden_adaptive_weight_options=(
                 self.feed_forward_hidden_adaptive_weight_options
                 if self.feed_forward_hidden_adaptive_weight_options is not None
