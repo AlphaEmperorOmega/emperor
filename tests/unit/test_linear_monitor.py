@@ -637,6 +637,69 @@ class TestLinearMonitorCallback(unittest.TestCase):
         self.assertEqual(names.count("linear/output/mean"), 1)
         callback.on_fit_end(trainer, module)
 
+    def test_generated_only_weights_keep_activation_metrics(self):
+        class GeneratedWeightLinear(LinearLayer):
+            def __init__(self):
+                super().__init__(
+                    LinearLayerConfig(input_dim=1, output_dim=1, bias_flag=False)
+                )
+                self.generated_weight = nn.Parameter(
+                    torch.tensor([[2.0]], dtype=torch.float64)
+                )
+
+            def _create_weight_parameters(self):
+                return None
+
+            def forward(self, X):
+                return X @ self.generated_weight
+
+        module = FakeLightningModule(GeneratedWeightLinear())
+        trainer = FakeTrainer()
+        callback = LinearMonitorCallback(log_every_n_steps=1)
+        callback.on_fit_start(trainer, module)
+        try:
+            inputs = torch.tensor([[1.0], [3.0]], dtype=torch.float64)
+            module.linear(inputs).sum().backward()
+            complete_optimizer_step(callback, trainer, module)
+
+            scalars = dict(module.logged_scalars)
+            self.assertEqual(scalars["linear/input/mean"].item(), 2.0)
+            self.assertEqual(scalars["linear/input/var"].item(), 1.0)
+            self.assertEqual(scalars["linear/output/mean"].item(), 4.0)
+            self.assertEqual(scalars["linear/output/var"].item(), 4.0)
+            self.assertTrue(
+                all(
+                    name.startswith(("linear/input/", "linear/output/"))
+                    for name in scalars
+                )
+            )
+            self.assertEqual(module.linear.generated_weight.grad.item(), 4.0)
+        finally:
+            callback.on_fit_end(trainer, module)
+        self.assertFalse(module.linear._forward_hooks)
+
+    def test_removed_weight_keeps_activations_without_parameter_metrics(self):
+        module = build_module(input_dim=1, output_dim=1, bias_flag=False)
+        with torch.no_grad():
+            module.linear.weight_params.fill_(2.0)
+        trainer = FakeTrainer()
+        callback = LinearMonitorCallback(log_every_n_steps=1)
+        callback.on_fit_start(trainer, module)
+        try:
+            module.linear(torch.tensor([[1.0], [3.0]]))
+            complete_optimizer_step(
+                callback,
+                trainer,
+                module,
+                update=lambda: setattr(module.linear, "weight_params", None),
+            )
+            scalars = dict(module.logged_scalars)
+            self.assertAlmostEqual(scalars["linear/input/mean"].item(), 2.0, places=6)
+            self.assertAlmostEqual(scalars["linear/output/mean"].item(), 4.0, places=6)
+            self.assertFalse(any(name.startswith("linear/weights/") for name in scalars))
+        finally:
+            callback.on_fit_end(trainer, module)
+
     def test_forward_hook_tracks_keyword_tensor_inputs(self):
         module = build_module()
         callback = LinearMonitorCallback(log_every_n_steps=1)
