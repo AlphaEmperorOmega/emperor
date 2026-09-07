@@ -8,45 +8,22 @@ if TYPE_CHECKING:
     from torch import Tensor
 
     from emperor.experts._layers.layer import MixtureOfExpertsLayer
-    from emperor.experts._state import MixtureOfExpertsLayerState
 
 
 class MixtureOfExpertsLayerValidator(LayerValidator):
-    """Validate RowLayout contracts at a routed expert-layer boundary."""
+    """Validate the row count promised by the configured routing mode."""
 
     @staticmethod
-    def validate_layout_can_cross_routing(
+    def validate_output_rows(
         layer: "MixtureOfExpertsLayer",
-        state: "MixtureOfExpertsLayerState",
         main_model_input: "Tensor",
-    ) -> None:
-        row_layout = state.row_layout
-        if row_layout is None:
-            return
-        if row_layout.row_count != main_model_input.size(0):
-            raise ValueError(
-                f"MixtureOfExpertsLayer row_layout row_count={row_layout.row_count} "
-                "does not match input row count "
-                f"{main_model_input.size(0)}."
-            )
-        if not layer.model.compute_expert_mixture_flag and layer.model.top_k != 1:
-            raise ValueError(
-                "MixtureOfExpertsLayer cannot preserve RowLayout when routing "
-                "returns multiple unreduced expert rows per input; enable expert "
-                "mixture reduction or use top_k=1."
-            )
-
-    @staticmethod
-    def validate_layout_restored(
-        state: "MixtureOfExpertsLayerState",
         output: "Tensor",
     ) -> None:
-        row_layout = state.row_layout
-        if row_layout is None:
+        if not layer.model.compute_expert_mixture_flag and layer.model.top_k != 1:
             return
-        if output.dim() == 0 or output.size(0) != row_layout.row_count:
+        expected_rows = main_model_input.size(0)
+        if output.dim() == 0 or output.size(0) != expected_rows:
             raise ValueError(
-                "MixtureOfExpertsLayer did not restore one output row per "
-                f"RowLayout entry: expected {row_layout.row_count}, received "
-                f"shape {tuple(output.shape)}."
+                "MixtureOfExpertsLayer did not restore one output row per input: "
+                f"expected {expected_rows}, received shape {tuple(output.shape)}."
             )

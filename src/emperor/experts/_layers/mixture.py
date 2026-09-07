@@ -112,6 +112,7 @@ class MixtureOfExperts(Module):
                 input_batch, probabilities, indices, skip_mask
             )
         )
+        self.VALIDATOR.validate_grouping_skip_mask(self, skip_mask)
         expert_input_data = self._split_tokens_per_expert(
             input_batch, probabilities, indices
         )
@@ -331,6 +332,9 @@ class MixtureOfExperts(Module):
 
         expert_model = self.expert_modules[expert_data.expert_index]
         expert_state = Layer.run_model_from_hidden(expert_model, expert_samples)
+        self.VALIDATOR.validate_expert_output_rows(
+            self, expert_samples, expert_state.hidden
+        )
         expert_loss = self.__resolve_expert_loss(expert_state.loss, expert_samples)
         return expert_state.hidden, expert_loss
 
