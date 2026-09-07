@@ -227,6 +227,10 @@ class TestLayerMemoryDelegateValidatorAdapter(unittest.TestCase):
 
 
 class TestLayerNormalizationDelegateValidatorAdapter(unittest.TestCase):
+    def test_rejects_invalid_normalization_when_constructed_directly(self):
+        with self.assertRaisesRegex(TypeError, "NormalizationOptions"):
+            LayerNormalizationDelegate(make_config(normalization="layer-norm"))
+
     def test_module_exposes_normalization_validator_adapter(self):
         self.assertIs(
             LayerNormalizationDelegate.VALIDATOR,

@@ -30,6 +30,7 @@ from emperor.layers._options import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
 )
 from emperor.layers._stack import LayerStack, MirroredLayerStack
 from emperor.layers._state import LayerState
@@ -43,6 +44,7 @@ __all__ = (
     "LayerConfig",
     "LayerGateOptions",
     "LayerNormPositionOptions",
+    "NormalizationOptions",
     "LayerStackConfig",
     "MirroredLayerStackConfig",
     "HierarchicalReasoningModelRecurrentConfig",

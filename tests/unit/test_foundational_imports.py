@@ -220,6 +220,7 @@ print(json.dumps({
                     "LayerConfig",
                     "LayerGateOptions",
                     "LayerNormPositionOptions",
+                    "NormalizationOptions",
                     "LayerStackConfig",
                     "MirroredLayerStackConfig",
                     "HierarchicalReasoningModelRecurrentConfig",

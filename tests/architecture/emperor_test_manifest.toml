@@ -339,6 +339,7 @@ modules = [
   "src/emperor/layers/_layer/pipeline/halting.py",
   "src/emperor/layers/_layer/pipeline/memory.py",
   "src/emperor/layers/_layer/pipeline/normalization.py",
+  "src/emperor/layers/_layer/pipeline/normalization_variants.py",
   "src/emperor/layers/_layer/pipeline/postprocessing.py",
   "src/emperor/layers/_layer/pipeline/residual.py",
   "src/emperor/layers/_layer/validation.py",

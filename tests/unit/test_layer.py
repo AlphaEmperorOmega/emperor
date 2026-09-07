@@ -2,6 +2,7 @@ import inspect
 import math
 import unittest
 from dataclasses import fields
+from itertools import product
 
 import torch
 import torch.nn as nn
@@ -26,6 +27,7 @@ from emperor.layers import (
     LayerStack,
     LayerStackConfig,
     LayerState,
+    NormalizationOptions,
     ResidualConfig,
     WeightedBlendResidualConfig,
     WeightedResidualConfig,
@@ -123,6 +125,7 @@ class TestLayer(unittest.TestCase):
             "LayerConfig",
             "LayerGateOptions",
             "LayerNormPositionOptions",
+            "NormalizationOptions",
             "LayerStackConfig",
             "MirroredLayerStackConfig",
             "HierarchicalReasoningModelRecurrentConfig",
@@ -634,6 +637,15 @@ class TestLayer(unittest.TestCase):
             ),
             ("dropout_probability", "0.2", TypeError, "dropout_probability"),
             ("layer_norm_position", object(), TypeError, "layer_norm_position"),
+            ("normalization", "rms-norm", TypeError, "NormalizationOptions"),
+            ("normalization", 0, TypeError, "NormalizationOptions"),
+            ("normalization", False, TypeError, "NormalizationOptions"),
+            (
+                "normalization",
+                ActivationOptions.RELU,
+                TypeError,
+                "NormalizationOptions",
+            ),
             ("layer_model_config", object(), TypeError, "ConfigBase"),
             ("gate_config", object(), TypeError, "GateConfig"),
             ("halting_config", object(), TypeError, "HaltingConfig"),
@@ -933,6 +945,26 @@ class TestLayer(unittest.TestCase):
                     self.assertEqual(
                         set(layer.normalization.module.state_dict()), {"weight"}
                     )
+
+    def test_normalization_options_round_trip_by_name(self):
+        for option in NormalizationOptions:
+            with self.subTest(option=option):
+                name = NormalizationOptions.cli_name(option.name)
+                self.assertIs(NormalizationOptions.get_member(name), option)
+
+    def test_normalization_selection_survives_partial_config_overrides(self):
+        cfg = self.bare_config(layer_norm_position=LayerNormPositionOptions.BEFORE)
+        cfg.normalization = NormalizationOptions.LAYER_NORM
+
+        inherited = Layer(cfg, LayerConfig(output_dim=6))
+        overridden = Layer(
+            cfg, LayerConfig(normalization=NormalizationOptions.RMS_NORM)
+        )
+
+        self.assertIsInstance(inherited.normalization.module, nn.LayerNorm)
+        self.assertEqual(inherited.normalization.module.normalized_shape, (4,))
+        self.assertIsInstance(overridden.normalization.module, nn.RMSNorm)
+        self.assertIs(cfg.normalization, NormalizationOptions.LAYER_NORM)
 
     def test_postprocessing_delegate_stores_activation_option(self):
         activations = [
@@ -1656,7 +1688,6 @@ class TestLayer(unittest.TestCase):
                         self.assertTrue(torch.equal(result, x))
 
     def test_normalization_delegate_dispatches_by_position(self):
-        batch_size = 4
         dim = 12
         positions = [
             LayerNormPositionOptions.DISABLED,
@@ -1669,31 +1700,51 @@ class TestLayer(unittest.TestCase):
             ("after_model", LayerNormPositionOptions.DEFAULT),
             ("after_residual", LayerNormPositionOptions.AFTER),
         ]
-        for position in positions:
-            for method_name, active_position in methods:
-                message = f"position={position}, method={method_name}"
-                with self.subTest(msg=message):
-                    cfg = self.preset(
-                        input_dim=dim,
-                        output_dim=dim,
-                        layer_norm_position=position,
-                    )
-                    layer = Layer(cfg)
-                    x = torch.arange(
-                        1, batch_size * dim + 1, dtype=torch.float32
-                    ).reshape(batch_size, dim)
-                    method = getattr(layer.normalization, method_name)
-                    state = LayerState(hidden=x)
-                    expected = (
-                        x * torch.rsqrt(x.square().mean(dim=-1, keepdim=True) + 1e-5)
-                        if position == active_position
-                        else x
-                    )
-                    result = method(state)
+        cases = product(
+            (None, *NormalizationOptions), positions, methods, ((4, dim), (2, 3, dim))
+        )
+        for normalization, position, (method_name, active_position), shape in cases:
+            with self.subTest(
+                normalization=normalization,
+                position=position,
+                method=method_name,
+                shape=shape,
+            ):
+                cfg = self.bare_config(
+                    input_dim=dim,
+                    output_dim=dim,
+                    layer_norm_position=position,
+                )
+                cfg.normalization = normalization
+                layer = Layer(cfg)
+                x = torch.linspace(
+                    -3, 4, math.prod(shape), dtype=torch.float64
+                ).reshape(shape)
+                x.requires_grad_()
+                module = layer.normalization.module
+                if module is not None:
+                    module.double()
+                    with torch.no_grad():
+                        module.weight.copy_(torch.linspace(0.5, 1.5, dim))
+                        if getattr(module, "bias", None) is not None:
+                            module.bias.fill_(0.25)
+                method = getattr(layer.normalization, method_name)
+                state = LayerState(hidden=x)
+                expected = x
+                if position == active_position:
+                    expected = module(x)
+                result = method(state)
 
-                    self.assertIs(result, state)
-                    self.assertEqual(result.hidden.shape, x.shape)
-                    torch.testing.assert_close(result.hidden, expected)
+                self.assertIs(result, state)
+                self.assertEqual(result.hidden.shape, x.shape)
+                torch.testing.assert_close(result.hidden, expected)
+                actual_gradient = torch.autograd.grad(result.hidden.sum(), x)[0]
+                expected_gradient = torch.autograd.grad(expected.sum(), x)[0]
+                torch.testing.assert_close(actual_gradient, expected_gradient)
+                if position == LayerNormPositionOptions.DISABLED:
+                    self.assertIsNone(module)
+                if position != active_position:
+                    self.assertIs(result.hidden, x)
 
     def test_postprocessing_delegate_applies_optional_gate(self):
         batch_size = 4
