@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from emperor._validation import ValidatorBase
+from emperor._validation import ValidatorBase, _adaptive_grouping_paths
 from emperor.experts._options import RoutingInitializationMode
 
 if TYPE_CHECKING:
@@ -9,6 +9,15 @@ if TYPE_CHECKING:
 
 class MixtureOfExpertsModelValidator(ValidatorBase):
     OPTIONAL_FIELDS = {"sampler_config"}
+
+    @staticmethod
+    def validate_grouping_forward_inputs(model, hidden, skip_mask) -> None:
+        if not _adaptive_grouping_paths(model.cfg, root="MixtureOfExpertsModelConfig"):
+            return
+        leaf = model.stack_config.layer_config.layer_model_config
+        validator = leaf.registry_owner().VALIDATOR
+        validator.validate_skip_mask(hidden, skip_mask, hidden.size(0))
+        validator.validate_grouping_skip_mask(model, skip_mask)
 
     @classmethod
     def validate(cls, model: "MixtureOfExpertsModel") -> None:

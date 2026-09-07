@@ -11,11 +11,6 @@ class MixtureOfExpertsLayer(Layer):
         state: MixtureOfExpertsLayerState,
     ) -> MixtureOfExpertsLayerState:
         main_model_input = state.hidden
-        self.VALIDATOR.validate_layout_can_cross_routing(
-            self,
-            state,
-            main_model_input,
-        )
         output, skip_mask, loss = self.model(
             main_model_input,
             state.probabilities,
@@ -24,6 +19,6 @@ class MixtureOfExpertsLayer(Layer):
         )
         state.skip_mask = skip_mask
         state.loss = loss if state.loss is None else state.loss + loss
-        self.VALIDATOR.validate_layout_restored(state, output)
+        self.VALIDATOR.validate_output_rows(self, main_model_input, output)
         state.hidden = output
         return state
