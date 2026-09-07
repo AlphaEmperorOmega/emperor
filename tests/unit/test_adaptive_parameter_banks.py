@@ -211,3 +211,35 @@ def test_malformed_sampler_routes_cannot_broadcast_silently(
     )
     with pytest.raises((TypeError, ValueError)):
         model(torch.zeros_like(model.parameter_bank[0]), torch.ones(2, 2))
+
+
+@pytest.mark.parametrize("bias", [False, True])
+def test_linear_owns_bias_policy_and_constructs_base_parameters(bias, monkeypatch):
+    from emperor.augmentations.adaptive_parameters import (
+        AdaptiveLinearLayerConfig,
+        AdaptiveParameterAugmentationConfig,
+    )
+    from emperor.linears import LinearAbstract
+
+    calls = []
+    original = LinearAbstract._create_weight_parameters
+
+    def observe(model):
+        calls.append(model)
+        return original(model)
+
+    monkeypatch.setattr(LinearAbstract, "_create_weight_parameters", observe)
+    layer = AdaptiveLinearLayerConfig(
+        input_dim=2,
+        output_dim=3,
+        bias_flag=bias,
+        adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+            weight_config=weight_mixture_config(),
+            bias_config=bias_mixture_config() if bias else None,
+        ),
+    ).build()
+    assert sum(owner is layer for owner in calls) == 1
+    assert layer.weight_params is not None
+    assert (layer.bias_params is not None) is bias
+    assert (layer.adaptive_behaviour.bias_model is not None) is bias
+    assert layer(torch.randn(2, 2)).shape == (2, 3)
