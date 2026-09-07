@@ -1,9 +1,10 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import models.vit.expert_linear_adaptive.config as config
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    GroupingConfig,
 )
 from emperor.layers import (
     ActivationOptions,
@@ -157,6 +158,7 @@ class LinearLayerConfigFactory:
 
 @dataclass(frozen=True)
 class AdaptiveAugmentationDependencies:
+    grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
     hidden_dim: int
     output_dim: int
     adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None
@@ -180,6 +182,7 @@ class AdaptiveAugmentationConfigFactory:
             if dependencies.hidden_adaptive_weight_options is not None
             else config_defaults.hidden_adaptive_weight_options(config_module)
         )
+        self.grouping_config = dependencies.grouping_config
         self.hidden_adaptive_bias_options = (
             dependencies.hidden_adaptive_bias_options
             if dependencies.hidden_adaptive_bias_options is not None
@@ -208,6 +211,7 @@ class AdaptiveAugmentationConfigFactory:
                 layer_controller_options=None,
                 dynamic_memory_options=None,
                 recurrent_controller_options=None,
+                grouping_config=self.grouping_config,
                 hidden_adaptive_weight_options=(self.hidden_adaptive_weight_options),
                 hidden_adaptive_bias_options=(self.hidden_adaptive_bias_options),
                 hidden_adaptive_diagonal_options=(

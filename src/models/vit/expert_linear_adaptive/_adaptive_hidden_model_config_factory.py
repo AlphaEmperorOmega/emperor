@@ -1,14 +1,14 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import models.vit.expert_linear_adaptive.config as config
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
     AxisMaskConfig,
     DynamicBiasConfig,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
+    GroupingConfig,
 )
 from emperor.halting import HaltingConfig
 from emperor.layers import (
@@ -30,6 +30,10 @@ from models.vit.expert_linear_adaptive._adaptive_parameter_config_factory import
     resolve_enabled_adaptive_parameter_option,
 )
 from models.vit.expert_linear_adaptive._gate_config_factory import GateConfigFactory
+from models.vit.expert_linear_adaptive._generation import (
+    mixture_generation_fields,
+    weight_generation_fields,
+)
 from models.vit.expert_linear_adaptive._halting_config_factory import (
     HaltingConfigFactory,
 )
@@ -55,6 +59,7 @@ from ._residual import build_residual_config
 
 @dataclass(frozen=True)
 class HiddenModelConfigDependencies:
+    grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
     hidden_dim: int
     stack_options: MainLayerStackOptions | None
     submodule_stack_options: SubmoduleStackOptions | None
@@ -78,6 +83,7 @@ class HiddenModelConfigFactory:
         dynamic_memory_options = dependencies.dynamic_memory_options
         recurrent_controller_options = dependencies.recurrent_controller_options
         hidden_adaptive_weight_options = dependencies.hidden_adaptive_weight_options
+        grouping_config = dependencies.grouping_config
         hidden_adaptive_bias_options = dependencies.hidden_adaptive_bias_options
         hidden_adaptive_diagonal_options = dependencies.hidden_adaptive_diagonal_options
         hidden_adaptive_mask_options = dependencies.hidden_adaptive_mask_options
@@ -145,6 +151,7 @@ class HiddenModelConfigFactory:
             if hidden_adaptive_weight_options is None
             else hidden_adaptive_weight_options
         )
+        self.grouping_config = grouping_config
         self.hidden_adaptive_bias_options = (
             config_defaults.hidden_adaptive_bias_options(config)
             if hidden_adaptive_bias_options is None
@@ -242,7 +249,7 @@ class HiddenModelConfigFactory:
         mask_config = self.__build_mask_config()
         shared_model_config = self.__build_shared_adaptive_generator_stack_config()
         return AdaptiveParameterAugmentationConfig(
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=self.grouping_config,
             weight_config=weight_config,
             bias_config=bias_config,
             diagonal_config=diagonal_config,
@@ -266,6 +273,11 @@ class HiddenModelConfigFactory:
         )
         return build_weight_config(
             weight_option,
+            generation_fields=weight_generation_fields(
+                self.hidden_adaptive_weight_options.generation,
+                self.adaptive_generator_stack_config_factory,
+                self.hidden_adaptive_weight_options.generator_stack_source,
+            ),
             generator_depth=self.hidden_adaptive_weight_options.generator_depth,
             decay_schedule=self.hidden_adaptive_weight_options.decay_schedule,
             decay_rate=self.hidden_adaptive_weight_options.decay_rate,
@@ -300,6 +312,10 @@ class HiddenModelConfigFactory:
         )
         return build_bias_config(
             bias_option,
+            generation_fields=mixture_generation_fields(
+                self.hidden_adaptive_bias_options.generation,
+                self.adaptive_generator_stack_config_factory,
+            ),
             decay_schedule=self.hidden_adaptive_bias_options.decay_schedule,
             decay_rate=self.hidden_adaptive_bias_options.decay_rate,
             decay_warmup_batches=(

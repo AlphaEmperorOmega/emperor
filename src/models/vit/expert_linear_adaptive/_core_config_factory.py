@@ -45,6 +45,10 @@ class CoreConfigDependencies:
     dynamic_memory_options: DynamicMemoryOptions | None
     recurrent_controller_options: RecurrentControllerOptions | None
     linear_layer_config_factory: LinearLayerConfigFactory
+    attention_projection_linear_layer_config_factory: (
+        LinearLayerConfigFactory | None
+    ) = None
+    feed_forward_linear_layer_config_factory: LinearLayerConfigFactory | None = None
     expert_config_factory: _VitExpertConfigFactory | None = None
 
 
@@ -165,5 +169,7 @@ class CoreConfigFactory:
             dynamic_memory_options=dependencies.dynamic_memory_options,
             recurrent_controller_options=dependencies.recurrent_controller_options,
             linear_layer_config_factory=dependencies.linear_layer_config_factory,
+            attention_projection_linear_layer_config_factory=dependencies.attention_projection_linear_layer_config_factory,
+            feed_forward_linear_layer_config_factory=dependencies.feed_forward_linear_layer_config_factory,
             expert_config_factory=dependencies.expert_config_factory,
         )
