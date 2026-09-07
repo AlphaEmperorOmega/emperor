@@ -13,7 +13,7 @@ from emperor.layers import (
     LayerState,
 )
 from emperor.linears import LinearLayerConfig
-from emperor.neuron._cluster.state import NeuronClusterRouteState
+from emperor.neuron._cluster.routing.state import NeuronClusterRouteState
 from emperor.parametric import (
     AdaptiveRouterOptions,
     GeneratorBiasMixtureConfig,
@@ -33,7 +33,9 @@ from emperor.parametric._validation import (
     ParametricHandlerValidator,
     ParametricLayerValidator,
 )
+from support.adaptive_grouping import bias_linear, grouping_value
 from unit.test_parametric_behavioral_contracts import (
+    _bank_kwargs,
     _generator_config,
     _mixture_kwargs,
     _parametric_config,
@@ -569,9 +571,7 @@ class ParametricValidationMutationContractTests(unittest.TestCase):
 
     def test_bias_top_k_mismatch_reports_exact_public_error(self) -> None:
         config = _parametric_config(
-            bias_config=MatrixBiasMixtureConfig(
-                **_mixture_kwargs(top_k=1, num_experts=2)
-            )
+            bias_config=MatrixBiasMixtureConfig(**_bank_kwargs(top_k=1, num_experts=2))
         )
         self.assert_exact_error(
             ValueError,
@@ -582,9 +582,7 @@ class ParametricValidationMutationContractTests(unittest.TestCase):
 
     def test_bias_expert_count_mismatch_reports_exact_public_error(self) -> None:
         config = _parametric_config(
-            bias_config=MatrixBiasMixtureConfig(
-                **_mixture_kwargs(top_k=2, num_experts=3)
-            )
+            bias_config=MatrixBiasMixtureConfig(**_bank_kwargs(top_k=2, num_experts=3))
         )
         self.assert_exact_error(
             ValueError,
@@ -616,16 +614,16 @@ class ParametricValidationMutationContractTests(unittest.TestCase):
             lambda: ParametricLayer(config),
         )
 
-    def test_unresolved_grouping_scope_is_rejected_before_child_construction(
+    def test_unknown_augmentation_fields_are_rejected_before_child_construction(
         self,
     ) -> None:
         config = _parametric_config()
-        config.adaptive_augmentation_config.grouping_scope = None
+        config.adaptive_augmentation_config.unexpected_field = None
 
         self.assert_rejected_before_rng_consumption(
             ValueError,
-            "grouping_scope is required for a resolved "
-            "AdaptiveParameterAugmentationConfig; use DISABLED, ROWS, or SEQUENCE.",
+            "AdaptiveParameterAugmentationConfig contains unsupported fields; "
+            "rebuild it using the current configuration schema.",
             lambda: ParametricLayer(config),
         )
 
@@ -633,10 +631,9 @@ class ParametricValidationMutationContractTests(unittest.TestCase):
         self,
     ) -> None:
         config = _parametric_config()
-        config.adaptive_augmentation_config.grouping_scope = (
-            AdaptiveParameterGroupingScopeOptions.ROWS
-        )
-        config.adaptive_augmentation_config.group_count = 2
+        config.adaptive_augmentation_config = bias_linear(
+            grouping_value(AdaptiveParameterGroupingScopeOptions.ROWS, 2)
+        ).cfg.adaptive_augmentation_config
 
         self.assert_rejected_before_rng_consumption(
             ValueError,
@@ -647,9 +644,7 @@ class ParametricValidationMutationContractTests(unittest.TestCase):
 
     def test_duplicate_bias_sources_report_exact_public_error(self) -> None:
         config = _parametric_config(
-            bias_config=MatrixBiasMixtureConfig(
-                **_mixture_kwargs(top_k=2, num_experts=2)
-            )
+            bias_config=MatrixBiasMixtureConfig(**_bank_kwargs(top_k=2, num_experts=2))
         )
         config.adaptive_augmentation_config.bias_config = object()
         self.assert_exact_error(
@@ -658,6 +653,34 @@ class ParametricValidationMutationContractTests(unittest.TestCase):
             "bias_mixture_config is None.",
             lambda: ParametricLayer(config),
         )
+
+    def test_adaptive_matrix_bias_is_rejected_before_child_construction(self) -> None:
+        from emperor.augmentations.adaptive_parameters import (
+            MatrixBiasMixtureConfig as AdaptiveMatrixBiasMixtureConfig,
+        )
+        from emperor.sampler import SamplerConfig
+        from support.adaptive_grouping import linear_stack_config
+
+        for parametric_bias in (
+            None,
+            MatrixBiasMixtureConfig(**_bank_kwargs(top_k=2, num_experts=2)),
+        ):
+            with self.subTest(parametric_bias=parametric_bias):
+                config = _parametric_config(bias_config=parametric_bias)
+                config.adaptive_augmentation_config.bias_config = (
+                    AdaptiveMatrixBiasMixtureConfig(
+                        num_experts=2,
+                        top_k=2,
+                        sampler_config=SamplerConfig(),
+                        model_config=linear_stack_config(2, 2),
+                    )
+                )
+                self.assert_rejected_before_rng_consumption(
+                    ValueError,
+                    "ParametricLayer does not support adaptive MatrixBiasMixtureConfig; "
+                    "use its parametric bias_mixture_config instead.",
+                    lambda config=config: ParametricLayer(config),
+                )
 
     def test_handler_rejects_real_non_layer_state_exactly(self) -> None:
         handler = _handler_config(_parametric_config()).build()
