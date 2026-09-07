@@ -343,7 +343,7 @@ class LayerRuntimeMutationContractTests(unittest.TestCase):
 
         first_affine = hidden @ first_weight
         first_residual = torch.tanh(first_affine) + hidden
-        first_normalized = F.layer_norm(
+        first_normalized = F.rms_norm(
             first_residual,
             (2,),
             eps=first.normalization.module.eps,

@@ -317,7 +317,7 @@ class LayerValidator(ValidatorBase):
         raise ValueError(
             f"layer_norm_position must be DISABLED when layer_model_config "
             f"is a spatial (Conv2d-like) module, received "
-            f"{cfg.layer_norm_position}. nn.LayerNorm normalizes over the last "
+            f"{cfg.layer_norm_position}. nn.RMSNorm normalizes over the last "
             f"tensor dim; for (B, C, H, W) inputs that is W, which is not "
             f"channel normalization. Use BatchNorm2d or GroupNorm externally, "
             f"or disable layer norm."
