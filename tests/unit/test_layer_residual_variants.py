@@ -144,7 +144,6 @@ class TestResidualRuntimeHierarchy(unittest.TestCase):
                 previous,
                 *,
                 residual_state=None,
-                row_layout=None,
             ):
                 return current
 
