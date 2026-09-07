@@ -5,10 +5,14 @@ from emperor.augmentations.adaptive_parameters._biases.config import (
     AffineTransformDynamicBiasConfig,
     DynamicBiasConfig,
     GeneratorDynamicBiasConfig,
+    MatrixBiasMixtureConfig,
     MultiplicativeDynamicBiasConfig,
     SigmoidGatedDynamicBiasConfig,
     TanhGatedDynamicBiasConfig,
     WeightedBankDynamicBiasConfig,
+)
+from emperor.augmentations.adaptive_parameters._biases.variants.matrix_mixture import (
+    MatrixBiasMixture,
 )
 from emperor.augmentations.adaptive_parameters._config import (
     AdaptiveLinearLayerConfig,
@@ -76,6 +80,8 @@ __all__ = (
     "WeightNormalizationPolicy",
     "MatrixWeightsMixtureConfig",
     "MatrixWeightsMixture",
+    "MatrixBiasMixtureConfig",
+    "MatrixBiasMixture",
     "AttentionGroupingConfig",
     "GroupingConfig",
     "MeanGroupingConfig",

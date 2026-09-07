@@ -20,6 +20,10 @@ if TYPE_CHECKING:
         AdaptiveLinearLayer,
     )
 
+
+from emperor.augmentations.adaptive_parameters._biases.config import (
+    MatrixBiasMixtureConfig,
+)
 from emperor.augmentations.adaptive_parameters._weights.config import (
     MatrixWeightsMixtureConfig,
 )
@@ -308,14 +312,17 @@ class AdaptiveParameterAugmentationValidator(
 
     @staticmethod
     def validate_matrix_mixture_configs(config, input_dim, output_dim):
-        variant = config.weight_config
-        if isinstance(variant, MatrixWeightsMixtureConfig):
-            variant.registry_owner().validate_owner_config(
-                variant,
-                input_dim=input_dim,
-                output_dim=output_dim,
-                model_config=config.model_config,
-            )
+        for variant in (config.weight_config, config.bias_config):
+            if isinstance(
+                variant, (MatrixWeightsMixtureConfig, MatrixBiasMixtureConfig)
+            ):
+                variant_owner = variant.registry_owner()
+                variant_owner.validate_owner_config(
+                    variant,
+                    input_dim=input_dim,
+                    output_dim=output_dim,
+                    model_config=config.model_config,
+                )
 
     @classmethod
     def _validate_sub_configs(cls, model: "AdaptiveParameterAugmentation") -> None:
@@ -349,7 +356,9 @@ class AdaptiveParameterAugmentationValidator(
                     f"{name} must be a {expected_type.__name__} instance, "
                     f"got {type(config).__name__}."
                 )
-            if isinstance(config, MatrixWeightsMixtureConfig):
+            if isinstance(
+                config, (MatrixWeightsMixtureConfig, MatrixBiasMixtureConfig)
+            ):
                 continue
             cls._validate_model_config(f"{name}.model_config", config.model_config)
             if config.model_config is None and model.model_config is None:
