@@ -11,7 +11,6 @@ from pathlib import Path
 import torch
 
 from emperor.attention import (
-    AttentionLayerState,
     IndependentAttentionConfig,
     MixerAttentionConfig,
     MixtureOfAttentionHeadsConfig,
@@ -20,7 +19,6 @@ from emperor.attention import (
     SelfAttentionProjectionStrategy,
 )
 from emperor.attention._runtime import (
-    AttentionRuntimeLayout,
     MultiHeadAttentionInputs,
 )
 from emperor.experts import RoutingInitializationMode
@@ -370,7 +368,6 @@ heavy_modules = (
     "emperor.attention._ops.masking",
     "emperor.attention._ops.processing",
     "emperor.attention._ops.projection",
-    "emperor.attention._ops.projection_layout",
     "emperor.attention._ops.reshaping",
     "emperor.attention._ops.zero_attention",
     "emperor.attention._variants.independent.layer",
@@ -511,18 +508,6 @@ print(json.dumps({
             ),
         )
         self.assertEqual(
-            tuple(field.name for field in fields(AttentionLayerState)),
-            (
-                "hidden",
-                "loss",
-                "halting_state",
-                "residual_state",
-                "row_layout",
-                "key_padding_mask",
-                "attention_mask",
-            ),
-        )
-        self.assertEqual(
             tuple(field.name for field in fields(MultiHeadAttentionInputs)),
             (
                 "query",
@@ -534,18 +519,6 @@ print(json.dumps({
                 "static_value",
                 "runtime_layout",
                 "merged_attention_mask",
-            ),
-        )
-        self.assertEqual(
-            tuple(field.name for field in fields(AttentionRuntimeLayout)),
-            (
-                "batch_size",
-                "target_sequence_length",
-                "source_sequence_length",
-                "input_was_batched",
-                "input_was_batch_first",
-                "source_extension_count",
-                "row_layout",
             ),
         )
         self.assertEqual(
