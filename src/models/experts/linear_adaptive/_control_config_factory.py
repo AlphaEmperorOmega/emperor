@@ -1,13 +1,13 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
     AxisMaskConfig,
     DynamicBiasConfig,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
+    GroupingConfig,
 )
 from emperor.experts import (
     MixtureOfExpertsConfig,
@@ -40,6 +40,10 @@ from models.experts.linear_adaptive._control_support import (
     ExpertsRecurrentConfigFactory,
     build_controller_stack,
 )
+from models.experts.linear_adaptive._generation import (
+    mixture_generation_fields,
+    weight_generation_fields,
+)
 from models.experts.linear_adaptive._router_controller_config import (
     RouterControllerModelConfig,
 )
@@ -65,6 +69,8 @@ from ._residual import build_residual_config
 
 @dataclass(frozen=True)
 class ControlConfigDependencies:
+    grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
+    router_grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
     stack_options: ExpertsStackOptions
     submodule_stack_options: ExpertsSubmoduleStackOptions
     mixture_options: ExpertsMixtureOptions
@@ -144,6 +150,7 @@ class ControlConfigFactory:
         self.router_adaptive_mask_options = dependencies.router_adaptive_mask_options
         self.hidden_adaptive_augmentation_config = (
             self.__build_adaptive_augmentation_config(
+                grouping_config=dependencies.grouping_config,
                 weight_options=self.hidden_adaptive_weight_options,
                 bias_options=self.hidden_adaptive_bias_options,
                 diagonal_options=self.hidden_adaptive_diagonal_options,
@@ -152,6 +159,7 @@ class ControlConfigFactory:
         )
         self.router_adaptive_augmentation_config = (
             self.__build_adaptive_augmentation_config(
+                grouping_config=dependencies.router_grouping_config,
                 weight_options=self.router_adaptive_weight_options,
                 bias_options=self.router_adaptive_bias_options,
                 diagonal_options=self.router_adaptive_diagonal_options,
@@ -255,6 +263,7 @@ class ControlConfigFactory:
     def __build_adaptive_augmentation_config(
         self,
         *,
+        grouping_config: GroupingConfig | None,
         weight_options: HiddenAdaptiveWeightOptions,
         bias_options: HiddenAdaptiveBiasOptions,
         diagonal_options: HiddenAdaptiveDiagonalOptions,
@@ -266,7 +275,7 @@ class ControlConfigFactory:
         mask_config = self.__build_mask_config(mask_options)
         model_config = self.__build_shared_generator_model_config()
         return AdaptiveParameterAugmentationConfig(
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=grouping_config,
             weight_config=weight_config,
             bias_config=bias_config,
             diagonal_config=diagonal_config,
@@ -541,6 +550,11 @@ class ControlConfigFactory:
         )
         return build_weight_config(
             weight_option,
+            generation_fields=weight_generation_fields(
+                adaptive_options.generation,
+                self.adaptive_generator_stack_config_factory,
+                adaptive_options.generator_stack_source,
+            ),
             generator_depth=adaptive_options.generator_depth,
             decay_schedule=adaptive_options.decay_schedule,
             decay_rate=adaptive_options.decay_rate,
@@ -570,6 +584,10 @@ class ControlConfigFactory:
         )
         return build_bias_config(
             bias_option,
+            generation_fields=mixture_generation_fields(
+                adaptive_options.generation,
+                self.adaptive_generator_stack_config_factory,
+            ),
             decay_schedule=adaptive_options.decay_schedule,
             decay_rate=adaptive_options.decay_rate,
             decay_warmup_batches=adaptive_options.decay_warmup_batches,

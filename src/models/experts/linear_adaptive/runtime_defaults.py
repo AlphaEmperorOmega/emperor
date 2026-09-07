@@ -1,4 +1,5 @@
 from collections.abc import Mapping
+from dataclasses import fields, replace
 from types import ModuleType
 from typing import Final
 
@@ -8,6 +9,14 @@ from models.experts.linear_adaptive._config_implementation import (
     _RuntimeDefaultsResolver,
     _RuntimeDefaultValues,
     resolve_runtime_defaults,
+)
+from models.experts.linear_adaptive._generation import (
+    apply_generation_options,
+    generation_keys,
+)
+from models.experts.linear_adaptive._grouping import (
+    GROUPING_FIELDS,
+    grouping_from_fields,
 )
 from models.experts.linear_adaptive.runtime_options import RuntimeOptions
 
@@ -69,7 +78,16 @@ def runtime_from_flat(
     flat_kwargs: Mapping[str, object] | None = None,
     config_module: ModuleType = config,
 ) -> RuntimeOptions:
-    flat_values = builder_kwargs_from_flat(flat_kwargs or {}, config_module)
+    generation_values = dict(flat_kwargs or {})
+    feature_keys = generation_keys(config_module)
+    flat_values = builder_kwargs_from_flat(
+        {
+            key: value
+            for key, value in generation_values.items()
+            if key not in feature_keys
+        },
+        config_module,
+    )
     validate_runtime_default_value_types(
         flat_values,
         package="models.experts.linear_adaptive",
@@ -83,7 +101,32 @@ def runtime_from_flat(
             "_RuntimeDefaultsResolver.__init__",
         )
         raise TypeError(message) from None
-    return _runtime_from_resolver(resolve_runtime_defaults(values))
+    runtime = _runtime_from_resolver(resolve_runtime_defaults(values))
+    runtime_values = {
+        item.name: getattr(runtime, item.name) for item in fields(runtime)
+    }
+    runtime = replace(
+        runtime,
+        **apply_generation_options(runtime_values, generation_values, config_module),
+    )
+    grouping = {
+        prefix: grouping_from_fields(
+            {name: getattr(values, prefix + name) for name in GROUPING_FIELDS},
+            prefix=prefix or "main",
+        )
+        for prefix in ("", "router_", "input_layer_", "output_layer_")
+    }
+    return replace(
+        runtime,
+        grouping_config=grouping[""],
+        router_grouping_config=grouping["router_"],
+        input_boundary_options=replace(
+            runtime.input_boundary_options, grouping_config=grouping["input_layer_"]
+        ),
+        output_boundary_options=replace(
+            runtime.output_boundary_options, grouping_config=grouping["output_layer_"]
+        ),
+    )
 
 
 DEFAULT_RUNTIME: Final[RuntimeOptions] = runtime_from_flat()
