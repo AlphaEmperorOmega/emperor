@@ -7,8 +7,6 @@ from emperor.parametric import (
     AdaptiveMixtureConfig,
     ClipParameterOptions,
     GeneratorWeightsMixture,
-    MatrixBiasMixture,
-    MatrixWeightsMixture,
     VectorWeightsMixture,
 )
 from emperor.parametric._mixtures.validation import AdaptiveMixtureValidator
@@ -33,8 +31,6 @@ class TestAdaptiveMixtureValidatorAdapter(unittest.TestCase):
         module_types = (
             AdaptiveMixtureBase,
             VectorWeightsMixture,
-            MatrixWeightsMixture,
-            MatrixBiasMixture,
             GeneratorWeightsMixture,
         )
 
