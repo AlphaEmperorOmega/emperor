@@ -139,7 +139,6 @@ def _validate_variant_state(
 def _validate_variant_transition_output(
     output_state: object,
     transition_input: Tensor,
-    expected_row_layout: object,
     *,
     expected_feature_dim: int,
     owner_name: str,
@@ -169,11 +168,6 @@ def _validate_variant_transition_output(
     if output_state.hidden.device != transition_input.device:
         raise ValueError(
             f"{transition_name} transition block must preserve hidden device."
-        )
-    if output_state.row_layout is not expected_row_layout:
-        raise ValueError(
-            f"{transition_name} transition block must preserve the exact "
-            "row_layout object."
         )
 
 

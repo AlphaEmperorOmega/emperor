@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from typing import TYPE_CHECKING, cast
+from typing import cast
 
 import torch.nn as nn
 from torch import Tensor
@@ -16,9 +16,6 @@ from emperor.layers._composition.residual.base import (
     ResidualRuntimeRequirement,
     ResidualState,
 )
-
-if TYPE_CHECKING:
-    from emperor.layers._row_layout import RowLayout
 
 
 class RecurrentResidualSchedule(nn.Module, ABC):
@@ -53,7 +50,6 @@ class RecurrentResidualSchedule(nn.Module, ABC):
         previous: Tensor,
         *,
         residual_state: ResidualState | None,
-        row_layout: RowLayout | None = None,
     ) -> None:
         """Replay a residual application to advance one forked recurrent branch."""
         if residual_state is None:
@@ -64,7 +60,6 @@ class RecurrentResidualSchedule(nn.Module, ABC):
             current,
             previous,
             residual_state=residual_state,
-            row_layout=row_layout,
         )
 
     def apply(
@@ -75,7 +70,6 @@ class RecurrentResidualSchedule(nn.Module, ABC):
         previous: Tensor,
         *,
         residual_state: ResidualState | None = None,
-        row_layout: RowLayout | None = None,
     ) -> Tensor:
         connection = self.connection_for_transition(
             primary_connection,
@@ -85,7 +79,6 @@ class RecurrentResidualSchedule(nn.Module, ABC):
             current,
             previous,
             residual_state=residual_state,
-            row_layout=row_layout,
         )
 
     def connection_for_transition(
