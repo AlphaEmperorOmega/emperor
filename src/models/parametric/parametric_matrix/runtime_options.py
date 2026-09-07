@@ -6,7 +6,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     ResidualConfig,
 )
-from emperor.parametric import ClipParameterOptions
 from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
 
 
@@ -29,8 +28,6 @@ class ParametricMixtureOptions:
     top_k: int
     num_experts: int
     weighted_parameters_flag: bool
-    clip_parameter_option: ClipParameterOptions
-    clip_range: float
 
 
 @dataclass(frozen=True)
