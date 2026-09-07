@@ -15,7 +15,6 @@ from emperor.attention._ops.bias import KeyValueBias
 from emperor.attention._ops.masking import Mask
 from emperor.attention._ops.processing import ProcessorBase
 from emperor.attention._ops.projection import ProjectorBase
-from emperor.attention._ops.projection_layout import ProjectionRowLayoutManager
 from emperor.attention._variants.independent.layer import IndependentAttention
 from emperor.attention._variants.independent.validation import (
     IndependentAttentionValidator,
@@ -280,10 +279,6 @@ class TestAttention(unittest.TestCase):
         self.assertIsInstance(model.processor, ProcessorBase)
         self.assertIsInstance(model.bias, KeyValueBias)
         self.assertIsInstance(model.batch_manager, BatchDimensionManager)
-        self.assertIsInstance(
-            model.layout_manager,
-            ProjectionRowLayoutManager,
-        )
 
     def test_model_config_wrapper_and_explicit_overrides_are_honoured(self):
         base = self.config(FORWARD_CASES[0])
@@ -313,10 +308,10 @@ class TestAttention(unittest.TestCase):
 
         self.assertIs(model.processor.reshaper, model.reshaper)
 
-    def test_projection_row_layout_validation_dispatches_through_subclass(self):
+    def test_grouping_eligibility_validation_dispatches_through_subclass(self):
         class RejectingValidator(IndependentAttentionValidator):
             @staticmethod
-            def validate_projection_row_layout_runtime_layout(*args, **kwargs):
+            def validate_grouping_forward_inputs(*args, **kwargs):
                 raise RuntimeError("substituted projection-layout validator was called")
 
         class RejectingAttention(IndependentAttention):
