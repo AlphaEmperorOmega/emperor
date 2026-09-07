@@ -120,7 +120,6 @@ class RecurrentLayerValidator(_RecurrentCompositionValidator):
         cls,
         output_state: object,
         transition_input: Tensor,
-        expected_row_layout: object,
         *,
         expected_feature_dim: int,
     ) -> None:
@@ -140,10 +139,6 @@ class RecurrentLayerValidator(_RecurrentCompositionValidator):
             raise ValueError("recurrent transition block must preserve hidden dtype.")
         if output_state.hidden.device != transition_input.device:
             raise ValueError("recurrent transition block must preserve hidden device.")
-        cls.validate_row_layout_preserved(
-            output_state.row_layout,
-            expected_row_layout,
-        )
 
     @staticmethod
     def validate_hidden(
@@ -178,16 +173,6 @@ class RecurrentLayerValidator(_RecurrentCompositionValidator):
                 f"shape {tuple(candidate.shape)} and previous shape "
                 f"{tuple(previous_hidden.shape)}"
             )
-
-    @staticmethod
-    def validate_row_layout_preserved(candidate_layout, expected_layout) -> None:
-        if candidate_layout is expected_layout:
-            return
-        raise ValueError(
-            "recurrent block must preserve the exact row_layout object; row "
-            "selection, reordering, or replacement requires an explicit layout "
-            "transformation contract."
-        )
 
     @staticmethod
     def _validate_integer_field(field_name: str, value: int) -> None:

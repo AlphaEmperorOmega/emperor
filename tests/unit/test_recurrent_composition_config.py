@@ -533,7 +533,6 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
                 "_blend_recurrent_branch_losses",
                 "_new_recurrent_initial_buffer",
                 "_observe_recurrent_step",
-                "_recurrent_row_layout_for_transitions",
                 "_run_recurrent_transition",
                 "_run_shared_handoff_boundary_transition",
                 "_set_recurrent_diagnostic_observer",
