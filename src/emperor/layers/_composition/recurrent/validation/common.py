@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 import torch
 from torch import Tensor
 
-from emperor._validation import ValidatorBase
+from emperor._validation import ValidatorBase, _validate_grouped_row_preservation
 from emperor.layers._composition.gate.validation import LayerGateValidator
 from emperor.layers._composition.residual.base import ResidualRuntimeRequirement
 from emperor.layers._composition.residual.validation import (
@@ -310,6 +310,7 @@ def _validate_recurrent_controller_config(
     ] = frozenset(),
 ) -> None:
     owner_name = type(config).__name__
+    _validate_grouped_row_preservation(config, root=owner_name)
     recurrent_layer_norm_position = config.recurrent_layer_norm_position
     if recurrent_layer_norm_position is not None and not isinstance(
         recurrent_layer_norm_position,

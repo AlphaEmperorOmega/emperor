@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, TypeGuard
 
-from emperor._validation import ValidatorBase
+from emperor._validation import ValidatorBase, _validate_grouped_row_preservation
 from emperor.layers._composition.gate.validation import LayerGateValidator
 from emperor.layers._composition.residual.base import ResidualStackRequirements
 from emperor.layers._config import MirroredLayerStackConfig
@@ -65,6 +65,7 @@ class LayerStackValidator(ValidatorBase):
         cls._validate_gate_config(cfg)
         cls._validate_halting_config(cfg)
         cls._validate_memory_config(cfg)
+        _validate_grouped_row_preservation(cfg, root=type(cfg).__name__)
         cls._validate_residual_stack_requirements(cfg)
         _validate_no_grouping_with_context_controllers(
             cfg,
