@@ -5,7 +5,6 @@ import torch
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.experts import (
     DroppedTokenOptions,
@@ -113,6 +112,23 @@ def _mixture_kwargs(
     }
 
 
+def _bank_kwargs(
+    *,
+    input_dim: int = 2,
+    output_dim: int = 2,
+    top_k: int = 2,
+    num_experts: int = 3,
+    weighted: bool = True,
+) -> dict[str, object]:
+    return {
+        "input_dim": input_dim,
+        "output_dim": output_dim,
+        "top_k": top_k,
+        "num_experts": num_experts,
+        "weighted_parameters_flag": weighted,
+    }
+
+
 def _augmentation_config(
     input_dim: int = 2,
     output_dim: int = 2,
@@ -120,7 +136,7 @@ def _augmentation_config(
     return AdaptiveParameterAugmentationConfig(
         input_dim=input_dim,
         output_dim=output_dim,
-        grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+        grouping_config=None,
         weight_config=None,
         diagonal_config=None,
         bias_config=None,
@@ -164,7 +180,7 @@ def _parametric_config(
 ) -> ParametricLayerConfig:
     if weight_config is None:
         weight_config = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(
+            **_bank_kwargs(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 top_k=top_k,
@@ -194,7 +210,7 @@ class ParametricMixtureBehavioralContractTests(unittest.TestCase):
         )
 
         sparse = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(top_k=2, num_experts=3)
+            **_bank_kwargs(top_k=2, num_experts=3)
         ).build()
         with torch.no_grad():
             sparse.parameter_bank.copy_(bank)
@@ -212,7 +228,7 @@ class ParametricMixtureBehavioralContractTests(unittest.TestCase):
         )
 
         dense = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(top_k=3, num_experts=3)
+            **_bank_kwargs(top_k=3, num_experts=3)
         ).build()
         with torch.no_grad():
             dense.parameter_bank.copy_(bank)
@@ -224,7 +240,7 @@ class ParametricMixtureBehavioralContractTests(unittest.TestCase):
         )
 
         explicit_full = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(top_k=3, num_experts=3)
+            **_bank_kwargs(top_k=3, num_experts=3)
         ).build()
         with torch.no_grad():
             explicit_full.parameter_bank.copy_(bank)
@@ -244,8 +260,7 @@ class ParametricMixtureBehavioralContractTests(unittest.TestCase):
             )
         )
         explicit_output = explicit_full.compute_mixture(
-            explicit_probabilities,
-            explicit_indices,
+            explicit_probabilities, explicit_indices
         )
         torch.testing.assert_close(explicit_output, expected_explicit)
         self.assertEqual(explicit_output.shape, (2, 2, 2))
@@ -260,7 +275,7 @@ class ParametricMixtureBehavioralContractTests(unittest.TestCase):
         )
 
         top_one = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(
+            **_bank_kwargs(
                 top_k=1,
                 num_experts=3,
                 weighted=False,
@@ -278,7 +293,7 @@ class ParametricMixtureBehavioralContractTests(unittest.TestCase):
 
     def test_matrix_bias_probability_shapes_and_gradients_are_exact(self) -> None:
         mixture = MatrixBiasMixtureConfig(
-            **_mixture_kwargs(output_dim=3, top_k=2, num_experts=3)
+            **_bank_kwargs(output_dim=3, top_k=2, num_experts=3)
         ).build()
         bank = torch.tensor([[1.0, 2.0, 3.0], [-2.0, 0.5, 4.0], [3.0, -1.0, 2.0]])
         with torch.no_grad():
@@ -305,7 +320,7 @@ class ParametricMixtureBehavioralContractTests(unittest.TestCase):
         self.assertGreater(mixture.parameter_bank.grad.abs().sum().item(), 0.0)
 
         top_one = MatrixBiasMixtureConfig(
-            **_mixture_kwargs(
+            **_bank_kwargs(
                 output_dim=3,
                 top_k=1,
                 num_experts=3,
@@ -342,7 +357,7 @@ class ParametricMixtureBehavioralContractTests(unittest.TestCase):
         )
         weights = (
             MatrixWeightsMixtureConfig(
-                **_mixture_kwargs(
+                **_bank_kwargs(
                     input_dim=2,
                     output_dim=4,
                     top_k=3,
@@ -355,7 +370,7 @@ class ParametricMixtureBehavioralContractTests(unittest.TestCase):
         )
         bias = (
             MatrixBiasMixtureConfig(
-                **_mixture_kwargs(
+                **_bank_kwargs(
                     input_dim=2,
                     output_dim=4,
                     top_k=3,
@@ -764,9 +779,9 @@ class ParametricLayerBehavioralContractTests(unittest.TestCase):
         self,
     ) -> None:
         weight_config = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(top_k=2, num_experts=2)
+            **_bank_kwargs(top_k=2, num_experts=2)
         )
-        bias_config = MatrixBiasMixtureConfig(**_mixture_kwargs(top_k=2, num_experts=2))
+        bias_config = MatrixBiasMixtureConfig(**_bank_kwargs(top_k=2, num_experts=2))
         model = ParametricLayer(
             _parametric_config(
                 weight_config=weight_config,
@@ -840,10 +855,10 @@ class ParametricLayerBehavioralContractTests(unittest.TestCase):
         restored = ParametricLayer(
             _parametric_config(
                 weight_config=MatrixWeightsMixtureConfig(
-                    **_mixture_kwargs(top_k=2, num_experts=2)
+                    **_bank_kwargs(top_k=2, num_experts=2)
                 ),
                 bias_config=MatrixBiasMixtureConfig(
-                    **_mixture_kwargs(top_k=2, num_experts=2)
+                    **_bank_kwargs(top_k=2, num_experts=2)
                 ),
                 routing_mode=AdaptiveRouterOptions.SHARED_ROUTER,
             )
@@ -861,7 +876,7 @@ class ParametricLayerBehavioralContractTests(unittest.TestCase):
         self,
     ) -> None:
         weight_config = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(
+            **_bank_kwargs(
                 input_dim=2,
                 output_dim=4,
                 top_k=3,
@@ -870,7 +885,7 @@ class ParametricLayerBehavioralContractTests(unittest.TestCase):
             )
         )
         bias_config = MatrixBiasMixtureConfig(
-            **_mixture_kwargs(
+            **_bank_kwargs(
                 input_dim=2,
                 output_dim=4,
                 top_k=3,
@@ -1118,7 +1133,7 @@ class ParametricLayerBehavioralContractTests(unittest.TestCase):
         ):
             model.get_parameter_handler()
 
-        matrix_bias = MatrixBiasMixtureConfig(**_mixture_kwargs(top_k=2, num_experts=3))
+        matrix_bias = MatrixBiasMixtureConfig(**_bank_kwargs(top_k=2, num_experts=3))
         fallback = ParametricLayer(
             _parametric_config(
                 bias_config=matrix_bias,
@@ -1147,7 +1162,7 @@ class ParametricValidationBehavioralContractTests(unittest.TestCase):
             AdaptiveMixtureValidator.validate_input_batch_2d(torch.ones(1, 1, 1))
         with self.assertRaisesRegex(ValueError, "positive integer"):
             AdaptiveMixtureValidator._validate_positive_integer("top_k", True)
-        weighted_cfg = MatrixWeightsMixtureConfig(**_mixture_kwargs())
+        weighted_cfg = MatrixWeightsMixtureConfig(**_bank_kwargs())
         with self.assertRaisesRegex(
             ValueError,
             "weighted_parameters_flag is True",
@@ -1214,7 +1229,7 @@ class ParametricValidationBehavioralContractTests(unittest.TestCase):
         conflicting = ParametricLayer(
             _parametric_config(
                 bias_config=MatrixBiasMixtureConfig(
-                    **_mixture_kwargs(top_k=2, num_experts=2)
+                    **_bank_kwargs(top_k=2, num_experts=2)
                 )
             )
         )
@@ -1298,7 +1313,7 @@ class ParametricValidationBehavioralContractTests(unittest.TestCase):
             AdaptiveMixtureValidator._validate_generator_config(sampler_count_mismatch)
 
         invalid_top_k = MatrixWeightsMixtureConfig(
-            **_mixture_kwargs(top_k=3, num_experts=2)
+            **_bank_kwargs(top_k=3, num_experts=2)
         )
         with self.assertRaisesRegex(ValueError, "top_k cannot exceed num_experts"):
             AdaptiveMixtureValidator._validate_top_k(invalid_top_k)
