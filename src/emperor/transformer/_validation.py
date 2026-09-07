@@ -1,12 +1,19 @@
 from typing import TYPE_CHECKING
 
-from emperor._validation import ValidatorBase, _first_adaptive_grouping_path
+import torch
+
+from emperor._validation import (
+    ValidatorBase,
+    _adaptive_grouping_configs,
+    _first_adaptive_grouping_path,
+    _validate_adaptive_sequence_input,
+    _validate_grouped_row_preservation,
+)
 from emperor.config import ConfigBase
 
 if TYPE_CHECKING:
     from torch import Tensor
 
-    from emperor.layers import RowLayout
     from emperor.transformer._feed_forward import FeedForward
     from emperor.transformer._layers import (
         TransformerDecoderLayer,
@@ -301,8 +308,9 @@ class TransformerValidator(ValidatorBase):
         grouping_path = _first_adaptive_grouping_path(
             feed_forward_config,
             root=f"{owner_name}.feed_forward_config",
+            direct_only=True,
             predicate=lambda config: (
-                getattr(config, "grouping_scope", None)
+                config.grouping_config.scope
                 is AdaptiveParameterGroupingScopeOptions.ROWS
             ),
         )
@@ -310,9 +318,120 @@ class TransformerValidator(ValidatorBase):
             return
         raise ValueError(
             f"{owner_name} feed-forward does not support ROWS adaptive parameter "
-            "grouping; use SEQUENCE for token inputs or DISABLED. Found grouping "
+            "grouping; use SEQUENCE for token inputs or grouping_config=None. Found grouping "
             f"at {grouping_path}."
         )
+
+    @classmethod
+    def validate_grouped_consumers(
+        cls,
+        model,
+        hidden,
+        padding_mask,
+        attention_mask,
+        cross_attention_mask=None,
+        *,
+        encoder_output=None,
+        encoder_padding_mask=None,
+    ) -> None:
+        consumers = (model.cfg.feed_forward_config, model.cfg.residual_config)
+        root = type(model.cfg).__name__
+        if not tuple(_adaptive_grouping_configs(consumers, root=root)):
+            return
+        attention_model = model.self_attention_model
+        batch_first = getattr(attention_model, "batch_first_flag", None)
+        if batch_first is None:
+            batch_first = hidden.dim() == 3 and hidden.size(1) != getattr(
+                attention_model, "batch_size", None
+            )
+        order = "BATCH_FIRST" if batch_first else "SEQUENCE_FIRST"
+        sequence_length = hidden.size(0)
+        if hidden.dim() == 3 and batch_first:
+            sequence_length = hidden.size(1)
+        cls._validate_grouping_masks(
+            attention_model, hidden, padding_mask, attention_mask
+        )
+        cross_model = getattr(model, "cross_attention_model", None)
+        if cross_model is not None:
+            cls._validate_grouping_masks(
+                cross_model,
+                hidden,
+                encoder_padding_mask,
+                cross_attention_mask,
+                source_hidden=encoder_output,
+            )
+        _validate_adaptive_sequence_input(
+            consumers, root=root, sequence_length=sequence_length, input_order=order
+        )
+        if padding_mask is not None:
+            excluded = (
+                padding_mask
+                if padding_mask.dtype == torch.bool
+                else padding_mask.isneginf()
+            )
+            if excluded.any():
+                raise ValueError(
+                    "Adaptive grouping requires all-valid inputs; target padding mask excludes positions."
+                )
+        if (
+            attention_mask is not None
+            or bool(getattr(attention_model, "causal_attention_mask_flag", False))
+            or (
+                cross_model is not None
+                and (
+                    cross_attention_mask is not None
+                    or bool(getattr(cross_model, "causal_attention_mask_flag", False))
+                )
+            )
+        ):
+            raise ValueError(
+                "Adaptive grouping context sharing is restricted after causal or explicitly masked attention."
+            )
+
+    @staticmethod
+    def _validate_grouping_masks(
+        attention_model,
+        hidden,
+        padding_mask,
+        attention_mask,
+        *,
+        source_hidden=None,
+    ) -> None:
+        from emperor.attention import SelfAttentionConfig
+
+        attention_validator = SelfAttentionConfig().registry_owner().VALIDATOR
+
+        batch_first = getattr(attention_model, "batch_first_flag", None)
+        if batch_first is None:
+            batch_first = hidden.dim() == 3 and hidden.size(1) != getattr(
+                attention_model, "batch_size", None
+            )
+        length = hidden.size(0)
+        if hidden.dim() == 3 and batch_first:
+            length = hidden.size(1)
+
+        source_length = length
+        if source_hidden is not None:
+            source_length = source_hidden.size(0)
+            if source_hidden.dim() == 3 and batch_first:
+                source_length = source_hidden.size(1)
+        batch = hidden.size(0 if batch_first else 1) if hidden.dim() == 3 else 1
+        prepared_padding = padding_mask
+        if padding_mask is not None and hidden.dim() == 2:
+            prepared_padding = padding_mask.unsqueeze(0)
+        attention_validator.validate_mask_shapes(
+            prepared_padding,
+            attention_mask,
+            expected_key_padding_shape=(batch, source_length),
+            expected_attention_sequence_shape=(length, source_length),
+            standard_branch_count=batch * getattr(attention_model, "num_heads", 1),
+        )
+        for name, mask in (
+            ("key_padding_mask", padding_mask),
+            ("attention_mask", attention_mask),
+        ):
+            if mask is not None:
+                attention_validator.validate_mask_is_float_or_bool(mask, name)
 
     # --- forward-boundary validation ---
 
@@ -423,6 +542,9 @@ class FeedForwardValidator(ValidatorBase):
         cls.validate_dimensions(input_dim=model.input_dim, output_dim=model.output_dim)
         cls._validate_stack_config_type(model.stack_config)
         cls._validate_mirrorable_stack_topology(model.stack_config)
+        _validate_grouped_row_preservation(
+            model.stack_config, root="FeedForward.stack_config"
+        )
 
     @staticmethod
     def _validate_stack_config_type(stack_config: ConfigBase) -> None:
@@ -467,14 +589,41 @@ class FeedForwardValidator(ValidatorBase):
                 f"{type(stack_config).__name__}."
             )
 
-    @staticmethod
+    @classmethod
     def validate_forward_inputs(
-        flattened_input: "Tensor",
-        row_layout: "RowLayout | None",
+        cls, model: "FeedForward", input_batch: "Tensor"
     ) -> None:
-        if row_layout is None or row_layout.row_count == flattened_input.size(0):
+        grouped = tuple(
+            _adaptive_grouping_configs(
+                model.stack_config, root="FeedForward.stack_config"
+            )
+        )
+        if not grouped:
             return
-        raise ValueError(
-            f"row_layout row_count={row_layout.row_count} does not match "
-            f"feed-forward row count {flattened_input.size(0)}."
+        if input_batch.dim() not in (2, 3):
+            raise ValueError(
+                "Grouped FeedForward requires rank-two or rank-three input."
+            )
+        if input_batch.size(-1) != model.input_dim:
+            raise ValueError(
+                "Grouped FeedForward input feature dimension must match input_dim."
+            )
+        if input_batch.dim() == 2:
+            return
+        direct_grouped = tuple(
+            _adaptive_grouping_configs(
+                model.stack_config, root="FeedForward.stack_config", direct_only=True
+            )
+        )
+        if not direct_grouped:
+            return
+        order = direct_grouped[0][1].grouping_config.input_order
+        if order is None:
+            raise ValueError("Rank-three FeedForward requires SEQUENCE grouping.")
+        sequence_length = input_batch.size(1 if order.name == "BATCH_FIRST" else 0)
+        _validate_adaptive_sequence_input(
+            model.stack_config,
+            root="FeedForward.stack_config",
+            sequence_length=sequence_length,
+            input_order=order.name,
         )
