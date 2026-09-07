@@ -1,17 +1,17 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 import models.vit.linear_adaptive.config as config
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
     AxisMaskConfig,
     BankExpansionFactorOptions,
     DynamicBiasConfig,
     DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
+    GroupingConfig,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
@@ -33,6 +33,12 @@ from models.vit.linear_adaptive._adaptive_parameter_config_factory import (
     build_mask_config,
     build_weight_config,
 )
+from models.vit.linear_adaptive._generation import (
+    BiasGenerationOptions,
+    WeightGenerationOptions,
+    mixture_generation_fields,
+    weight_generation_fields,
+)
 from models.vit.linear_adaptive.runtime_options import (
     AdaptiveGeneratorStackOptions,
     MainLayerStackOptions,
@@ -44,6 +50,13 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class AdaptiveBoundaryModelOptions:
+    grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
+    weight_generation: WeightGenerationOptions = field(
+        default_factory=WeightGenerationOptions, kw_only=True
+    )
+    bias_generation: BiasGenerationOptions = field(
+        default_factory=BiasGenerationOptions, kw_only=True
+    )
     weight_option: type[DynamicWeightConfig] | None
     generator_depth: DynamicDepthOptions
     weight_decay_schedule: WeightDecayScheduleOptions
@@ -229,8 +242,12 @@ class BoundaryModelConfigFactory:
         options: AdaptiveBoundaryModelOptions,
     ) -> AdaptiveLinearLayerConfig:
         adaptive_augmentation_config = AdaptiveParameterAugmentationConfig(
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=options.grouping_config,
             weight_config=build_weight_config(
+                generation_fields=weight_generation_fields(
+                    options.weight_generation,
+                    self.adaptive_generator_stack_config_factory,
+                ),
                 weight_option=options.weight_option,
                 generator_depth=options.generator_depth,
                 decay_schedule=options.weight_decay_schedule,
@@ -243,6 +260,10 @@ class BoundaryModelConfigFactory:
                 bank_expansion_factor=options.weight_bank_expansion_factor,
             ),
             bias_config=build_bias_config(
+                generation_fields=mixture_generation_fields(
+                    options.bias_generation,
+                    self.adaptive_generator_stack_config_factory,
+                ),
                 bias_option=options.bias_option,
                 decay_schedule=options.bias_decay_schedule,
                 decay_rate=options.bias_decay_rate,
