@@ -76,9 +76,7 @@ class _AdaptiveParameterDiagnostics:
                 self.__collect_internal_metrics(slot, option, observation)
             )
         histogram_metrics = (
-            self.__collect_histogram_metrics(observation)
-            if include_histograms
-            else ()
+            self.__collect_histogram_metrics(observation) if include_histograms else ()
         )
         return _AdaptiveParameterDiagnosticFacts(
             scalars=tuple(scalar_metrics),
@@ -347,6 +345,13 @@ class AdaptiveParameterMonitorCallback(Callback):
         for augmentation_path, augmentation in pl_module.named_modules():
             if not isinstance(augmentation, AdaptiveParameterAugmentation):
                 continue
+            grouping = augmentation.grouping_config
+            if grouping is not None and grouping.chunk_size is not None:
+                self._hooks.append(
+                    augmentation.register_forward_hook(
+                        self.__grouping_hook(augmentation_path, pl_module)
+                    )
+                )
             self.__attach_option_hooks(
                 augmentation_path,
                 augmentation,
@@ -355,6 +360,34 @@ class AdaptiveParameterMonitorCallback(Callback):
                     augmentation.adaptive_parameter_grouping_enabled
                 ),
             )
+
+    def __grouping_hook(self, path, pl_module):
+        def observe(augmentation, inputs, output):
+            if (
+                not self.log_internal_stats
+                or pl_module.global_step % self.log_every_n_steps
+            ):
+                return
+            real_rows = output.size(0)
+            grouping = augmentation.grouping_config
+            size = grouping.chunk_size
+            length = grouping.sequence_length
+            contexts = (
+                (real_rows + size - 1) // size
+                if length is None
+                else (real_rows // length) * ((length + size - 1) // size)
+            )
+            for name, value in (
+                ("real_row_count", real_rows),
+                ("context_count", contexts),
+                ("padding_row_count", contexts * size - real_rows),
+            ):
+                pl_module.log(
+                    f"{path}/grouping/batch/{name}",
+                    output.new_tensor(value, dtype=torch.int64).detach(),
+                )
+
+        return observe
 
     def __attach_option_hooks(
         self,
