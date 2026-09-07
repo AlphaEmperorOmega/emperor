@@ -8,7 +8,6 @@ from emperor.attention import (
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.embedding.relative import (
     DynamicPositionalBiasConfig,
@@ -91,7 +90,7 @@ def make_adaptive_projection_model_config(
             layer_model_config=AdaptiveLinearLayerConfig(
                 bias_flag=bias_flag,
                 adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                    grouping_config=None,
                     weight_config=None,
                     bias_config=None,
                     diagonal_config=None,
