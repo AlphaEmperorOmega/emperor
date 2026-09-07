@@ -1,107 +1,70 @@
-from typing import TYPE_CHECKING
+"""Matrix banks consumed by the parametric layer's routing pipeline."""
+
+from dataclasses import replace
 
 from torch import Tensor
 
-from emperor.parametric._mixtures.base import AdaptiveMixtureBase
-from emperor.parametric._mixtures.config import AdaptiveMixtureConfig
+from emperor.nn import Module
+from emperor.parametric._mixtures.config import (
+    MatrixBiasMixtureConfig,
+    MatrixWeightsMixtureConfig,
+)
+from emperor.parametric._mixtures.validation import MatrixMixtureValidator
 
-if TYPE_CHECKING:
-    from emperor.config import ModelConfig
 
+class MatrixMixtureBase(Module):
+    VALIDATOR = MatrixMixtureValidator
 
-class MatrixMixtureBase(AdaptiveMixtureBase):
-    def __init__(
-        self,
-        cfg: "AdaptiveMixtureConfig | ModelConfig",
-        overrides: "AdaptiveMixtureConfig | None" = None,
-    ) -> None:
-        super().__init__(cfg, overrides)
-        self.depth_dim = self.num_experts
+    def __init__(self, cfg, overrides=None):
+        super().__init__()
+        config = self._override_config(cfg, overrides)
+        self.VALIDATOR.validate_configuration(config)
+        self.cfg = replace(
+            config,
+            weighted_parameters_flag=True
+            if config.weighted_parameters_flag is None
+            else config.weighted_parameters_flag,
+        )
+        self.VALIDATOR.validate_field_types(self.cfg)
+        self.input_dim = self.cfg.input_dim
+        self.output_dim = self.cfg.output_dim
+        self.num_experts = self.cfg.num_experts
+        self.top_k = self.cfg.top_k
+        self.weighted_parameters_flag = self.cfg.weighted_parameters_flag
 
     def compute_mixture(
-        self, probabilities: Tensor, indices: Tensor | None = None, *args
+        self, probabilities: Tensor | None, indices: Tensor | None = None, *args
     ) -> Tensor:
-        selected_params = self._select_parameters(indices)
-        return self.__compute_parameter_mixture(selected_params, probabilities)
-
-    def _select_parameters(
-        self,
-        indices: Tensor | None = None,
-    ) -> Tensor:
+        self.VALIDATOR.validate_route(self, probabilities, indices)
         if indices is None:
-            return self.parameter_bank
-        return self.parameter_bank[indices]
-
-    def __compute_parameter_mixture(
-        self,
-        selected_parameters: Tensor,
-        probs: Tensor,
-    ) -> Tensor:
-        weighted_parameters = selected_parameters
-        if self.__should_compute_weighted_parameters(probs):
-            weighted_parameters = self._compute_weighted_parameters(
-                selected_parameters, probs
-            )
-
-        if self.__is_topk_sparse():
-            return weighted_parameters
-        if weighted_parameters is self.parameter_bank:
-            return weighted_parameters.sum(dim=0)
-        return weighted_parameters.sum(dim=1)
-
-    def __is_topk_sparse(self) -> bool:
-        return self.top_k == 1
-
-    def __should_compute_weighted_parameters(self, probs: Tensor | None) -> bool | None:
-        if self.weighted_parameters_flag and probs is None:
-            raise ValueError(
-                "Probabilities must be provided when 'weighted_parameters_flag' "
-                "is set to True."
-            )
-        return self.weighted_parameters_flag and probs is not None
-
-    def _compute_weighted_parameters(
-        self,
-        selected_parameters: Tensor,
-        probs: Tensor,
-    ) -> Tensor:
-        probs = probs.reshape(self.probability_shape)
-        if selected_parameters is self.parameter_bank:
-            selected_parameters = selected_parameters.unsqueeze(dim=0)
-        return selected_parameters * probs
+            if not self.weighted_parameters_flag:
+                return self.parameter_bank.sum(dim=0)
+            selected = self.parameter_bank.unsqueeze(0)
+        else:
+            selected = self.parameter_bank[indices.reshape(-1, self.top_k)]
+        if self.weighted_parameters_flag:
+            probability_shape = (-1, self.top_k) + (1,) * (self.parameter_bank.ndim - 1)
+            selected = selected * probabilities.reshape(probability_shape)
+        return selected.sum(dim=1)
 
 
 class MatrixWeightsMixture(MatrixMixtureBase):
     def __init__(
         self,
-        cfg: "AdaptiveMixtureConfig | ModelConfig",
-        overrides: "AdaptiveMixtureConfig | None" = None,
-    ) -> None:
+        cfg: MatrixWeightsMixtureConfig,
+        overrides: MatrixWeightsMixtureConfig | None = None,
+    ):
         super().__init__(cfg, overrides)
-        self.parameter_mixture_dim = -2
-        self.probability_shape = self._generate_probability_shapes()
-        self.parameter_bank_shape = (self.depth_dim, self.input_dim, self.output_dim)
+        self.parameter_bank_shape = (self.num_experts, self.input_dim, self.output_dim)
         self.parameter_bank = self._init_parameter_bank(self.parameter_bank_shape)
-
-    def _generate_probability_shapes(self) -> tuple:
-        if self.top_k > 1:
-            return (-1, self.top_k, 1, 1)
-        return (-1, self.top_k, 1)
 
 
 class MatrixBiasMixture(MatrixMixtureBase):
     def __init__(
         self,
-        cfg: "AdaptiveMixtureConfig | ModelConfig",
-        overrides: "AdaptiveMixtureConfig | None" = None,
-    ) -> None:
+        cfg: MatrixBiasMixtureConfig,
+        overrides: MatrixBiasMixtureConfig | None = None,
+    ):
         super().__init__(cfg, overrides)
-        self.parameter_mixture_dim = -1
-        self.probability_shape = self._generate_probability_shapes()
-        self.parameter_bank_shape = (self.depth_dim, self.output_dim)
+        self.parameter_bank_shape = (self.num_experts, self.output_dim)
         self.parameter_bank = self._init_parameter_bank(self.parameter_bank_shape)
-
-    def _generate_probability_shapes(self) -> tuple:
-        if self.top_k > 1:
-            return (-1, self.top_k, 1)
-        return (-1, self.top_k)
