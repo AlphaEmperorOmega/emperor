@@ -148,6 +148,9 @@ class _ParameterShapeDetailsAdapter:
         for detail_key, parameter_names in (
             ("weightShape", ("weight", "weight_params", "weights")),
             ("biasShape", ("bias", "bias_params", "biases")),
+            ("parameterBankShape", ("parameter_bank",)),
+            ("inputFactorShape", ("input_factor",)),
+            ("outputFactorShape", ("output_factor",)),
         ):
             for parameter_name in parameter_names:
                 parameter = direct_parameters.get(parameter_name)
