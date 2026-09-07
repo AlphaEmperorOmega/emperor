@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from emperor.augmentations.adaptive_parameters._options import (
     BankExpansionFactorOptions,
     DynamicDepthOptions,
+    LowRankFactorSourceOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
@@ -86,6 +87,32 @@ class LowRankDynamicWeightConfig(DynamicWeightConfig):
         )
 
         return LowRankDynamicWeight
+
+
+@dataclass
+class DiagonallyModulatedLowRankDynamicWeightConfig(LowRankDynamicWeightConfig):
+    input_factor_source: LowRankFactorSourceOptions | None = optional_field(
+        "Source of U rank components. None selects GENERATED."
+    )
+    output_factor_source: LowRankFactorSourceOptions | None = optional_field(
+        "Source of V rank components. None selects GENERATED."
+    )
+    input_factor_model_config: "LayerStackConfig | None" = optional_field(
+        "Independent U generator; None inherits model_config. Invalid for shared U."
+    )
+    output_factor_model_config: "LayerStackConfig | None" = optional_field(
+        "Independent V generator; None inherits model_config. Invalid for shared V."
+    )
+    coefficient_model_config: "LayerStackConfig | None" = optional_field(
+        "Rank coefficient trunk; None inherits model_config."
+    )
+
+    def _registry_owner(self) -> type:
+        from .variants.diagonally_modulated_low_rank import (
+            DiagonallyModulatedLowRankDynamicWeight,
+        )
+
+        return DiagonallyModulatedLowRankDynamicWeight
 
 
 @dataclass

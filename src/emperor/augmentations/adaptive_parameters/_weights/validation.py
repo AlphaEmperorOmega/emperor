@@ -150,6 +150,58 @@ class DynamicWeightValidator(AdaptiveGeneratorValidatorBase, ValidatorBase):
             )
 
 
+class ModulatedLowRankValidator(DynamicWeightValidator):
+    OPTIONAL_FIELDS = {
+        "model_config",
+        "input_factor_model_config",
+        "output_factor_model_config",
+    }
+
+    @staticmethod
+    def validate_supported_fields(cfg) -> None:
+        if vars(cfg).keys() - {field.name for field in fields(cfg)} - {"_passed_args"}:
+            raise ValueError("Modulated low-rank config contains unsupported fields.")
+
+    @classmethod
+    def validate(cls, model) -> None:
+        cls.validate_supported_fields(model.cfg)
+        cls.validate_initialization_fields(model)
+        cls.validate_active_models(model.cfg)
+        if model.cfg.generator_depth.value <= 0:
+            raise ValueError("generator_depth must be greater than zero.")
+
+    @classmethod
+    def validate_active_models(cls, cfg, fallback=None) -> None:
+        from emperor.augmentations.adaptive_parameters._options import (
+            LowRankFactorSourceOptions,
+        )
+
+        default_model = cfg.model_config if cfg.model_config is not None else fallback
+        for side in ("input", "output"):
+            source = getattr(cfg, f"{side}_factor_source")
+            if source is None:
+                source = LowRankFactorSourceOptions.GENERATED
+            if not isinstance(source, LowRankFactorSourceOptions):
+                raise TypeError(
+                    f"{side}_factor_source must be a LowRankFactorSourceOptions."
+                )
+            override = getattr(cfg, f"{side}_factor_model_config")
+            if source is LowRankFactorSourceOptions.SHARED_PARAMETER:
+                if override is not None:
+                    raise ValueError(
+                        f"{side}_factor_model_config is invalid for SHARED_PARAMETER."
+                    )
+            else:
+                cls.validate_generator_stack(
+                    override if override is not None else default_model
+                )
+        cls.validate_generator_stack(
+            cfg.coefficient_model_config
+            if cfg.coefficient_model_config is not None
+            else default_model
+        )
+
+
 class DepthMappingValidator(ValidatorBase):
     OPTIONAL_FIELDS: set[str] = set()
 
