@@ -1,7 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import models.vit.expert_linear_adaptive.config as config
 from emperor.attention import MixtureOfAttentionHeadsConfig
+from emperor.augmentations.adaptive_parameters import GroupingConfig
 from emperor.experts import MixtureOfExpertsModelConfig
 from emperor.layers import LayerStackConfig, RecurrentLayerConfig
 from models.vit.expert_linear_adaptive import _config_defaults as config_defaults
@@ -33,6 +34,8 @@ from models.vit.expert_linear_adaptive.runtime_options import (
 
 @dataclass(frozen=True)
 class ExpertAdaptiveConfigDependencies:
+    grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
+    router_grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
     hidden_dim: int
     encoder_options: TransformerEncoderOptions | None
     attention_options: TransformerAttentionOptions | None
@@ -192,6 +195,7 @@ class ExpertAdaptiveConfigFactory:
             if dependencies.hidden_adaptive_weight_options is not None
             else config_defaults.hidden_adaptive_weight_options(config_module)
         )
+        self.grouping_config = dependencies.grouping_config
         self.hidden_adaptive_bias_options = (
             dependencies.hidden_adaptive_bias_options
             if dependencies.hidden_adaptive_bias_options is not None
@@ -214,6 +218,7 @@ class ExpertAdaptiveConfigFactory:
                 config_module, config_defaults.AdaptiveRole.ROUTER
             )
         )
+        self.router_grouping_config = dependencies.router_grouping_config
         self.router_adaptive_bias_options = (
             dependencies.router_adaptive_bias_options
             if dependencies.router_adaptive_bias_options is not None
@@ -296,12 +301,14 @@ class ExpertAdaptiveConfigFactory:
                 adaptive_generator_stack_options=(
                     self.adaptive_generator_stack_options
                 ),
+                grouping_config=self.grouping_config,
                 hidden_adaptive_weight_options=self.hidden_adaptive_weight_options,
                 hidden_adaptive_bias_options=self.hidden_adaptive_bias_options,
                 hidden_adaptive_diagonal_options=(
                     self.hidden_adaptive_diagonal_options
                 ),
                 hidden_adaptive_mask_options=self.hidden_adaptive_mask_options,
+                router_grouping_config=self.router_grouping_config,
                 router_adaptive_weight_options=self.router_adaptive_weight_options,
                 router_adaptive_bias_options=self.router_adaptive_bias_options,
                 router_adaptive_diagonal_options=(

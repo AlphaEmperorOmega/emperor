@@ -1,6 +1,8 @@
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 import models.vit.expert_linear_adaptive.config as config
+from emperor.augmentations.adaptive_parameters import GroupingConfig
 from models.vit.expert_linear_adaptive._boundary_config_factory import (
     BoundaryConfigDependencies,
     BoundaryConfigFactory,
@@ -119,10 +121,14 @@ class _VitExpertLinearAdaptiveConfigBuilderImplementation:
             ExpertsRecurrentControllerOptions | None
         ) = None,
         adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None = None,
+        attention_grouping_config: GroupingConfig | None = None,
+        feed_forward_grouping_config: GroupingConfig | None = None,
+        grouping_config: GroupingConfig | None = None,
         hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions | None = None,
         hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions | None = None,
         hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None = None,
         hidden_adaptive_mask_options: HiddenAdaptiveMaskOptions | None = None,
+        router_grouping_config: GroupingConfig | None = None,
         router_adaptive_weight_options: HiddenAdaptiveWeightOptions | None = None,
         router_adaptive_bias_options: HiddenAdaptiveBiasOptions | None = None,
         router_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None = None,
@@ -182,10 +188,14 @@ class _VitExpertLinearAdaptiveConfigBuilderImplementation:
         self.expert_recurrent_controller_options = expert_recurrent_controller_options
         self.adaptive_generator_stack_options = adaptive_generator_stack_options
         self.hidden_adaptive_weight_options = hidden_adaptive_weight_options
+        self.grouping_config = grouping_config
+        self.attention_grouping_config = attention_grouping_config
+        self.feed_forward_grouping_config = feed_forward_grouping_config
         self.hidden_adaptive_bias_options = hidden_adaptive_bias_options
         self.hidden_adaptive_diagonal_options = hidden_adaptive_diagonal_options
         self.hidden_adaptive_mask_options = hidden_adaptive_mask_options
         self.router_adaptive_weight_options = router_adaptive_weight_options
+        self.router_grouping_config = router_grouping_config
         self.router_adaptive_bias_options = router_adaptive_bias_options
         self.router_adaptive_diagonal_options = router_adaptive_diagonal_options
         self.router_adaptive_mask_options = router_adaptive_mask_options
@@ -225,6 +235,7 @@ class _VitExpertLinearAdaptiveConfigBuilderImplementation:
             hidden_dim=self.hidden_dim,
             output_dim=self.output_dim,
             adaptive_generator_stack_options=self.adaptive_generator_stack_options,
+            grouping_config=self.grouping_config,
             hidden_adaptive_weight_options=self.hidden_adaptive_weight_options,
             hidden_adaptive_bias_options=self.hidden_adaptive_bias_options,
             hidden_adaptive_diagonal_options=self.hidden_adaptive_diagonal_options,
@@ -301,6 +312,12 @@ class _VitExpertLinearAdaptiveConfigBuilderImplementation:
             dynamic_memory_options=self.encoder_dynamic_memory_options,
             recurrent_controller_options=self.encoder_recurrent_controller_options,
             linear_layer_config_factory=self.__adaptive_linear_layer_config_factory(),
+            attention_projection_linear_layer_config_factory=self.__grouped_linear_layer_config_factory(
+                self.attention_grouping_config
+            ),
+            feed_forward_linear_layer_config_factory=self.__grouped_linear_layer_config_factory(
+                self.feed_forward_grouping_config
+            ),
             expert_config_factory=self.__expert_config_factory(),
         )
 
@@ -325,6 +342,17 @@ class _VitExpertLinearAdaptiveConfigBuilderImplementation:
             adaptive_augmentation_config=self.adaptive_augmentation_config
         )
         return LinearLayerConfigFactory(linear_layer_config_dependencies)
+
+    def __grouped_linear_layer_config_factory(
+        self, grouping_config: GroupingConfig | None
+    ) -> LinearLayerConfigFactory:
+        augmentation_config = replace(
+            self.adaptive_augmentation_config, grouping_config=grouping_config
+        )
+        dependencies = self.__linear_layer_config_dependencies(
+            adaptive_augmentation_config=augmentation_config
+        )
+        return LinearLayerConfigFactory(dependencies)
 
     def __linear_layer_config_dependencies(
         self,
@@ -368,10 +396,12 @@ class _VitExpertLinearAdaptiveConfigBuilderImplementation:
                 self.expert_recurrent_controller_options
             ),
             adaptive_generator_stack_options=self.adaptive_generator_stack_options,
+            grouping_config=self.grouping_config,
             hidden_adaptive_weight_options=self.hidden_adaptive_weight_options,
             hidden_adaptive_bias_options=self.hidden_adaptive_bias_options,
             hidden_adaptive_diagonal_options=self.hidden_adaptive_diagonal_options,
             hidden_adaptive_mask_options=self.hidden_adaptive_mask_options,
+            router_grouping_config=self.router_grouping_config,
             router_adaptive_weight_options=self.router_adaptive_weight_options,
             router_adaptive_bias_options=self.router_adaptive_bias_options,
             router_adaptive_diagonal_options=self.router_adaptive_diagonal_options,
