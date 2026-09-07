@@ -18,7 +18,6 @@ if TYPE_CHECKING:
         RecurrentResidualSchedule,
     )
     from emperor.layers._composition.residual.base import ResidualState
-    from emperor.layers._row_layout import RowLayout
 
 
 @dataclass(frozen=True)
@@ -32,9 +31,6 @@ class RecurrentExecutionState(Protocol):
 
     @property
     def context_state(self) -> LayerState: ...
-
-    @property
-    def row_layout(self) -> RowLayout | None: ...
 
     @property
     def transition_index(self) -> int: ...

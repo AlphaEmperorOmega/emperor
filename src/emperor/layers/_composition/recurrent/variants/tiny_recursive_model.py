@@ -21,7 +21,6 @@ if TYPE_CHECKING:
     from emperor.layers._composition.recurrent.config import (
         TinyRecursiveModelRecurrentConfig,
     )
-    from emperor.layers._row_layout import RowLayout
     from emperor.layers._state import LayerState
     from emperor.nn import Module
 
@@ -34,7 +33,6 @@ class _TinyRecursiveModelState:
     initial_loss: Tensor | None
     auxiliary_losses: tuple[Tensor, ...]
     context_state: LayerState
-    row_layout: RowLayout | None
     transition_index: int
     halting_state: HaltingStateBase | None = None
     all_items_halted: bool = False
@@ -120,7 +118,6 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
             initial_loss=branch_base_loss,
             auxiliary_losses=(),
             context_state=layer_state,
-            row_layout=self._recurrent_row_layout_for_transitions(layer_state),
             transition_index=0,
         )
 

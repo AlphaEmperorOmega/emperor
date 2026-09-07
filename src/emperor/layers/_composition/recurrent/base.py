@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Protocol, TypeVar, cast
 import torch
 from torch import Tensor, nn
 
-from emperor.layers._composition.gate import LayerGate
 from emperor.layers._composition.recurrent.runtime.execution.runtime_state import (
     RecurrentRuntimeStateGuard,
 )
@@ -21,7 +20,7 @@ from emperor.layers._composition.recurrent.runtime.residual_schedule import (
 )
 from emperor.layers._composition.residual.base import ResidualConnectionAbstract
 from emperor.layers._options import LayerNormPositionOptions
-from emperor.layers._support import LayerModuleBase, RowLayoutAwareModule
+from emperor.layers._support import LayerModuleBase
 from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
@@ -33,7 +32,6 @@ if TYPE_CHECKING:
         RecurrentCompositionConfig,
     )
     from emperor.layers._composition.residual.base import ResidualState
-    from emperor.layers._row_layout import RowLayout
     from emperor.layers._state import LayerState
     from emperor.memory import MemoryInterface
     from emperor.nn import Module
@@ -44,9 +42,6 @@ class _RecurrentTransitionContext(Protocol):
 
     @property
     def context_state(self) -> LayerState: ...
-
-    @property
-    def row_layout(self) -> RowLayout | None: ...
 
     @property
     def halting_state(self) -> HaltingStateBase | None: ...
@@ -285,7 +280,6 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
             target_residual_state,
             residual_schedule,
             transition_index,
-            recurrent_state.row_layout,
         )
         with self.__runtime_state_guard.isolate_provisional_branch(self):
             source_result = self.__apply_halting_and_observe_recurrent_transition(
@@ -338,26 +332,22 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
             hidden=transition_model_input,
             loss=loss,
             halting_state=None,
-            row_layout=recurrent_state.row_layout,
         )
         output_state = run_transition(transition_state)
         self.VALIDATOR.validate_transition_output(
             output_state,
             transition_model_input,
-            recurrent_state.row_layout,
             expected_feature_dim=self.output_dim,
         )
         candidate_hidden = self.__maybe_apply_memory_after(output_state.hidden)
         candidate_hidden = self.__maybe_apply_layer_norm_default(candidate_hidden)
         candidate_hidden = self.__maybe_apply_gate(
             candidate_hidden,
-            recurrent_state.row_layout,
         )
         residual_input = candidate_hidden
         candidate_hidden = self.__maybe_apply_residual_connection(
             candidate_hidden,
             previous_evolving_hidden,
-            recurrent_state.row_layout,
             residual_state,
             residual_schedule,
             transition_index,
@@ -376,7 +366,6 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         target_residual_state: ResidualState | None,
         residual_schedule: RecurrentResidualSchedule | None,
         transition_index: int,
-        row_layout: RowLayout | None,
     ) -> None:
         if target_residual_state is None:
             return
@@ -393,7 +382,6 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
                 residual_input.detach(),
                 previous_evolving_hidden.detach(),
                 residual_state=target_residual_state,
-                row_layout=row_layout,
             )
 
     def __apply_halting_and_observe_recurrent_transition(
@@ -459,19 +447,15 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
     def __maybe_apply_gate(
         self,
         candidate_hidden: Tensor,
-        row_layout: RowLayout | None,
     ) -> Tensor:
         if self.recurrent_gate is None:
             return candidate_hidden
-        if isinstance(self.recurrent_gate, (LayerGate, RowLayoutAwareModule)):
-            return self.recurrent_gate(candidate_hidden, row_layout=row_layout)
         return self.recurrent_gate(candidate_hidden)
 
     def __maybe_apply_residual_connection(
         self,
         candidate_hidden: Tensor,
         previous_hidden: Tensor,
-        row_layout: RowLayout | None,
         residual_state: ResidualState | None,
         residual_schedule: RecurrentResidualSchedule | None,
         transition_index: int,
@@ -486,13 +470,11 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
                 candidate_hidden,
                 previous_hidden,
                 residual_state=residual_state,
-                row_layout=row_layout,
             )
         return residual_connection(
             candidate_hidden,
             previous_hidden,
             residual_state=residual_state,
-            row_layout=row_layout,
         )
 
     def __maybe_apply_layer_norm_after(self, hidden: Tensor) -> Tensor:
@@ -533,17 +515,6 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         return finalized_hidden, self._accumulate_auxiliary_loss(
             loss, reduced_halting_loss
         )
-
-    def _recurrent_row_layout_for_transitions(
-        self,
-        state: LayerState,
-    ) -> RowLayout | None:
-        row_layout = state.row_layout
-        if row_layout is None:
-            return None
-        if self.halting_model is not None or self.memory_model is not None:
-            return row_layout.with_context_sharing_restricted()
-        return row_layout
 
     @staticmethod
     def __all_items_halted(halting_state: HaltingStateBase | None) -> bool:

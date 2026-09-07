@@ -19,7 +19,6 @@ if TYPE_CHECKING:
     from emperor.halting import HaltingStateBase
     from emperor.layers._composition.recurrent.base import RecurrentTransitionResult
     from emperor.layers._composition.residual.base import ResidualState
-    from emperor.layers._row_layout import RowLayout
 
 
 @dataclass(frozen=True)
@@ -28,7 +27,6 @@ class _StandardRecurrentState:
     fixed_input: Tensor
     loss: Tensor | None
     context_state: LayerState
-    row_layout: RowLayout | None
     transition_index: int
     residual_state: ResidualState | None = None
     halting_state: HaltingStateBase | None = None
@@ -85,7 +83,6 @@ class RecurrentLayer(RecurrentCompositionAbstract):
             fixed_input=layer_state.hidden,
             loss=branch_base_loss,
             context_state=layer_state,
-            row_layout=self._recurrent_row_layout_for_transitions(layer_state),
             transition_index=0,
             residual_state=self.__initialize_recurrent_residual_state(layer_state),
         )

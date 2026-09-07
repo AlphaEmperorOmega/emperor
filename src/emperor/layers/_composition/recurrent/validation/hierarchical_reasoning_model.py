@@ -159,14 +159,12 @@ class HierarchicalReasoningModelRecurrentValidator(_RecurrentCompositionValidato
         cls,
         output_state: object,
         transition_input: Tensor,
-        expected_row_layout: object,
         *,
         expected_feature_dim: int,
     ) -> None:
         _validate_variant_transition_output(
             output_state,
             transition_input,
-            expected_row_layout,
             expected_feature_dim=expected_feature_dim,
             owner_name="HierarchicalReasoningModelRecurrent",
             transition_name="Hierarchical Reasoning Model",
