@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 class LayerNormalizationDelegate(Module):
-    """Own Layer normalization construction and position dispatch."""
+    """Own RMS normalization construction and position dispatch."""
 
     VALIDATOR = LayerNormalizationDelegateValidator
 
@@ -26,7 +26,7 @@ class LayerNormalizationDelegate(Module):
         self.cfg = cfg
         self.VALIDATOR.validate(self)
         self.__initialize_from_config()
-        self.module = self.__build_layer_norm()
+        self.module = self.__build_rms_norm()
 
     def __initialize_from_config(self) -> None:
         self.position: LayerNormPositionOptions = self.cfg.layer_norm_position
@@ -34,10 +34,10 @@ class LayerNormalizationDelegate(Module):
         self.output_dim: int = self.cfg.output_dim
         self.dimension = self.__resolve_dimension(self.input_dim, self.output_dim)
 
-    def __build_layer_norm(self) -> nn.LayerNorm | None:
+    def __build_rms_norm(self) -> nn.RMSNorm | None:
         if self.dimension is None:
             return None
-        return nn.LayerNorm(self.dimension)
+        return nn.RMSNorm(self.dimension, eps=1e-5)
 
     def __resolve_dimension(self, input_dim: int, output_dim: int) -> int | None:
         if self.position == LayerNormPositionOptions.DISABLED:

@@ -39,6 +39,20 @@ def _layer_norm(
     )
 
 
+def _rms_norm(
+    parameters: dict[str, torch.Tensor],
+    input_tensor: torch.Tensor,
+    prefix: str,
+    hidden_dim: int,
+) -> torch.Tensor:
+    return F.rms_norm(
+        input_tensor,
+        (hidden_dim,),
+        parameters[f"{prefix}.weight"],
+        1e-5,
+    )
+
+
 def _attention(
     parameters: dict[str, torch.Tensor],
     query_input: torch.Tensor,
@@ -209,7 +223,7 @@ class TestReferenceModelComputation(unittest.TestCase):
             attention_prefix,
             hidden_dim,
         )
-        hidden = _layer_norm(
+        hidden = _rms_norm(
             parameters,
             hidden + attention_output,
             f"{attention_prefix}normalization.module",
@@ -222,7 +236,7 @@ class TestReferenceModelComputation(unittest.TestCase):
             feed_forward_prefix,
             F.gelu,
         )
-        hidden = _layer_norm(
+        hidden = _rms_norm(
             parameters,
             hidden + feed_forward_output,
             f"{feed_forward_prefix}normalization.module",
@@ -302,7 +316,7 @@ class TestReferenceModelComputation(unittest.TestCase):
         )
         block_prefix = "transformer.layers.0.model."
         attention_prefix = f"{block_prefix}self_attention_layer."
-        normalized = _layer_norm(
+        normalized = _rms_norm(
             parameters,
             hidden,
             f"{attention_prefix}normalization.module",
@@ -318,7 +332,7 @@ class TestReferenceModelComputation(unittest.TestCase):
             causal=True,
         )
         feed_forward_prefix = f"{block_prefix}feed_forward_layer."
-        normalized = _layer_norm(
+        normalized = _rms_norm(
             parameters,
             hidden,
             f"{feed_forward_prefix}normalization.module",
@@ -381,7 +395,7 @@ class TestReferenceModelComputation(unittest.TestCase):
         ] * embedding_scale + _sinusoidal_positions(source_ids, hidden_dim)
         encoder_prefix = "encoder.layers.0.model."
         encoder_attention_prefix = f"{encoder_prefix}self_attention_layer."
-        normalized = _layer_norm(
+        normalized = _rms_norm(
             parameters,
             encoder_hidden,
             f"{encoder_attention_prefix}normalization.module",
@@ -396,7 +410,7 @@ class TestReferenceModelComputation(unittest.TestCase):
             hidden_dim,
         )
         encoder_feed_forward_prefix = f"{encoder_prefix}feed_forward_layer."
-        normalized = _layer_norm(
+        normalized = _rms_norm(
             parameters,
             encoder_hidden,
             f"{encoder_feed_forward_prefix}normalization.module",
@@ -419,7 +433,7 @@ class TestReferenceModelComputation(unittest.TestCase):
         ] * embedding_scale + _sinusoidal_positions(target_ids, hidden_dim)
         decoder_prefix = "decoder.layers.0.model."
         decoder_attention_prefix = f"{decoder_prefix}self_attention_layer."
-        normalized = _layer_norm(
+        normalized = _rms_norm(
             parameters,
             decoder_hidden,
             f"{decoder_attention_prefix}normalization.module",
@@ -435,7 +449,7 @@ class TestReferenceModelComputation(unittest.TestCase):
             causal=True,
         )
         cross_attention_prefix = f"{decoder_prefix}cross_attention_layer."
-        normalized = _layer_norm(
+        normalized = _rms_norm(
             parameters,
             decoder_hidden,
             f"{cross_attention_prefix}normalization.module",
@@ -450,7 +464,7 @@ class TestReferenceModelComputation(unittest.TestCase):
             hidden_dim,
         )
         decoder_feed_forward_prefix = f"{decoder_prefix}feed_forward_layer."
-        normalized = _layer_norm(
+        normalized = _rms_norm(
             parameters,
             decoder_hidden,
             f"{decoder_feed_forward_prefix}normalization.module",
