@@ -356,9 +356,18 @@ class AdaptiveParameterAugmentationValidator(
                     f"{name} must be a {expected_type.__name__} instance, "
                     f"got {type(config).__name__}."
                 )
+            from emperor.augmentations.adaptive_parameters._weights.config import (
+                DiagonallyModulatedLowRankDynamicWeightConfig,
+            )
+
             if isinstance(
                 config, (MatrixWeightsMixtureConfig, MatrixBiasMixtureConfig)
             ):
+                continue
+            if isinstance(config, DiagonallyModulatedLowRankDynamicWeightConfig):
+                config.registry_owner().VALIDATOR.validate_active_models(
+                    config, model.model_config
+                )
                 continue
             cls._validate_model_config(f"{name}.model_config", config.model_config)
             if config.model_config is None and model.model_config is None:

@@ -1,6 +1,11 @@
 from enum import Enum
 
 
+class LowRankFactorSourceOptions(Enum):
+    GENERATED = 1
+    SHARED_PARAMETER = 2
+
+
 class AdaptiveParameterGroupingScopeOptions(Enum):
     ROWS = 1
     SEQUENCE = 2
