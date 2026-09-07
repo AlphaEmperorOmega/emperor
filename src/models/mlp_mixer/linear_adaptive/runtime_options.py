@@ -3,17 +3,23 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from emperor.augmentations.adaptive_parameters import (
+    AdaptiveParameterGroupingScopeOptions,
+    AdaptiveParameterInputOrderOptions,
     AxisMaskConfig,
     BankExpansionFactorOptions,
     DynamicBiasConfig,
     DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
+    GroupingConfig,
+    LowRankFactorSourceOptions,
     MaskDimensionOptions,
+    SummaryNormalizationOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
+from emperor.config import ConfigBase
 from emperor.halting import HaltingConfig, HaltingHiddenStateModeOptions
 from emperor.layers import (
     ActivationOptions,
@@ -27,6 +33,119 @@ from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 
 @dataclass(frozen=True, slots=True)
 class RuntimeOptions:
+    channel_mixer_grouping_scope: AdaptiveParameterGroupingScopeOptions | None
+    channel_mixer_group_count: int | None
+    channel_mixer_chunk_size: int | None
+    channel_mixer_grouping_sequence_length: int | None
+    channel_mixer_grouping_input_order: AdaptiveParameterInputOrderOptions | None
+    channel_mixer_grouping_method: type[GroupingConfig] | None
+    channel_mixer_grouping_summary_normalization: SummaryNormalizationOptions | None
+    channel_mixer_grouping_model_config: ConfigBase | None
+    channel_mixer_grouping_attention_hidden_dim: int | None
+    channel_mixer_grouping_rms_norm_epsilon: float | None
+    weight_input_factor_source: LowRankFactorSourceOptions | None
+    weight_output_factor_source: LowRankFactorSourceOptions | None
+    weight_mixture_num_experts: int | None
+    bias_mixture_num_experts: int | None
+    weight_mixture_top_k: int | None
+    bias_mixture_top_k: int | None
+    weight_mixture_normalize_probabilities_flag: bool | None
+    bias_mixture_normalize_probabilities_flag: bool | None
+    weight_input_factor_generator_stack_independent_flag: bool
+    weight_input_factor_generator_stack_hidden_dim: int | None
+    weight_input_factor_generator_stack_layer_norm_position: (
+        LayerNormPositionOptions | None
+    )
+    weight_input_factor_generator_stack_num_layers: int | None
+    weight_input_factor_generator_stack_activation: ActivationOptions | None
+    weight_input_factor_generator_stack_residual_connection_option: (
+        type[ResidualConfig] | None
+    )
+    weight_input_factor_generator_stack_residual_model_flag: bool
+    weight_input_factor_generator_stack_dropout_probability: float | None
+    weight_input_factor_generator_stack_last_layer_bias_option: (
+        LastLayerBiasOptions | None
+    )
+    weight_input_factor_generator_stack_apply_output_postprocessing_flag: bool | None
+    weight_input_factor_generator_stack_bias_flag: bool | None
+    weight_output_factor_generator_stack_independent_flag: bool
+    weight_output_factor_generator_stack_hidden_dim: int | None
+    weight_output_factor_generator_stack_layer_norm_position: (
+        LayerNormPositionOptions | None
+    )
+    weight_output_factor_generator_stack_num_layers: int | None
+    weight_output_factor_generator_stack_activation: ActivationOptions | None
+    weight_output_factor_generator_stack_residual_connection_option: (
+        type[ResidualConfig] | None
+    )
+    weight_output_factor_generator_stack_residual_model_flag: bool
+    weight_output_factor_generator_stack_dropout_probability: float | None
+    weight_output_factor_generator_stack_last_layer_bias_option: (
+        LastLayerBiasOptions | None
+    )
+    weight_output_factor_generator_stack_apply_output_postprocessing_flag: bool | None
+    weight_output_factor_generator_stack_bias_flag: bool | None
+    weight_coefficient_generator_stack_independent_flag: bool
+    weight_coefficient_generator_stack_hidden_dim: int | None
+    weight_coefficient_generator_stack_layer_norm_position: (
+        LayerNormPositionOptions | None
+    )
+    weight_coefficient_generator_stack_num_layers: int | None
+    weight_coefficient_generator_stack_activation: ActivationOptions | None
+    weight_coefficient_generator_stack_residual_connection_option: (
+        type[ResidualConfig] | None
+    )
+    weight_coefficient_generator_stack_residual_model_flag: bool
+    weight_coefficient_generator_stack_dropout_probability: float | None
+    weight_coefficient_generator_stack_last_layer_bias_option: (
+        LastLayerBiasOptions | None
+    )
+    weight_coefficient_generator_stack_apply_output_postprocessing_flag: bool | None
+    weight_coefficient_generator_stack_bias_flag: bool | None
+    weight_mixture_router_generator_stack_independent_flag: bool
+    bias_mixture_router_generator_stack_independent_flag: bool
+    weight_mixture_router_generator_stack_hidden_dim: int | None
+    bias_mixture_router_generator_stack_hidden_dim: int | None
+    weight_mixture_router_generator_stack_layer_norm_position: (
+        LayerNormPositionOptions | None
+    )
+    bias_mixture_router_generator_stack_layer_norm_position: (
+        LayerNormPositionOptions | None
+    )
+    weight_mixture_router_generator_stack_num_layers: int | None
+    bias_mixture_router_generator_stack_num_layers: int | None
+    weight_mixture_router_generator_stack_activation: ActivationOptions | None
+    bias_mixture_router_generator_stack_activation: ActivationOptions | None
+    weight_mixture_router_generator_stack_residual_connection_option: (
+        type[ResidualConfig] | None
+    )
+    bias_mixture_router_generator_stack_residual_connection_option: (
+        type[ResidualConfig] | None
+    )
+    weight_mixture_router_generator_stack_residual_model_flag: bool
+    bias_mixture_router_generator_stack_residual_model_flag: bool
+    weight_mixture_router_generator_stack_dropout_probability: float | None
+    bias_mixture_router_generator_stack_dropout_probability: float | None
+    weight_mixture_router_generator_stack_last_layer_bias_option: (
+        LastLayerBiasOptions | None
+    )
+    bias_mixture_router_generator_stack_last_layer_bias_option: (
+        LastLayerBiasOptions | None
+    )
+    weight_mixture_router_generator_stack_apply_output_postprocessing_flag: bool | None
+    bias_mixture_router_generator_stack_apply_output_postprocessing_flag: bool | None
+    weight_mixture_router_generator_stack_bias_flag: bool | None
+    bias_mixture_router_generator_stack_bias_flag: bool | None
+    grouping_scope: AdaptiveParameterGroupingScopeOptions | None
+    group_count: int | None
+    chunk_size: int | None
+    grouping_sequence_length: int | None
+    grouping_input_order: AdaptiveParameterInputOrderOptions | None
+    grouping_method: type[GroupingConfig] | None
+    grouping_summary_normalization: SummaryNormalizationOptions | None
+    grouping_model_config: ConfigBase | None
+    grouping_attention_hidden_dim: int | None
+    grouping_rms_norm_epsilon: float | None
     batch_size: int
     learning_rate: float
     input_dim: int
