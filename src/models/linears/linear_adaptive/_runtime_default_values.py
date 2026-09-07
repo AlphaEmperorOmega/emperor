@@ -6,17 +6,23 @@ from enum import Enum
 from typing import Generic, Protocol, TypeGuard, TypeVar
 
 from emperor.augmentations.adaptive_parameters import (
+    AdaptiveParameterGroupingScopeOptions,
+    AdaptiveParameterInputOrderOptions,
     AxisMaskConfig,
     BankExpansionFactorOptions,
     DynamicBiasConfig,
     DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
+    GroupingConfig,
+    LowRankFactorSourceOptions,
     MaskDimensionOptions,
+    SummaryNormalizationOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
+from emperor.config import ConfigBase
 from emperor.halting import HaltingConfig, HaltingHiddenStateModeOptions
 from emperor.layers import (
     ActivationOptions,
@@ -28,6 +34,7 @@ from emperor.layers import (
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 from models.linears.linear_adaptive import config
+from models.linears.linear_adaptive._grouping import grouping_from_fields
 
 _PACKAGE = "models.linears.linear_adaptive"
 _ValueT = TypeVar("_ValueT")
@@ -590,7 +597,30 @@ class ProjectionFields:
 
 
 @dataclass(frozen=True, slots=True)
+class GenerationValues:
+    weight_input_factor_source: LowRankFactorSourceOptions | None
+    weight_output_factor_source: LowRankFactorSourceOptions | None
+    weight_mixture_num_experts: int | None
+    bias_mixture_num_experts: int | None
+    weight_mixture_top_k: int | None
+    bias_mixture_top_k: int | None
+    weight_mixture_normalize_probabilities_flag: bool | None
+    bias_mixture_normalize_probabilities_flag: bool | None
+    weight_input_factor_generator_stack: OptionalStackValues
+    weight_output_factor_generator_stack: OptionalStackValues
+    weight_coefficient_generator_stack: OptionalStackValues
+    weight_mixture_router_generator_stack: OptionalStackValues
+    bias_mixture_router_generator_stack: OptionalStackValues
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeDefaultValues:
+    grouping: GroupingConfig | None
+    input_grouping: GroupingConfig | None
+    output_grouping: GroupingConfig | None
+    generation: GenerationValues
+    input_generation: GenerationValues
+    output_generation: GenerationValues
     dimensions: RuntimeDimensionsValues
     main_stack: StackValues
     submodule_stack: StackValues
@@ -1745,8 +1775,205 @@ def _read_projection(
     )
 
 
+def _generation_stack_fields(prefix: str) -> OptionalStackFields:
+    return OptionalStackFields(
+        independent_flag=_boolean_field(
+            f"{prefix}_independent_flag",
+            getattr(config, f"{prefix.upper()}_INDEPENDENT_FLAG"),
+        ),
+        hidden_dim=_optional_integer_field(
+            f"{prefix}_hidden_dim",
+            getattr(config, f"{prefix.upper()}_HIDDEN_DIM"),
+        ),
+        layer_norm_position=_optional_enum_field(
+            f"{prefix}_layer_norm_position",
+            getattr(config, f"{prefix.upper()}_LAYER_NORM_POSITION"),
+            LayerNormPositionOptions,
+        ),
+        num_layers=_optional_integer_field(
+            f"{prefix}_num_layers",
+            getattr(config, f"{prefix.upper()}_NUM_LAYERS"),
+        ),
+        activation=_optional_enum_field(
+            f"{prefix}_activation",
+            getattr(config, f"{prefix.upper()}_ACTIVATION"),
+            ActivationOptions,
+        ),
+        residual_connection_option=_optional_implementation_field(
+            f"{prefix}_residual_connection_option",
+            getattr(config, f"{prefix.upper()}_RESIDUAL_CONNECTION_OPTION"),
+            ResidualConfig,
+        ),
+        residual_model_flag=_boolean_field(
+            f"{prefix}_residual_model_flag",
+            getattr(config, f"{prefix.upper()}_RESIDUAL_MODEL_FLAG"),
+        ),
+        dropout_probability=_optional_float_field(
+            f"{prefix}_dropout_probability",
+            getattr(config, f"{prefix.upper()}_DROPOUT_PROBABILITY"),
+        ),
+        last_layer_bias_option=_optional_enum_field(
+            f"{prefix}_last_layer_bias_option",
+            getattr(config, f"{prefix.upper()}_LAST_LAYER_BIAS_OPTION"),
+            LastLayerBiasOptions,
+        ),
+        apply_output_postprocessing_flag=_optional_boolean_field(
+            f"{prefix}_apply_output_postprocessing_flag",
+            getattr(config, f"{prefix.upper()}_APPLY_OUTPUT_POSTPROCESSING_FLAG"),
+        ),
+        bias_flag=_optional_boolean_field(
+            f"{prefix}_bias_flag",
+            getattr(config, f"{prefix.upper()}_BIAS_FLAG"),
+        ),
+    )
+
+
+def _read_generation(
+    reader: RuntimeOverrideReader, prefix: str = ""
+) -> GenerationValues:
+    return GenerationValues(
+        weight_input_factor_source=reader.read(
+            _optional_enum_field(
+                f"{prefix}weight_input_factor_source",
+                getattr(config, f"{prefix.upper()}WEIGHT_INPUT_FACTOR_SOURCE"),
+                LowRankFactorSourceOptions,
+            )
+        ),
+        weight_output_factor_source=reader.read(
+            _optional_enum_field(
+                f"{prefix}weight_output_factor_source",
+                getattr(config, f"{prefix.upper()}WEIGHT_OUTPUT_FACTOR_SOURCE"),
+                LowRankFactorSourceOptions,
+            )
+        ),
+        weight_mixture_num_experts=reader.read(
+            _optional_integer_field(
+                f"{prefix}weight_mixture_num_experts",
+                getattr(config, f"{prefix.upper()}WEIGHT_MIXTURE_NUM_EXPERTS"),
+            )
+        ),
+        bias_mixture_num_experts=reader.read(
+            _optional_integer_field(
+                f"{prefix}bias_mixture_num_experts",
+                getattr(config, f"{prefix.upper()}BIAS_MIXTURE_NUM_EXPERTS"),
+            )
+        ),
+        weight_mixture_top_k=reader.read(
+            _optional_integer_field(
+                f"{prefix}weight_mixture_top_k",
+                getattr(config, f"{prefix.upper()}WEIGHT_MIXTURE_TOP_K"),
+            )
+        ),
+        bias_mixture_top_k=reader.read(
+            _optional_integer_field(
+                f"{prefix}bias_mixture_top_k",
+                getattr(config, f"{prefix.upper()}BIAS_MIXTURE_TOP_K"),
+            )
+        ),
+        weight_mixture_normalize_probabilities_flag=reader.read(
+            _optional_boolean_field(
+                f"{prefix}weight_mixture_normalize_probabilities_flag",
+                getattr(
+                    config,
+                    f"{prefix.upper()}WEIGHT_MIXTURE_NORMALIZE_PROBABILITIES_FLAG",
+                ),
+            )
+        ),
+        bias_mixture_normalize_probabilities_flag=reader.read(
+            _optional_boolean_field(
+                f"{prefix}bias_mixture_normalize_probabilities_flag",
+                getattr(
+                    config,
+                    f"{prefix.upper()}BIAS_MIXTURE_NORMALIZE_PROBABILITIES_FLAG",
+                ),
+            )
+        ),
+        weight_input_factor_generator_stack=_read_optional_stack(
+            reader,
+            _generation_stack_fields(f"{prefix}weight_input_factor_generator_stack"),
+        ),
+        weight_output_factor_generator_stack=_read_optional_stack(
+            reader,
+            _generation_stack_fields(f"{prefix}weight_output_factor_generator_stack"),
+        ),
+        weight_coefficient_generator_stack=_read_optional_stack(
+            reader,
+            _generation_stack_fields(f"{prefix}weight_coefficient_generator_stack"),
+        ),
+        weight_mixture_router_generator_stack=_read_optional_stack(
+            reader,
+            _generation_stack_fields(f"{prefix}weight_mixture_router_generator_stack"),
+        ),
+        bias_mixture_router_generator_stack=_read_optional_stack(
+            reader,
+            _generation_stack_fields(f"{prefix}bias_mixture_router_generator_stack"),
+        ),
+    )
+
+
+def _read_grouping(reader: RuntimeOverrideReader, prefix: str = ""):
+    values = {}
+    key = prefix + "grouping_scope"
+    values["grouping_scope"] = reader.read(
+        _optional_enum_field(
+            key, getattr(config, key.upper()), AdaptiveParameterGroupingScopeOptions
+        )
+    )
+    key = prefix + "group_count"
+    values["group_count"] = reader.read(
+        _optional_integer_field(key, getattr(config, key.upper()))
+    )
+    key = prefix + "chunk_size"
+    values["chunk_size"] = reader.read(
+        _optional_integer_field(key, getattr(config, key.upper()))
+    )
+    key = prefix + "grouping_sequence_length"
+    values["grouping_sequence_length"] = reader.read(
+        _optional_integer_field(key, getattr(config, key.upper()))
+    )
+    key = prefix + "grouping_input_order"
+    values["grouping_input_order"] = reader.read(
+        _optional_enum_field(
+            key, getattr(config, key.upper()), AdaptiveParameterInputOrderOptions
+        )
+    )
+    key = prefix + "grouping_method"
+    values["grouping_method"] = reader.read(
+        _optional_implementation_field(
+            key, getattr(config, key.upper()), GroupingConfig
+        )
+    )
+    key = prefix + "grouping_summary_normalization"
+    values["grouping_summary_normalization"] = reader.read(
+        _optional_enum_field(
+            key,
+            getattr(config, key.upper()),
+            SummaryNormalizationOptions,
+        )
+    )
+    key = prefix + "grouping_model_config"
+    values["grouping_model_config"] = reader.read(
+        _optional_instance_field(key, getattr(config, key.upper()), ConfigBase)
+    )
+    key = prefix + "grouping_attention_hidden_dim"
+    values["grouping_attention_hidden_dim"] = reader.read(
+        _optional_integer_field(key, getattr(config, key.upper()))
+    )
+    key = prefix + "grouping_rms_norm_epsilon"
+    values["grouping_rms_norm_epsilon"] = reader.read(
+        _optional_float_field(key, getattr(config, key.upper()))
+    )
+    return grouping_from_fields(values, prefix=prefix or "main")
+
+
 def _read_runtime_values(reader: RuntimeOverrideReader) -> RuntimeDefaultValues:
     return RuntimeDefaultValues(
+        grouping=_read_grouping(reader),
+        input_grouping=_read_grouping(reader, "input_layer_"),
+        output_grouping=_read_grouping(reader, "output_layer_"),
+        generation=_read_generation(reader),
+        input_generation=_read_generation(reader, "input_layer_"),
+        output_generation=_read_generation(reader, "output_layer_"),
         dimensions=_read_dimensions(reader),
         main_stack=_read_stack(reader, _MAIN_STACK_FIELDS),
         submodule_stack=_read_stack(reader, _SUBMODULE_STACK_FIELDS),

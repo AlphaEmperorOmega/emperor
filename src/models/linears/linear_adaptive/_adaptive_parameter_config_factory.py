@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
     AxisMaskConfig,
     DiagonalAxisMaskConfig,
+    DiagonallyModulatedLowRankDynamicWeightConfig,
     DualModelDynamicWeightConfig,
     DynamicBiasConfig,
     DynamicDiagonalConfig,
@@ -12,6 +12,8 @@ from emperor.augmentations.adaptive_parameters import (
     HypernetworkDynamicWeightConfig,
     LayeredWeightedBankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
+    MatrixBiasMixtureConfig,
+    MatrixWeightsMixtureConfig,
     PerAxisScoreMaskConfig,
     SingleModelDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
@@ -21,11 +23,13 @@ from emperor.augmentations.adaptive_parameters import (
 )
 from emperor.layers import LayerConfig, LayerStackConfig
 from emperor.linears import LinearLayerConfig
+from emperor.sampler import RouterConfig, SamplerConfig
 from models.linears.linear_adaptive._residual import (
     ResidualStackOptions,
     build_residual_config,
 )
 from models.linears.linear_adaptive.runtime_options import (
+    AdaptiveGenerationOptions,
     AdaptiveProjectionOptions,
     GeneratorStackOptions,
     RuntimeOptions,
@@ -33,6 +37,14 @@ from models.linears.linear_adaptive.runtime_options import (
 )
 
 _WEIGHT_OPTION_FIELDS: dict[type[DynamicWeightConfig], tuple[str, ...]] = {
+    DiagonallyModulatedLowRankDynamicWeightConfig: (
+        "normalization_option",
+        "input_factor_source",
+        "output_factor_source",
+        "input_factor_model_config",
+        "output_factor_model_config",
+        "coefficient_model_config",
+    ),
     SingleModelDynamicWeightConfig: (
         "normalization_option",
         "normalization_position_option",
@@ -94,10 +106,14 @@ def _stack_config(
 
 
 def _independent_stack_config(
-    options: GeneratorStackOptions,
+    options: GeneratorStackOptions | None,
     residual_stack: ResidualStackOptions,
 ) -> LayerStackConfig | None:
-    return _stack_config(options.stack, residual_stack) if options.independent else None
+    return (
+        _stack_config(options.stack, residual_stack)
+        if options is not None and options.independent
+        else None
+    )
 
 
 class AdaptiveParameterConfigFactory:
@@ -110,6 +126,7 @@ class AdaptiveParameterConfigFactory:
         if runtime.weight.enabled:
             weight_config = self._weight_config(
                 runtime.weight.option,
+                generation_fields=self._generation_weight_fields(runtime.generation),
                 generator_depth=runtime.weight.generator_depth,
                 decay_schedule=runtime.weight.decay_schedule,
                 decay_rate=runtime.weight.decay_rate,
@@ -128,6 +145,9 @@ class AdaptiveParameterConfigFactory:
         if runtime.bias.enabled:
             bias_config = self._bias_config(
                 runtime.bias.option,
+                generation_fields=self._generation_mixture_fields(
+                    runtime.generation, "bias"
+                ),
                 decay_schedule=runtime.bias.decay_schedule,
                 decay_rate=runtime.bias.decay_rate,
                 decay_warmup_batches=runtime.bias.decay_warmup_batches,
@@ -161,7 +181,7 @@ class AdaptiveParameterConfigFactory:
                 ),
             )
         return AdaptiveParameterAugmentationConfig(
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=runtime.grouping_config,
             weight_config=weight_config,
             bias_config=bias_config,
             diagonal_config=diagonal_config,
@@ -177,9 +197,10 @@ class AdaptiveParameterConfigFactory:
         options: AdaptiveProjectionOptions,
     ) -> AdaptiveParameterAugmentationConfig:
         return AdaptiveParameterAugmentationConfig(
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=options.grouping_config,
             weight_config=self._weight_config(
                 options.weight_option,
+                generation_fields=self._generation_weight_fields(options.generation),
                 generator_depth=options.generator_depth,
                 decay_schedule=options.weight_decay_schedule,
                 decay_rate=options.weight_decay_rate,
@@ -192,6 +213,9 @@ class AdaptiveParameterConfigFactory:
             ),
             bias_config=self._bias_config(
                 options.bias_option,
+                generation_fields=self._generation_mixture_fields(
+                    options.generation, "bias"
+                ),
                 decay_schedule=options.bias_decay_schedule,
                 decay_rate=options.bias_decay_rate,
                 decay_warmup_batches=options.bias_decay_warmup_batches,
@@ -212,6 +236,43 @@ class AdaptiveParameterConfigFactory:
             ),
         )
 
+    def _generation_weight_fields(self, options: AdaptiveGenerationOptions) -> dict:
+        return {
+            **self._generation_mixture_fields(options, "weight"),
+            "input_factor_source": options.weight_input_factor_source,
+            "output_factor_source": options.weight_output_factor_source,
+            "input_factor_model_config": _independent_stack_config(
+                options.weight_input_factor_generator_stack,
+                self._runtime.residual_stack,
+            ),
+            "output_factor_model_config": _independent_stack_config(
+                options.weight_output_factor_generator_stack,
+                self._runtime.residual_stack,
+            ),
+            "coefficient_model_config": _independent_stack_config(
+                options.weight_coefficient_generator_stack, self._runtime.residual_stack
+            ),
+        }
+
+    def _generation_mixture_fields(
+        self, options: AdaptiveGenerationOptions, family: str
+    ) -> dict:
+        return dict(
+            num_experts=getattr(options, f"{family}_mixture_num_experts"),
+            top_k=getattr(options, f"{family}_mixture_top_k"),
+            sampler_config=SamplerConfig(
+                normalize_probabilities_flag=getattr(
+                    options, f"{family}_mixture_normalize_probabilities_flag"
+                ),
+                router_config=RouterConfig(
+                    model_config=_independent_stack_config(
+                        getattr(options, f"{family}_mixture_router_generator_stack"),
+                        self._runtime.residual_stack,
+                    )
+                ),
+            ),
+        )
+
     @staticmethod
     def _weight_config(
         option,
@@ -224,9 +285,23 @@ class AdaptiveParameterConfigFactory:
         normalization_position_option,
         bank_expansion_factor,
         model_config=None,
+        generation_fields=None,
     ) -> DynamicWeightConfig | None:
         if option is None:
             return None
+        if option is MatrixWeightsMixtureConfig:
+            mixture_fields = {
+                name: value
+                for name, value in (generation_fields or {}).items()
+                if name in ("num_experts", "top_k", "sampler_config")
+            }
+            return option(
+                model_config=model_config,
+                decay_schedule=decay_schedule,
+                decay_rate=decay_rate,
+                decay_warmup_batches=decay_warmup_batches,
+                **mixture_fields,
+            )
         kwargs = {
             "generator_depth": generator_depth,
             "decay_schedule": decay_schedule,
@@ -239,6 +314,7 @@ class AdaptiveParameterConfigFactory:
                 _WEIGHT_OPTION_FIELDS,
                 option,
                 {
+                    **(generation_fields or {}),
                     "normalization_option": normalization_option,
                     "normalization_position_option": normalization_position_option,
                     "bank_expansion_factor": bank_expansion_factor,
@@ -256,9 +332,23 @@ class AdaptiveParameterConfigFactory:
         decay_warmup_batches,
         bank_expansion_factor,
         model_config=None,
+        generation_fields=None,
     ) -> DynamicBiasConfig | None:
         if option is None:
             return None
+        if option is MatrixBiasMixtureConfig:
+            mixture_fields = {
+                name: value
+                for name, value in (generation_fields or {}).items()
+                if name in ("num_experts", "top_k", "sampler_config")
+            }
+            return option(
+                model_config=model_config,
+                decay_schedule=decay_schedule,
+                decay_rate=decay_rate,
+                decay_warmup_batches=decay_warmup_batches,
+                **mixture_fields,
+            )
         kwargs = {
             "decay_schedule": decay_schedule,
             "decay_rate": decay_rate,
