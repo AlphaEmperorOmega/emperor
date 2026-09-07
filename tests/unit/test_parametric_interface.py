@@ -124,14 +124,6 @@ ROUTER_CONFIG_FIELDS = (
     "model_config",
 )
 
-STATE_FIELDS = (
-    "hidden",
-    "loss",
-    "halting_state",
-    "residual_state",
-    "row_layout",
-    "skip_mask",
-)
 
 FLOAT = torch.float32
 LONG = torch.int64
@@ -752,3 +744,5 @@ print(json.dumps({
 
 if __name__ == "__main__":
     unittest.main()
+
+STATE_FIELDS = ("hidden", "loss", "halting_state", "residual_state", "skip_mask")
