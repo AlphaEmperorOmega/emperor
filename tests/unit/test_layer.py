@@ -927,6 +927,12 @@ class TestLayer(unittest.TestCase):
                 result = layer.normalization.dimension
 
                 self.assertEqual(result, expected_dim)
+                if expected_dim is not None:
+                    self.assertIsInstance(layer.normalization.module, nn.RMSNorm)
+                    self.assertEqual(layer.normalization.module.eps, 1e-5)
+                    self.assertEqual(
+                        set(layer.normalization.module.state_dict()), {"weight"}
+                    )
 
     def test_postprocessing_delegate_stores_activation_option(self):
         activations = [
@@ -1673,11 +1679,13 @@ class TestLayer(unittest.TestCase):
                         layer_norm_position=position,
                     )
                     layer = Layer(cfg)
-                    x = torch.randn(batch_size, dim)
+                    x = torch.arange(
+                        1, batch_size * dim + 1, dtype=torch.float32
+                    ).reshape(batch_size, dim)
                     method = getattr(layer.normalization, method_name)
                     state = LayerState(hidden=x)
                     expected = (
-                        layer.normalization.module(x)
+                        x * torch.rsqrt(x.square().mean(dim=-1, keepdim=True) + 1e-5)
                         if position == active_position
                         else x
                     )
@@ -1685,7 +1693,7 @@ class TestLayer(unittest.TestCase):
 
                     self.assertIs(result, state)
                     self.assertEqual(result.hidden.shape, x.shape)
-                    self.assertTrue(torch.equal(result.hidden, expected))
+                    torch.testing.assert_close(result.hidden, expected)
 
     def test_postprocessing_delegate_applies_optional_gate(self):
         batch_size = 4
