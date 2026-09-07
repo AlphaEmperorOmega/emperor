@@ -29,14 +29,18 @@ class LinearAbstract(Module):
         self.__init_parameters()
 
     def __init_parameters(self) -> None:
-        self.weight_params = self.__init_weight_parameters()
-        self.bias_params = self.__init_bias_parameters()
+        weight, bias = self._create_base_parameters()
+        self.register_parameter("weight_params", weight)
+        self.register_parameter("bias_params", bias)
 
-    def __init_weight_parameters(self) -> Parameter:
+    def _create_base_parameters(self) -> tuple[Parameter | None, Parameter | None]:
+        return self._create_weight_parameters(), self._create_bias_parameters()
+
+    def _create_weight_parameters(self) -> Parameter | None:
         weight_shape = (self.input_dim, self.output_dim)
         return self._init_parameter_bank(weight_shape)
 
-    def __init_bias_parameters(self) -> Parameter | None:
+    def _create_bias_parameters(self) -> Parameter | None:
         if not self.bias_flag:
             return None
         bias_shape = (self.output_dim,)
