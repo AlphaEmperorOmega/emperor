@@ -11,7 +11,6 @@ import emperor.augmentations.adaptive_parameters as adaptive_parameters
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
     AdditiveDynamicBiasConfig,
     WeightDecayScheduleOptions,
 )
@@ -84,7 +83,7 @@ def adaptive_linear_config(
         output_dim=output_dim,
         bias_flag=bias_flag,
         adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=None,
             bias_config=bias_config,
         ),
     )
@@ -120,7 +119,7 @@ class AdaptiveParameterBehavioralContractTests(unittest.TestCase):
             AdaptiveParameterAugmentationConfig(
                 input_dim=2,
                 output_dim=2,
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
             )
         )
         generator = LinearLayer(
@@ -358,7 +357,7 @@ class AdaptiveParameterBehavioralContractTests(unittest.TestCase):
             AdaptiveParameterAugmentationConfig(
                 input_dim=2,
                 output_dim=3,
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
             )
         )
 

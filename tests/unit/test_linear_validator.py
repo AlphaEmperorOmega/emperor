@@ -5,7 +5,6 @@ import torch
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.augmentations.adaptive_parameters._linear_adapter import (
     AdaptiveLinearLayer,
@@ -66,7 +65,7 @@ class TestLinearValidatorAdapter(unittest.TestCase):
                 output_dim=3,
                 bias_flag=True,
                 adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                    grouping_config=None,
                 ),
             )
         )
@@ -94,7 +93,7 @@ class TestLinearValidatorAdapter(unittest.TestCase):
                 output_dim=3,
                 bias_flag=True,
                 adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                    grouping_config=None,
                 ),
             )
         )
@@ -114,7 +113,7 @@ class TestLinearValidatorAdapter(unittest.TestCase):
                 output_dim=3,
                 bias_flag=True,
                 adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                    grouping_config=None,
                 ),
             )
         )
