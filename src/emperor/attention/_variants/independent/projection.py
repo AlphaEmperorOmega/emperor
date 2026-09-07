@@ -24,22 +24,17 @@ class IndependentProjector(ProjectorBase):
         self,
         attention_inputs: "MultiHeadAttentionInputs",
     ) -> "MultiHeadAttentionInputs":
-        runtime_layout = attention_inputs.runtime_layout
-        row_layout = runtime_layout.row_layout if runtime_layout is not None else None
         q_projection = self._compute_projection(
             attention_inputs.query,
             self.query_model,
-            row_layout=row_layout,
         )
         k_projection = self._compute_projection(
             attention_inputs.key,
             self.key_model,
-            row_layout=row_layout,
         )
         v_projection = self._compute_projection(
             attention_inputs.value,
             self.value_model,
-            row_layout=row_layout,
         )
         return replace(
             attention_inputs,
