@@ -6,8 +6,6 @@ from dataclasses import dataclass, replace
 
 from torch import Tensor
 
-from emperor.layers import RowLayout
-
 
 @dataclass(frozen=True, eq=False, kw_only=True)
 class MultiHeadAttentionInputs:
@@ -30,7 +28,6 @@ class AttentionRuntimeLayout:
     input_was_batched: bool = True
     input_was_batch_first: bool = False
     source_extension_count: int = 0
-    row_layout: RowLayout | None = None
 
     def branch_count(self, num_heads: int) -> int:
         return self.batch_size * num_heads
@@ -41,9 +38,6 @@ class AttentionRuntimeLayout:
             source_sequence_length=self.source_sequence_length + count,
             source_extension_count=self.source_extension_count + count,
         )
-
-    def with_row_layout(self, row_layout: RowLayout) -> AttentionRuntimeLayout:
-        return replace(self, row_layout=row_layout)
 
     @property
     def real_source_sequence_length(self) -> int:

@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 
 from torch import Tensor
 
-from emperor._validation import _first_adaptive_grouping_path
 from emperor.attention._validation import MultiHeadAttentionValidator
 
 if TYPE_CHECKING:
@@ -102,33 +101,24 @@ class MixtureOfAttentionHeadsValidator(MultiHeadAttentionValidator):
     def validate(cls, model: "MultiHeadAttentionAbstract") -> None:
         super().validate(model)
         cls.validate_experts_configuration(model)
-        cls.validate_adaptive_grouping_is_not_routed(model)
         cls.validate_expert_key_value_sequence_lengths(model)
 
     @staticmethod
-    def validate_adaptive_grouping_is_not_routed(
-        model: "MultiHeadAttentionAbstract",
-    ) -> None:
-        for path, config in (
+    def grouping_child_boundaries(config):
+        return {
+            "projection_model_config": "branch",
+            "experts_config": "restored_template",
+        }
+
+    @staticmethod
+    def grouping_configuration_roots(model):
+        return (
             (
                 "MixtureOfAttentionHeadsConfig.projection_model_config",
                 model.cfg.projection_model_config,
             ),
-            (
-                "MixtureOfAttentionHeadsConfig.experts_config",
-                model.cfg.experts_config,
-            ),
-        ):
-            grouping_path = _first_adaptive_grouping_path(
-                config,
-                root=path,
-            )
-            if grouping_path is not None:
-                raise ValueError(
-                    "Adaptive parameter grouping is not supported by mixture-of-"
-                    "attention-heads projections because expert routing changes row "
-                    f"membership and order. Found grouping at {grouping_path}."
-                )
+            ("MixtureOfAttentionHeadsConfig.experts_config", model.cfg.experts_config),
+        )
 
     @staticmethod
     def validate_experts_configuration(

@@ -160,7 +160,6 @@ class ProcessorBase(Module):
     ) -> Tensor:
         attention_output = self.projector.compute_output_projection(
             weighted_values,
-            runtime_layout=runtime_layout,
         )
         embedding_dim = self.embedding_dim
         batch_size = (

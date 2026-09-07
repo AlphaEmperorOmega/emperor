@@ -5,7 +5,13 @@ from typing import TYPE_CHECKING
 import torch
 from torch import Tensor
 
-from emperor._validation import ValidatorBase
+from emperor._validation import (
+    ValidatorBase,
+    _adaptive_grouping_configs,
+    _adaptive_grouping_visits,
+    _validate_adaptive_sequence_input,
+    _validate_grouped_row_preservation,
+)
 
 if TYPE_CHECKING:
     from emperor.attention._base import MultiHeadAttentionAbstract
@@ -32,15 +38,6 @@ class AttentionValidatorBase:
         if runtime_layout is None:
             raise RuntimeError(
                 "Output layout restoration requires resolved attention runtime layout."
-            )
-
-    @staticmethod
-    def validate_projection_row_layout_runtime_layout(
-        runtime_layout: "AttentionRuntimeLayout | None",
-    ) -> None:
-        if runtime_layout is None:
-            raise RuntimeError(
-                "Projection row layout requires resolved attention runtime layout."
             )
 
     @staticmethod
@@ -358,6 +355,81 @@ class MultiHeadAttentionValidator(AttentionValidatorBase, ValidatorBase):
             source_sequence_length=model.source_sequence_length,
         )
         cls.validate_head_divisibility(model)
+        cls.validate_grouping_configuration(model)
+
+    @staticmethod
+    def grouping_child_boundaries(config):
+        return {"projection_model_config": "branch"}
+
+    @staticmethod
+    def grouping_configuration_roots(model):
+        return (
+            (
+                f"{type(model.cfg).__name__}.projection_model_config",
+                model.cfg.projection_model_config,
+            ),
+        )
+
+    @classmethod
+    def validate_grouping_configuration(cls, model) -> None:
+        for root, config in cls.grouping_configuration_roots(model):
+            for visit in _adaptive_grouping_visits(config, root=root):
+                augmentation, path = visit.config, visit.path
+                grouping = augmentation.grouping_config
+                if visit.expert_path is not None:
+                    augmentation.registry_owner().VALIDATOR.validate_grouping_expert_input(
+                        augmentation, path=path
+                    )
+                else:
+                    if grouping.scope.name != "SEQUENCE":
+                        raise ValueError(
+                            f"{path} requires SEQUENCE grouping for token attention; ROWS mixes samples."
+                        )
+                    if grouping.input_order.name != "SEQUENCE_FIRST":
+                        raise ValueError(
+                            f"{path} input_order must be SEQUENCE_FIRST for attention projections."
+                        )
+                if model.causal_attention_mask_flag:
+                    raise ValueError(
+                        f"Adaptive grouping context sharing is restricted by causal attention at {path}."
+                    )
+        _validate_grouped_row_preservation(model.cfg, root=type(model.cfg).__name__)
+
+    @classmethod
+    def validate_grouping_forward_inputs(cls, model, attention_inputs) -> None:
+        roots = cls.grouping_configuration_roots(model)
+        grouped = tuple(
+            item
+            for root, config in roots
+            for item in _adaptive_grouping_configs(config, root=root)
+        )
+        if not grouped:
+            return
+        if (
+            attention_inputs.query is not attention_inputs.key
+            or attention_inputs.key is not attention_inputs.value
+            or attention_inputs.static_key is not None
+            or attention_inputs.static_value is not None
+            or attention_inputs.attention_mask is not None
+        ):
+            raise ValueError(
+                "Adaptive grouping context sharing is restricted for cross/static or explicitly masked attention."
+            )
+        mask = attention_inputs.key_padding_mask
+        if (
+            mask is not None
+            and (mask if mask.dtype == torch.bool else mask.isneginf()).any()
+        ):
+            raise ValueError(
+                "Adaptive grouping requires all-valid inputs; key_padding_mask excludes positions."
+            )
+        for root, config in roots:
+            _validate_adaptive_sequence_input(
+                config,
+                root=root,
+                sequence_length=attention_inputs.runtime_layout.target_sequence_length,
+                input_order="SEQUENCE_FIRST",
+            )
 
     @staticmethod
     def validate_batch_first_flag(batch_first_flag: bool | None) -> None:
