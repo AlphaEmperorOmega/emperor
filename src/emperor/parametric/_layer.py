@@ -14,7 +14,6 @@ from emperor.parametric._handlers import (
     VectorParameterHandler,
 )
 from emperor.parametric._mixtures.config import (
-    AdaptiveMixtureConfig,
     GeneratorBiasMixtureConfig,
     GeneratorWeightsMixtureConfig,
     MatrixWeightsMixtureConfig,
@@ -25,6 +24,10 @@ from emperor.parametric._validation import ParametricLayerValidator
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
     from emperor.parametric._mixtures.base import AdaptiveMixtureBase
+    from emperor.parametric._mixtures.matrix import (
+        MatrixBiasMixture,
+        MatrixWeightsMixture,
+    )
 
 
 class ParametricLayer(Module):
@@ -64,17 +67,17 @@ class ParametricLayer(Module):
         )
         return self.adaptive_augmentation_config.build(overrides)
 
-    def __init_weight_model(self) -> "AdaptiveMixtureBase":
-        overrides = AdaptiveMixtureConfig(
+    def __init_weight_model(self) -> "AdaptiveMixtureBase | MatrixWeightsMixture":
+        overrides = type(self.weight_mixture_config)(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )
         return self.weight_mixture_config.build(overrides)
 
-    def __init_bias_model(self) -> "AdaptiveMixtureBase | None":
+    def __init_bias_model(self) -> "AdaptiveMixtureBase | MatrixBiasMixture | None":
         if self.bias_mixture_config is None:
             return None
-        overrides = AdaptiveMixtureConfig(
+        overrides = type(self.bias_mixture_config)(
             input_dim=self.input_dim,
             output_dim=self.output_dim,
         )

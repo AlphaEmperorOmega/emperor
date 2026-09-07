@@ -1,6 +1,8 @@
 import math
+from dataclasses import fields
 from typing import TYPE_CHECKING
 
+import torch
 from torch import Tensor
 
 from emperor._validation import ValidatorBase
@@ -131,3 +133,68 @@ class AdaptiveMixtureValidator(ValidatorBase):
                 f"num_experts, received {sampler_config.num_experts} and "
                 f"{cfg.num_experts}."
             )
+
+
+class MatrixMixtureValidator(ValidatorBase):
+    @staticmethod
+    def validate_configuration(cfg):
+        if vars(cfg).keys() - {field.name for field in fields(cfg)} - {"_passed_args"}:
+            raise ValueError(
+                "Complete parameter bank config contains unsupported fields."
+            )
+        for name in ("input_dim", "output_dim", "num_experts", "top_k"):
+            value = getattr(cfg, name)
+            if type(value) is not int or value <= 0:
+                raise ValueError(
+                    f"{name} must be a positive integer, received {value!r}."
+                )
+        if cfg.top_k > cfg.num_experts:
+            raise ValueError("top_k cannot exceed num_experts.")
+
+    @staticmethod
+    def validate_route(model, probabilities, indices):
+        if indices is None:
+            if model.top_k != model.num_experts:
+                raise ValueError(
+                    "Missing indices require a full-bank route: top_k must equal num_experts."
+                )
+        else:
+            if not isinstance(indices, Tensor) or indices.dtype != torch.long:
+                raise TypeError("indices must be a torch.long Tensor.")
+            if indices.device != model.parameter_bank.device:
+                raise ValueError("indices must be on the parameter bank device.")
+            if indices.ndim not in (1, 2) or (indices.ndim == 1 and model.top_k != 1):
+                raise ValueError(
+                    "indices must have shape [contexts, top_k], or [contexts] for top-1."
+                )
+            if indices.ndim == 2 and indices.shape[1] != model.top_k:
+                raise ValueError("indices selection dimension must equal top_k.")
+            if torch.any((indices < 0) | (indices >= model.num_experts)):
+                raise ValueError("indices must lie within the parameter bank.")
+        if probabilities is None:
+            if model.weighted_parameters_flag:
+                raise ValueError(
+                    "Probabilities must be provided when weighted_parameters_flag is True."
+                )
+            return
+        if (
+            not isinstance(probabilities, Tensor)
+            or not probabilities.is_floating_point()
+        ):
+            raise TypeError("probabilities must be a floating-point Tensor.")
+        if probabilities.device != model.parameter_bank.device:
+            raise ValueError("probabilities must be on the parameter bank device.")
+        if probabilities.ndim not in (1, 2) or (
+            probabilities.ndim == 1 and model.top_k != 1
+        ):
+            raise ValueError(
+                "probabilities must have shape [contexts, top_k], or [contexts] for top-1."
+            )
+        if probabilities.ndim == 2 and probabilities.shape[1] != model.top_k:
+            raise ValueError("probabilities selection dimension must equal top_k.")
+        if indices is not None and probabilities.shape[0] != indices.shape[0]:
+            raise ValueError(
+                "probabilities and indices must have the same context count."
+            )
+        if not torch.isfinite(probabilities).all() or torch.any(probabilities < 0):
+            raise ValueError("probabilities must be finite and non-negative.")
