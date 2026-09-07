@@ -16,10 +16,10 @@ from emperor.neuron import (
     TerminalConnectionShapeOptions,
 )
 from emperor.neuron._cluster.plasticity import ClusterPlasticityDelegate
-from emperor.neuron._cluster.recurrent_routes import (
+from emperor.neuron._cluster.routing.delegate import (
     ClusterRoutingDelegate,
 )
-from emperor.neuron._cluster.state import (
+from emperor.neuron._cluster.routing.state import (
     NeuronClusterRouteState,
     RouteStateDelegate,
     _NeuronClusterForwardContext,
