@@ -40,7 +40,7 @@ from emperor.neuron import (
     TerminalConnectionShapeOptions,
     TerminalRangeOptions,
 )
-from emperor.neuron._cluster.state import _NeuronClusterForwardContext
+from emperor.neuron._cluster.routing.state import _NeuronClusterForwardContext
 from emperor.nn import Module
 from emperor.sampler import RouterConfig, SamplerConfig
 
