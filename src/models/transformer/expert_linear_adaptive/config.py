@@ -1,29 +1,41 @@
-from emperor.augmentations.adaptive_parameters import (
+from emperor.augmentations.adaptive_parameters import (  # noqa: F401
     AdaptiveParameterGroupingScopeOptions,
+    AdaptiveParameterInputOrderOptions,
     AdditiveDynamicBiasConfig,  # noqa: F401
     AffineTransformDynamicBiasConfig,  # noqa: F401
     AntiDynamicDiagonalConfig,  # noqa: F401
+    AttentionGroupingConfig,  # noqa: F401
     AxisMaskConfig,
     BankExpansionFactorOptions,
     CombinedDynamicDiagonalConfig,  # noqa: F401
     DiagonalAxisMaskConfig,  # noqa: F401
+    DiagonallyModulatedLowRankDynamicWeightConfig,
     DualModelDynamicWeightConfig,  # noqa: F401
     DynamicBiasConfig,
     DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
     GeneratorDynamicBiasConfig,  # noqa: F401
+    GroupingConfig,
     HypernetworkDynamicWeightConfig,  # noqa: F401
     LayeredWeightedBankDynamicWeightConfig,  # noqa: F401
     LowRankDynamicWeightConfig,  # noqa: F401
+    LowRankFactorSourceOptions,
     MaskDimensionOptions,
+    MatrixBiasMixtureConfig,  # noqa: F401
+    MatrixWeightsMixtureConfig,  # noqa: F401
+    MeanGroupingConfig,  # noqa: F401
+    MeanStdGroupingConfig,  # noqa: F401
     MultiplicativeDynamicBiasConfig,  # noqa: F401
     OuterProductMaskConfig,  # noqa: F401
     PerAxisScoreMaskConfig,  # noqa: F401
+    RMSGroupingConfig,  # noqa: F401
     SigmoidGatedDynamicBiasConfig,  # noqa: F401
     SingleModelDynamicWeightConfig,  # noqa: F401
     SoftWeightedBankDynamicWeightConfig,  # noqa: F401
     StandardDynamicDiagonalConfig,  # noqa: F401
+    SumGroupingConfig,  # noqa: F401
+    SummaryNormalizationOptions,
     TanhGatedDynamicBiasConfig,  # noqa: F401
     TopSliceAxisMaskConfig,  # noqa: F401
     WeightDecayScheduleOptions,
@@ -32,6 +44,7 @@ from emperor.augmentations.adaptive_parameters import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
+from emperor.config import ConfigBase
 from emperor.embedding.absolute import (
     AbsolutePositionalEmbeddingConfig,
     TextSinusoidalPositionalEmbeddingConfig,
@@ -380,10 +393,30 @@ ROUTER_NOISY_TOPK_FLAG: bool = False
 # Adaptive Parameter Options
 _CONFIG_FIELD_METADATA_ALIASES: dict[str, str] = {}
 
-GROUPING_SCOPE: AdaptiveParameterGroupingScopeOptions = (
-    AdaptiveParameterGroupingScopeOptions.DISABLED
-)
-GROUP_COUNT: int = 1
+# Grouping accepts all-valid fixed sequences. None leaves generation per row.
+GROUPING_SCOPE: AdaptiveParameterGroupingScopeOptions | None = None
+GROUP_COUNT: int | None = None
+# Tokens per chunk; final incomplete chunks are padded internally.
+CHUNK_SIZE: int | None = None
+GROUPING_SEQUENCE_LENGTH: int | None = None
+GROUPING_INPUT_ORDER: AdaptiveParameterInputOrderOptions | None = None
+# Chunk reducer: SUM, MEAN, MEAN_STD, ATTENTION, or RMS. None uses SUM.
+GROUPING_METHOD: type[GroupingConfig] | None = None
+# Summary normalization: DISABLED or RMS_NORM. None uses DISABLED.
+GROUPING_SUMMARY_NORMALIZATION: SummaryNormalizationOptions | None = None
+# ATTENTION scorer width. None preserves the supplied attention model width.
+GROUPING_MODEL_CONFIG: ConfigBase | None = None
+GROUPING_ATTENTION_HIDDEN_DIM: int | None = None
+# RMS_NORM epsilon. None uses 1e-6 when summary normalization is selected.
+GROUPING_RMS_NORM_EPSILON: float | None = None
+WEIGHT_INPUT_FACTOR_SOURCE: LowRankFactorSourceOptions | None = None
+WEIGHT_OUTPUT_FACTOR_SOURCE: LowRankFactorSourceOptions | None = None
+WEIGHT_MIXTURE_NUM_EXPERTS: int | None = None
+BIAS_MIXTURE_NUM_EXPERTS: int | None = None
+WEIGHT_MIXTURE_TOP_K: int | None = None
+BIAS_MIXTURE_TOP_K: int | None = None
+WEIGHT_MIXTURE_NORMALIZE_PROBABILITIES_FLAG: bool | None = None
+BIAS_MIXTURE_NORMALIZE_PROBABILITIES_FLAG: bool | None = None
 WEIGHT_OPTION_FLAG: bool = True
 WEIGHT_OPTION: type[DynamicWeightConfig] | None = None
 GENERATOR_DEPTH: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_ONE
@@ -446,7 +479,17 @@ _COMPONENT_GENERATOR_DEFAULTS = {
     "BIAS_FLAG": None,
 }
 _annotations = globals().setdefault("__annotations__", {})
-for _component in ("WEIGHT", "BIAS", "DIAGONAL", "MASK"):
+for _component in (
+    "WEIGHT",
+    "BIAS",
+    "DIAGONAL",
+    "MASK",
+    "WEIGHT_INPUT_FACTOR",
+    "WEIGHT_OUTPUT_FACTOR",
+    "WEIGHT_COEFFICIENT",
+    "WEIGHT_MIXTURE_ROUTER",
+    "BIAS_MIXTURE_ROUTER",
+):
     for _suffix, _value in _COMPONENT_GENERATOR_DEFAULTS.items():
         _target = f"{_component}_GENERATOR_STACK_{_suffix}"
         globals()[_target] = _value
@@ -464,8 +507,24 @@ for _component in ("WEIGHT", "BIAS", "DIAGONAL", "MASK"):
 
 
 _ADAPTIVE_DEFAULT_NAMES = {
+    "WEIGHT_INPUT_FACTOR_SOURCE": "WEIGHT_INPUT_FACTOR_SOURCE",
+    "WEIGHT_OUTPUT_FACTOR_SOURCE": "WEIGHT_OUTPUT_FACTOR_SOURCE",
+    "WEIGHT_MIXTURE_NUM_EXPERTS": "WEIGHT_MIXTURE_NUM_EXPERTS",
+    "BIAS_MIXTURE_NUM_EXPERTS": "BIAS_MIXTURE_NUM_EXPERTS",
+    "WEIGHT_MIXTURE_TOP_K": "WEIGHT_MIXTURE_TOP_K",
+    "BIAS_MIXTURE_TOP_K": "BIAS_MIXTURE_TOP_K",
+    "WEIGHT_MIXTURE_NORMALIZE_PROBABILITIES_FLAG": "WEIGHT_MIXTURE_NORMALIZE_PROBABILITIES_FLAG",
+    "BIAS_MIXTURE_NORMALIZE_PROBABILITIES_FLAG": "BIAS_MIXTURE_NORMALIZE_PROBABILITIES_FLAG",
     "GROUPING_SCOPE": "GROUPING_SCOPE",
     "GROUP_COUNT": "GROUP_COUNT",
+    "CHUNK_SIZE": "CHUNK_SIZE",
+    "GROUPING_SEQUENCE_LENGTH": "GROUPING_SEQUENCE_LENGTH",
+    "GROUPING_INPUT_ORDER": "GROUPING_INPUT_ORDER",
+    "GROUPING_METHOD": "GROUPING_METHOD",
+    "GROUPING_MODEL_CONFIG": "GROUPING_MODEL_CONFIG",
+    "GROUPING_SUMMARY_NORMALIZATION": "GROUPING_SUMMARY_NORMALIZATION",
+    "GROUPING_ATTENTION_HIDDEN_DIM": "GROUPING_ATTENTION_HIDDEN_DIM",
+    "GROUPING_RMS_NORM_EPSILON": "GROUPING_RMS_NORM_EPSILON",
     "WEIGHT_OPTION_FLAG": "WEIGHT_OPTION_FLAG",
     "WEIGHT_OPTION": "WEIGHT_OPTION",
     "GENERATOR_DEPTH": "GENERATOR_DEPTH",
@@ -496,19 +555,32 @@ for _name in tuple(globals()):
         _ADAPTIVE_DEFAULT_NAMES[_name.removeprefix("ADAPTIVE_")] = _name
     elif any(
         _name.startswith(f"{_component}_GENERATOR_STACK_")
-        for _component in ("WEIGHT", "BIAS", "DIAGONAL", "MASK")
+        for _component in (
+            "WEIGHT",
+            "BIAS",
+            "DIAGONAL",
+            "MASK",
+            "WEIGHT_INPUT_FACTOR",
+            "WEIGHT_OUTPUT_FACTOR",
+            "WEIGHT_COEFFICIENT",
+            "WEIGHT_MIXTURE_ROUTER",
+            "BIAS_MIXTURE_ROUTER",
+        )
     ):
         _ADAPTIVE_DEFAULT_NAMES[_name] = _name
 
 
-def _copy_adaptive_runtime_defaults(target_prefix: str) -> None:
+def _copy_adaptive_runtime_defaults(
+    target_prefix: str, *, inherit_shared: bool = False
+) -> None:
     annotations = globals().setdefault("__annotations__", {})
     for suffix, source in _ADAPTIVE_DEFAULT_NAMES.items():
         target = f"{target_prefix}{suffix}"
-        globals()[target] = globals()[source]
+        globals()[target] = None if inherit_shared else globals()[source]
         _CONFIG_FIELD_METADATA_ALIASES[target] = source
         if source in annotations:
-            annotations[target] = annotations[source]
+            annotation = annotations[source]
+            annotations[target] = annotation | None if inherit_shared else annotation
 
 
 for _adaptive_target_prefix in (
@@ -525,6 +597,13 @@ for _adaptive_target_prefix in (
     "DECODER_FF_ADAPTIVE_",
 ):
     _copy_adaptive_runtime_defaults(_adaptive_target_prefix)
+
+for _adaptive_target_prefix in (
+    "ENCODER_ATTN_EXPERT_ADAPTIVE_",
+    "DECODER_SELF_ATTN_EXPERT_ADAPTIVE_",
+    "DECODER_CROSS_ATTN_EXPERT_ADAPTIVE_",
+):
+    _copy_adaptive_runtime_defaults(_adaptive_target_prefix, inherit_shared=True)
 
 del (
     _adaptive_target_prefix,
