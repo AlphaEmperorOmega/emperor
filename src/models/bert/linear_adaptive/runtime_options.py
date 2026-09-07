@@ -11,6 +11,7 @@ from emperor.augmentations.adaptive_parameters import (
     DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
+    GroupingConfig,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
@@ -32,6 +33,10 @@ from emperor.layers import (
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
+from models.bert.linear_adaptive._generation import (
+    BiasGenerationOptions,
+    WeightGenerationOptions,
+)
 from models.bert.linear_adaptive._residual import ResidualStackOptions
 
 
@@ -277,6 +282,9 @@ class AdaptiveGeneratorStackOptions:
 
 @dataclass(frozen=True)
 class HiddenAdaptiveWeightOptions:
+    generation: WeightGenerationOptions = field(
+        default_factory=WeightGenerationOptions, kw_only=True
+    )
     generator_depth: DynamicDepthOptions
     option_flag: bool
     option: type[DynamicWeightConfig] | None
@@ -291,6 +299,9 @@ class HiddenAdaptiveWeightOptions:
 
 @dataclass(frozen=True)
 class HiddenAdaptiveBiasOptions:
+    generation: BiasGenerationOptions = field(
+        default_factory=BiasGenerationOptions, kw_only=True
+    )
     option_flag: bool
     option: type[DynamicBiasConfig] | None
     decay_schedule: WeightDecayScheduleOptions
@@ -321,6 +332,11 @@ class HiddenAdaptiveMaskOptions:
 
 @dataclass(frozen=True, slots=True)
 class _ConstructionOptions:
+    attention_grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
+    feed_forward_grouping_config: GroupingConfig | None = field(
+        default=None, kw_only=True
+    )
+    grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
     batch_size: int
     learning_rate: float
     input_dim: int
@@ -466,6 +482,7 @@ class RuntimeOptions(ResolvedRuntimeOptions):
                 AdaptiveGeneratorStackOptions | None,
                 values.get("adaptive_generator_stack_options"),
             ),
+            grouping_config=cast(GroupingConfig | None, values.get("grouping_config")),
             hidden_adaptive_weight_options=cast(
                 HiddenAdaptiveWeightOptions | None,
                 values.get("hidden_adaptive_weight_options"),
@@ -486,6 +503,10 @@ class RuntimeOptions(ResolvedRuntimeOptions):
                 AdaptiveGeneratorStackOptions | None,
                 values.get("attention_adaptive_generator_stack_options"),
             ),
+            attention_grouping_config=cast(
+                GroupingConfig | None,
+                values.get("attention_grouping_config"),
+            ),
             attention_hidden_adaptive_weight_options=cast(
                 HiddenAdaptiveWeightOptions | None,
                 values.get("attention_hidden_adaptive_weight_options"),
@@ -505,6 +526,10 @@ class RuntimeOptions(ResolvedRuntimeOptions):
             feed_forward_adaptive_generator_stack_options=cast(
                 AdaptiveGeneratorStackOptions | None,
                 values.get("feed_forward_adaptive_generator_stack_options"),
+            ),
+            feed_forward_grouping_config=cast(
+                GroupingConfig | None,
+                values.get("feed_forward_grouping_config"),
             ),
             feed_forward_hidden_adaptive_weight_options=cast(
                 HiddenAdaptiveWeightOptions | None,
