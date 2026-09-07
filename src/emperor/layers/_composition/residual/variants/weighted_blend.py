@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
 
 import torch
 from torch import Tensor
@@ -11,9 +10,6 @@ from emperor.layers._composition.residual.config import WeightedBlendResidualCon
 from emperor.layers._composition.residual.pairwise import (
     WeightedPairwiseResidualAbstract,
 )
-
-if TYPE_CHECKING:
-    from emperor.layers._row_layout import RowLayout
 
 
 class WeightedBlendResidual(WeightedPairwiseResidualAbstract):
@@ -38,11 +34,8 @@ class WeightedBlendResidual(WeightedPairwiseResidualAbstract):
         previous: Tensor,
         *,
         residual_state: ResidualState | None = None,
-        row_layout: RowLayout | None = None,
     ) -> Tensor:
-        raw_mix_coefficient = self._resolve_raw_mix_coefficient(
-            current, previous, row_layout
-        )
+        raw_mix_coefficient = self._resolve_raw_mix_coefficient(current, previous)
         current_blend_coefficient = torch.sigmoid(raw_mix_coefficient)
         previous_blend_coefficient = 1.0 - current_blend_coefficient
         current_blend_contribution = current_blend_coefficient * current

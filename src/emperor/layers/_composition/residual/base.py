@@ -14,7 +14,6 @@ from emperor.layers._composition.residual.validation import (
 from emperor.nn import Module
 
 if TYPE_CHECKING:
-    from emperor.layers._row_layout import RowLayout
     from emperor.layers._state import LayerState
 
 
@@ -96,7 +95,6 @@ class ResidualConnectionAbstract(Module, ABC):
             state.hidden,
             previous,
             residual_state=state.residual_state,
-            row_layout=state.row_layout,
         )
         return state
 
@@ -107,6 +105,5 @@ class ResidualConnectionAbstract(Module, ABC):
         previous: Tensor,
         *,
         residual_state: ResidualState | None = None,
-        row_layout: RowLayout | None = None,
     ) -> Tensor:
         """Compose current and previous sources."""

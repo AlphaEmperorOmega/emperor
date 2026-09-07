@@ -21,7 +21,6 @@ from emperor.layers._composition.residual.validation import (
 )
 
 if TYPE_CHECKING:
-    from emperor.layers._row_layout import RowLayout
     from emperor.layers._state import LayerState
 
 
@@ -185,7 +184,6 @@ class AttentionResidual(ResidualConnectionAbstract):
         previous: Tensor,
         *,
         residual_state: ResidualState | None = None,
-        row_layout: RowLayout | None = None,
     ) -> Tensor:
         attention_state = self.__validate_attention_forward_inputs(
             current, residual_state
