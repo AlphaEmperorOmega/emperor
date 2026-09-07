@@ -3,7 +3,7 @@ from types import SimpleNamespace
 
 import torch
 
-from emperor.neuron._cluster.halting_lifecycle import _NeuronHaltingLifecycle
+from emperor.neuron._cluster.routing.halting import _NeuronHaltingLifecycle
 from unit.test_neuron import NeuronTestCase
 
 
