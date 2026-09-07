@@ -8,7 +8,6 @@ from emperor.attention import AttentionLayerState
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
     DynamicDepthOptions,
     GeneratorDynamicBiasConfig,
     SingleModelDynamicWeightConfig,
@@ -51,7 +50,6 @@ from emperor.layers import (
     RecurrentLayer,
     RecurrentLayerConfig,
     ResidualConfig,
-    RowLayout,
     WeightedBlendResidualConfig,
     WeightedResidualConfig,
 )
@@ -140,7 +138,6 @@ class DepthwiseTestResidual(ResidualConnectionAbstract):
         previous: torch.Tensor,
         *,
         residual_state=None,
-        row_layout=None,
     ) -> torch.Tensor:
         return current + self.offset
 
@@ -797,7 +794,7 @@ class TestRecurrentLayer(unittest.TestCase):
             adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
                 input_dim=dim,
                 output_dim=dim,
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                grouping_config=None,
                 weight_config=SingleModelDynamicWeightConfig(
                     input_dim=dim,
                     output_dim=dim,
@@ -1417,7 +1414,6 @@ class TestRecurrentLayer(unittest.TestCase):
                 previous: torch.Tensor,
                 *,
                 residual_state=None,
-                row_layout=None,
             ) -> torch.Tensor:
                 self.received_current = current.detach().clone()
                 self.received_previous = previous.detach().clone()
@@ -2169,10 +2165,6 @@ class TestRecurrentLayer(unittest.TestCase):
         hidden = torch.arange(6, dtype=torch.float64).reshape(2, dim)
         key_padding_mask = torch.tensor([[False, True], [False, False]])
         attention_mask = torch.zeros(2, 2)
-        row_layout = RowLayout.rows(
-            2,
-            context_sharing_restricted=False,
-        )
         existing_loss = torch.tensor(4.0)
         state = AttentionLayerState(
             hidden=hidden,
@@ -2180,7 +2172,6 @@ class TestRecurrentLayer(unittest.TestCase):
             halting_state=object(),
             key_padding_mask=key_padding_mask,
             attention_mask=attention_mask,
-            row_layout=row_layout,
         )
 
         result = model(state)
@@ -2196,8 +2187,6 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertEqual(result.hidden.device, hidden.device)
         self.assertIs(block_state.key_padding_mask, key_padding_mask)
         self.assertIs(block_state.attention_mask, attention_mask)
-        self.assertIs(block_state.row_layout, row_layout)
-        self.assertIs(result.row_layout, row_layout)
         self.assertFalse(hasattr(gate_state, "key_padding_mask"))
         self.assertFalse(hasattr(gate_state, "attention_mask"))
         self.assertIs(block_state.loss, existing_loss)
@@ -2230,7 +2219,6 @@ class TestRecurrentLayer(unittest.TestCase):
         hidden = torch.arange(6, dtype=torch.float64).reshape(2, dim)
         key_padding_mask = torch.tensor([[False, True], [False, False]])
         attention_mask = torch.zeros(2, 2)
-        row_layout = RowLayout.rows(2, context_sharing_restricted=False)
         existing_loss = torch.tensor(4.0, dtype=torch.float64)
         owner_halting_state = object()
         state = AttentionLayerState(
@@ -2239,7 +2227,6 @@ class TestRecurrentLayer(unittest.TestCase):
             halting_state=owner_halting_state,
             key_padding_mask=key_padding_mask,
             attention_mask=attention_mask,
-            row_layout=row_layout,
         )
 
         result = model(state)
@@ -2252,13 +2239,6 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertIs(result.halting_state, owner_halting_state)
         self.assertIs(result.key_padding_mask, key_padding_mask)
         self.assertIs(result.attention_mask, attention_mask)
-        self.assertIs(result.row_layout, row_layout)
-        self.assertTrue(
-            all(
-                transition_state.row_layout is row_layout
-                for transition_state in model.block_model.received_states
-            )
-        )
 
     def test_runs_exact_max_steps_without_halting_and_reuses_block_instance(self):
         dim = 4
