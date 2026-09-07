@@ -24,7 +24,6 @@ from emperor.layers import (
 from emperor.linears import LinearLayerConfig
 from emperor.parametric import (
     AdaptiveRouterOptions,
-    ClipParameterOptions,
     MatrixBiasMixtureConfig,
     MatrixWeightsMixtureConfig,
     ParametricLayerConfig,
@@ -182,8 +181,6 @@ class TestParametricMatrixModel(unittest.TestCase):
             top_k=2,
             num_experts=4,
             weighted_parameters_flag=True,
-            clip_parameter_option=ClipParameterOptions.AFTER,
-            clip_range=0.7,
         )
         sampler_options = ParametricSamplerOptions(
             threshold=0.2,
@@ -215,10 +212,6 @@ class TestParametricMatrixModel(unittest.TestCase):
             adaptive_mixture_weighted_parameters_flag=(
                 mixture_options.weighted_parameters_flag
             ),
-            adaptive_mixture_clip_parameter_option=(
-                mixture_options.clip_parameter_option
-            ),
-            adaptive_mixture_clip_range=mixture_options.clip_range,
             sampler_threshold=sampler_options.threshold,
             sampler_filter_above_threshold=(sampler_options.filter_above_threshold),
             sampler_num_topk_samples=sampler_options.num_topk_samples,
