@@ -4,7 +4,10 @@ import models.gpt.expert_linear_adaptive.config as config
 from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
 )
-from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveLinearLayerConfig,
+    GroupingConfig,
+)
 from emperor.experts import MixtureOfExpertsModelConfig
 from models.gpt.expert_linear_adaptive._base_config_builder import (
     GptBackendConfigBuilder,
@@ -33,6 +36,9 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
             options.hidden_adaptive_weight_options
             or defaults.hidden_adaptive_weight_options
         )
+        self.grouping_config = options.grouping_config
+        self.attention_grouping_config = options.attention_grouping_config
+        self.feed_forward_grouping_config = options.feed_forward_grouping_config
         self.hidden_adaptive_bias_options = (
             options.hidden_adaptive_bias_options
             or defaults.hidden_adaptive_bias_options
@@ -61,6 +67,7 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
             options.router_adaptive_weight_options
             or defaults.router_adaptive_weight_options
         )
+        self.router_grouping_config = options.router_grouping_config
         self.router_adaptive_bias_options = (
             options.router_adaptive_bias_options
             or defaults.router_adaptive_bias_options
@@ -253,7 +260,7 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
     ) -> AdaptiveLinearLayerConfig:
         adaptive_bias_enabled = self.hidden_adaptive_bias_options.option_flag
         return self._control_config_factory(
-            self._attention_experts_stack_options()
+            self._attention_experts_stack_options(), self.attention_grouping_config
         ).build_hidden_adaptive_linear_layer_config(bias_flag or adaptive_bias_enabled)
 
     def _build_expert_model_config(
@@ -266,7 +273,12 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
             if use_feed_forward_stack_options
             else self._attention_experts_stack_options()
         )
-        model_config = self._control_config_factory(stack_options).build()
+        grouping_config = self.grouping_config
+        if use_feed_forward_stack_options:
+            grouping_config = self.feed_forward_grouping_config
+        model_config = self._control_config_factory(
+            stack_options, grouping_config
+        ).build()
         if isinstance(model_config, MixtureOfExpertsModelConfig):
             return model_config
         return model_config.block_config
@@ -274,6 +286,7 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
     def _control_config_factory(
         self,
         stack_options: ExpertsStackOptions,
+        grouping_config: GroupingConfig | None,
     ) -> ControlConfigFactory:
         return ControlConfigFactory(
             ControlConfigDependencies(
@@ -300,12 +313,14 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
                 adaptive_generator_stack_options=(
                     self.adaptive_generator_stack_options
                 ),
+                grouping_config=grouping_config,
                 hidden_adaptive_weight_options=self.hidden_adaptive_weight_options,
                 hidden_adaptive_bias_options=self.hidden_adaptive_bias_options,
                 hidden_adaptive_diagonal_options=(
                     self.hidden_adaptive_diagonal_options
                 ),
                 hidden_adaptive_mask_options=self.hidden_adaptive_mask_options,
+                router_grouping_config=self.router_grouping_config,
                 router_adaptive_weight_options=self.router_adaptive_weight_options,
                 router_adaptive_bias_options=self.router_adaptive_bias_options,
                 router_adaptive_diagonal_options=(
