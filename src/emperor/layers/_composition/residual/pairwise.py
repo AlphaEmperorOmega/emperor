@@ -15,11 +15,9 @@ from emperor.layers._composition.residual.config import (
     WeightedBlendResidualConfig,
     WeightedResidualConfig,
 )
-from emperor.layers._support import RowLayoutAwareModule
 
 if TYPE_CHECKING:
     from emperor.layers import LayerStack, LayerStackConfig
-    from emperor.layers._row_layout import RowLayout
     from emperor.linears import LinearAbstract, LinearLayerConfig
 
 
@@ -93,7 +91,6 @@ class WeightedPairwiseResidualAbstract(PairwiseResidualAbstract):
         self,
         current: Tensor,
         previous: Tensor,
-        row_layout: RowLayout | None,
     ) -> Tensor:
         coefficient_model = self.model
         if coefficient_model is not None:
@@ -103,14 +100,8 @@ class WeightedPairwiseResidualAbstract(PairwiseResidualAbstract):
             if isinstance(coefficient_model, LayerStack):
                 coefficient_state = LayerState(
                     hidden=coefficient_model_input,
-                    row_layout=row_layout,
                 )
                 return coefficient_model(coefficient_state).hidden
-            if isinstance(coefficient_model, RowLayoutAwareModule):
-                return coefficient_model(
-                    coefficient_model_input,
-                    row_layout=row_layout,
-                )
             return coefficient_model(coefficient_model_input)
         self.VALIDATOR.validate_raw_mix_coefficient(self.raw_weight)
         return cast(Tensor, self.raw_weight)
@@ -122,6 +113,5 @@ class WeightedPairwiseResidualAbstract(PairwiseResidualAbstract):
         previous: Tensor,
         *,
         residual_state: ResidualState | None = None,
-        row_layout: RowLayout | None = None,
     ) -> Tensor:
         """Compose two sources using a learned coefficient."""
