@@ -234,8 +234,6 @@ print(json.dumps({
                     "LayerStack",
                     "MirroredLayerStack",
                     "RecurrentLayer",
-                    "RowLayout",
-                    "RowLayoutAwareModule",
                     "LayerControllerMonitorCallback",
                     "RecurrentLayerMonitorCallback",
                 ],
