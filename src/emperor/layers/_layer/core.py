@@ -14,13 +14,12 @@ from emperor.layers._layer.pipeline import (
 )
 from emperor.layers._layer.validation import LayerValidator
 from emperor.layers._state import LayerState
-from emperor.layers._support import LayerModuleBase, RowLayoutAwareModule
+from emperor.layers._support import LayerModuleBase
 
 if TYPE_CHECKING:
     from emperor.halting import HaltingInterface, HaltingStateBase
     from emperor.layers._composition.gate import LayerGate
     from emperor.layers._config import GateConfig
-    from emperor.layers._row_layout import RowLayout
     from emperor.memory import MemoryInterface
     from emperor.nn import Module
 
@@ -64,10 +63,8 @@ class Layer(LayerModuleBase):
     def run_model_from_hidden(
         model: Module,
         hidden: Tensor,
-        *,
-        row_layout: RowLayout | None = None,
     ) -> LayerState:
-        input_state = LayerState(hidden=hidden, row_layout=row_layout)
+        input_state = LayerState(hidden=hidden)
         return model(input_state)
 
     def forward(
@@ -84,7 +81,7 @@ class Layer(LayerModuleBase):
         return state
 
     def _handle_layer_processing(self, state: LayerState) -> LayerState:
-        state, saved_layout, residual = self.__setup_pipeline(state)
+        residual = state.hidden
         state = self.normalization.before_model(state)
         state = self.memory.before_model(state)
         state = self._handle_model_processing(state)
@@ -94,33 +91,13 @@ class Layer(LayerModuleBase):
         state = self.residual.apply_residual(state, residual)
         state = self.normalization.after_residual(state)
         state = self.halting.apply_halting(state)
-        return self.__finalize_pipeline(state, saved_layout)
-
-    def __setup_pipeline(
-        self,
-        state: LayerState,
-    ) -> tuple[LayerState, RowLayout | None, Tensor]:
-        saved_layout = state.row_layout
-        state.row_layout = self.halting.restrict_row_layout(state.row_layout)
-        residual = state.hidden
-        return state, saved_layout, residual
+        return state
 
     def _handle_model_processing(
         self,
         state: LayerState,
     ) -> LayerState:
-        if isinstance(self.model, RowLayoutAwareModule):
-            state.hidden = self.model(state.hidden, row_layout=state.row_layout)
-            return state
         state.hidden = self.model(state.hidden)
-        return state
-
-    def __finalize_pipeline(
-        self,
-        state: LayerState,
-        saved_layout: RowLayout | None,
-    ) -> LayerState:
-        state.row_layout = saved_layout
         return state
 
     def _handle_layer_output(self, state: LayerState) -> LayerState:

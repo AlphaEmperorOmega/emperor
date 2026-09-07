@@ -11,7 +11,6 @@ if TYPE_CHECKING:
 
     from emperor.halting import HaltingInterface, HaltingStateBase
     from emperor.layers._config import LayerConfig
-    from emperor.layers._row_layout import RowLayout
 
 
 class LayerHaltingDelegate(Module):
@@ -65,14 +64,6 @@ class LayerHaltingDelegate(Module):
             return self.__finalize(state, model, halting_state)
         state.hidden = halting_output
         return state
-
-    def restrict_row_layout(
-        self,
-        row_layout: RowLayout | None,
-    ) -> RowLayout | None:
-        if row_layout is None or self.model is None:
-            return row_layout
-        return row_layout.with_context_sharing_restricted()
 
     @staticmethod
     def __is_complete(halting_state: HaltingStateBase | None) -> bool:
