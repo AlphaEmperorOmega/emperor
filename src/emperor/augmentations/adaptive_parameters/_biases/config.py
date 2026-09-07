@@ -9,6 +9,7 @@ from emperor.config import ConfigBase, optional_field
 
 if TYPE_CHECKING:
     from emperor.layers import LayerStackConfig
+    from emperor.sampler import SamplerConfig
 
 
 @dataclass
@@ -105,3 +106,19 @@ class WeightedBankDynamicBiasConfig(DynamicBiasConfig):
         )
 
         return WeightedBankDynamicBias
+
+
+@dataclass
+class MatrixBiasMixtureConfig(DynamicBiasConfig):
+    num_experts: int | None = optional_field(
+        "Number of complete parameter bank entries."
+    )
+    top_k: int | None = optional_field("Number of selected entries per context.")
+    sampler_config: "SamplerConfig | None" = optional_field(
+        "Required independent bounded top-k sampler and router for this parameter variant."
+    )
+
+    def _registry_owner(self) -> type:
+        from .variants.matrix_mixture import MatrixBiasMixture
+
+        return MatrixBiasMixture
