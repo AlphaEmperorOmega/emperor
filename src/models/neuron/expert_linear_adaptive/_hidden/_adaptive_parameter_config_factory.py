@@ -2,6 +2,7 @@ from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
     BankExpansionFactorOptions,
     DiagonalAxisMaskConfig,
+    DiagonallyModulatedLowRankDynamicWeightConfig,
     DualModelDynamicWeightConfig,
     DynamicBiasConfig,
     DynamicDepthOptions,
@@ -11,6 +12,8 @@ from emperor.augmentations.adaptive_parameters import (
     LayeredWeightedBankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
     MaskDimensionOptions,
+    MatrixBiasMixtureConfig,
+    MatrixWeightsMixtureConfig,
     PerAxisScoreMaskConfig,
     SingleModelDynamicWeightConfig,
     SoftWeightedBankDynamicWeightConfig,
@@ -33,6 +36,14 @@ _WEIGHT_OPTION_FIELDS: dict[type[DynamicWeightConfig], tuple[str, ...]] = {
         "normalization_position_option",
     ),
     LowRankDynamicWeightConfig: ("normalization_option",),
+    DiagonallyModulatedLowRankDynamicWeightConfig: (
+        "normalization_option",
+        "input_factor_source",
+        "output_factor_source",
+        "input_factor_model_config",
+        "output_factor_model_config",
+        "coefficient_model_config",
+    ),
     HypernetworkDynamicWeightConfig: ("normalization_option",),
     LayeredWeightedBankDynamicWeightConfig: ("bank_expansion_factor",),
     SoftWeightedBankDynamicWeightConfig: ("bank_expansion_factor",),
@@ -51,6 +62,7 @@ _MASK_OPTION_FIELDS: dict[type[AxisMaskConfig], tuple[str, ...]] = {
 def build_weight_config(
     weight_option: type[DynamicWeightConfig] | None,
     *,
+    generation_fields: dict | None = None,
     generator_depth: DynamicDepthOptions,
     decay_schedule: WeightDecayScheduleOptions,
     decay_rate: float,
@@ -62,6 +74,19 @@ def build_weight_config(
 ) -> DynamicWeightConfig | None:
     if weight_option is None:
         return None
+    if weight_option is MatrixWeightsMixtureConfig:
+        mixture_fields = {
+            name: value
+            for name, value in (generation_fields or {}).items()
+            if name in ("num_experts", "top_k", "sampler_config")
+        }
+        return MatrixWeightsMixtureConfig(
+            decay_schedule=decay_schedule,
+            decay_rate=decay_rate,
+            decay_warmup_batches=decay_warmup_batches,
+            model_config=model_config,
+            **mixture_fields,
+        )
     kwargs = {
         "generator_depth": generator_depth,
         "decay_schedule": decay_schedule,
@@ -74,6 +99,7 @@ def build_weight_config(
         "normalization_position_option": normalization_position_option,
         "bank_expansion_factor": bank_expansion_factor,
     }
+    optional.update(generation_fields or {})
     kwargs.update(_selected_kwargs(_WEIGHT_OPTION_FIELDS, weight_option, optional))
     return weight_option(**kwargs)
 
@@ -81,6 +107,7 @@ def build_weight_config(
 def build_bias_config(
     bias_option: type[DynamicBiasConfig] | None,
     *,
+    generation_fields: dict | None = None,
     decay_schedule: WeightDecayScheduleOptions,
     decay_rate: float,
     decay_warmup_batches: int,
@@ -89,6 +116,19 @@ def build_bias_config(
 ) -> DynamicBiasConfig | None:
     if bias_option is None:
         return None
+    if bias_option is MatrixBiasMixtureConfig:
+        mixture_fields = {
+            name: value
+            for name, value in (generation_fields or {}).items()
+            if name in ("num_experts", "top_k", "sampler_config")
+        }
+        return MatrixBiasMixtureConfig(
+            decay_schedule=decay_schedule,
+            decay_rate=decay_rate,
+            decay_warmup_batches=decay_warmup_batches,
+            model_config=model_config,
+            **mixture_fields,
+        )
     kwargs = {
         "decay_schedule": decay_schedule,
         "decay_rate": decay_rate,
@@ -96,6 +136,7 @@ def build_bias_config(
         "model_config": model_config,
     }
     optional = {"bank_expansion_factor": bank_expansion_factor}
+    optional.update(generation_fields or {})
     kwargs.update(_selected_kwargs(_BIAS_OPTION_FIELDS, bias_option, optional))
     return bias_option(**kwargs)
 

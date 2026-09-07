@@ -8,6 +8,7 @@ from emperor.augmentations.adaptive_parameters import (
     DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
+    GroupingConfig,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
@@ -32,6 +33,10 @@ from emperor.layers import (
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
+from models.neuron.expert_linear_adaptive._generation import (
+    BiasGenerationOptions,
+    WeightGenerationOptions,
+)
 from models.neuron.expert_linear_adaptive._residual import ResidualStackOptions
 
 
@@ -295,6 +300,9 @@ class AdaptiveGeneratorStackOptions:
 
 @dataclass(frozen=True, slots=True)
 class HiddenAdaptiveWeightOptions:
+    generation: WeightGenerationOptions = field(
+        default_factory=WeightGenerationOptions, kw_only=True
+    )
     generator_depth: DynamicDepthOptions
     option_flag: bool
     option: type[DynamicWeightConfig] | None
@@ -309,6 +317,9 @@ class HiddenAdaptiveWeightOptions:
 
 @dataclass(frozen=True, slots=True)
 class HiddenAdaptiveBiasOptions:
+    generation: BiasGenerationOptions = field(
+        default_factory=BiasGenerationOptions, kw_only=True
+    )
     option_flag: bool
     option: type[DynamicBiasConfig] | None
     decay_schedule: WeightDecayScheduleOptions
@@ -338,6 +349,9 @@ class HiddenAdaptiveMaskOptions:
 
 
 class AdaptiveBoundaryModelOptions(Protocol):
+    grouping_config: GroupingConfig | None
+    weight_generation: WeightGenerationOptions
+    bias_generation: BiasGenerationOptions
     weight_option: type[DynamicWeightConfig] | None
     generator_depth: DynamicDepthOptions
     weight_decay_schedule: WeightDecayScheduleOptions
@@ -362,6 +376,8 @@ class AdaptiveBoundaryModelOptions(Protocol):
 
 @dataclass(frozen=True, slots=True)
 class RuntimeOptions:
+    grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
+    router_grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
     batch_size: int
     learning_rate: float
     input_dim: int
