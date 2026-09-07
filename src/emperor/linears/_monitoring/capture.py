@@ -38,7 +38,7 @@ class _ParameterBeforeStep:
 class _LinearBeforeStep:
     module_name: str
     linear_layer: LinearAbstract
-    weights: _ParameterBeforeStep
+    weights: _ParameterBeforeStep | None
     bias: _ParameterBeforeStep | None
 
 
@@ -288,9 +288,13 @@ class _LinearCaptureLifecycle:
         return _LinearBeforeStep(
             module_name=module_name,
             linear_layer=linear_layer,
-            weights=self.__capture_parameter(
-                linear_layer.weight_params,
-                optimizer_parameter_ids,
+            weights=(
+                self.__capture_parameter(
+                    linear_layer.weight_params,
+                    optimizer_parameter_ids,
+                )
+                if linear_layer.weight_params is not None
+                else None
             ),
             bias=(
                 self.__capture_parameter(
@@ -330,17 +334,22 @@ class _LinearCaptureLifecycle:
         pending_step: _PendingOptimizerStep,
     ) -> None:
         for linear_state in pending_step.linear_states:
+            reference = (
+                linear_state.weights.values
+                if linear_state.weights is not None
+                else next(linear_state.linear_layer.parameters()).detach()
+            )
             input_summary = self.__pop_activation_summary(
                 pending_step.step,
                 linear_state.linear_layer,
                 "input",
-                linear_state.weights.values,
+                reference,
             )
             output_summary = self.__pop_activation_summary(
                 pending_step.step,
                 linear_state.linear_layer,
                 "output",
-                linear_state.weights.values,
+                reference,
             )
             self._emitter.emit_activation(
                 _LinearActivationTrackingContext(
@@ -380,6 +389,8 @@ class _LinearCaptureLifecycle:
         contexts = []
         for linear_state in pending_step.linear_states:
             linear_layer = linear_state.linear_layer
+            if linear_state.weights is None or linear_layer.weight_params is None:
+                continue
             weights = self.__build_parameter_channel_metrics(
                 linear_layer.weight_params,
                 linear_state.weights,
