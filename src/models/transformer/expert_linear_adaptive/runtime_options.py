@@ -3,13 +3,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 
 from emperor.augmentations.adaptive_parameters import (
-    AdaptiveParameterGroupingScopeOptions,
     AxisMaskConfig,
     BankExpansionFactorOptions,
     DynamicBiasConfig,
     DynamicDepthOptions,
     DynamicDiagonalConfig,
     DynamicWeightConfig,
+    GroupingConfig,
+    LowRankFactorSourceOptions,
     MaskDimensionOptions,
     WeightDecayScheduleOptions,
     WeightNormalizationOptions,
@@ -264,10 +265,30 @@ class ExpertOptions:
 
 @dataclass(frozen=True)
 class AdaptiveParameterOptions:
-    grouping_scope: AdaptiveParameterGroupingScopeOptions = (
-        AdaptiveParameterGroupingScopeOptions.DISABLED
+    weight_input_factor_source: LowRankFactorSourceOptions | None = None
+    weight_output_factor_source: LowRankFactorSourceOptions | None = None
+    weight_mixture_num_experts: int | None = None
+    bias_mixture_num_experts: int | None = None
+    weight_mixture_top_k: int | None = None
+    bias_mixture_top_k: int | None = None
+    weight_mixture_normalize_probabilities_flag: bool | None = None
+    bias_mixture_normalize_probabilities_flag: bool | None = None
+    weight_input_factor_generator_stack_options: ControllerStackOptions = (
+        ControllerStackOptions()
     )
-    group_count: int = 1
+    weight_output_factor_generator_stack_options: ControllerStackOptions = (
+        ControllerStackOptions()
+    )
+    weight_coefficient_generator_stack_options: ControllerStackOptions = (
+        ControllerStackOptions()
+    )
+    weight_mixture_router_generator_stack_options: ControllerStackOptions = (
+        ControllerStackOptions()
+    )
+    bias_mixture_router_generator_stack_options: ControllerStackOptions = (
+        ControllerStackOptions()
+    )
+    grouping_config: GroupingConfig | None = None
     weight_option_flag: bool = True
     weight_option: type[DynamicWeightConfig] | None = None
     generator_depth: DynamicDepthOptions = DynamicDepthOptions.DEPTH_OF_ONE
@@ -360,6 +381,13 @@ class RuntimeOptions:
     )
     attention_expert_adaptive_options: AdaptiveParameterOptions = (
         AdaptiveParameterOptions()
+    )
+    encoder_attention_expert_adaptive_options: AdaptiveParameterOptions | None = None
+    decoder_self_attention_expert_adaptive_options: AdaptiveParameterOptions | None = (
+        None
+    )
+    decoder_cross_attention_expert_adaptive_options: AdaptiveParameterOptions | None = (
+        None
     )
     router_adaptive_options: AdaptiveParameterOptions = AdaptiveParameterOptions()
     feed_forward_adaptive_options: AdaptiveParameterOptions = AdaptiveParameterOptions()
