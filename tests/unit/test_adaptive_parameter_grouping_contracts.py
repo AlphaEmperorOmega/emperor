@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from dataclasses import replace
 from inspect import signature
 from unittest.mock import patch
 
@@ -42,9 +43,6 @@ from emperor.augmentations.adaptive_parameters import (
 from emperor.augmentations.adaptive_parameters._augmentation import (
     AdaptiveParameterAugmentation,
 )
-from emperor.augmentations.adaptive_parameters._grouping import (
-    build_adaptive_group_plan,
-)
 from emperor.augmentations.adaptive_parameters._linear_adapter import (
     AdaptiveLinearLayer,
 )
@@ -58,16 +56,16 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
-    RowLayout,
 )
 from emperor.linears import LinearLayerConfig
+from support.adaptive_grouping import combined_linear, grouping_value
 
 
 def grouping_fields(
     scope: AdaptiveParameterGroupingScopeOptions,
     group_count: int | None,
 ) -> dict[str, object]:
-    return {"grouping_scope": scope, "group_count": group_count}
+    return {"grouping_config": grouping_value(scope, group_count)}
 
 
 def linear_stack_config(input_dim: int, output_dim: int) -> LayerStackConfig:
@@ -165,485 +163,6 @@ class DeterministicDynamicWeightGenerator(torch.nn.Module):
         return generated_weights
 
 
-class AdaptiveParameterGroupingPrimitiveTests(unittest.TestCase):
-    def test_rows_grouping_preserves_members_and_restores_original_order(self):
-        inputs = torch.tensor(
-            [
-                [1.0, 10.0],
-                [2.0, 20.0],
-                [3.0, 30.0],
-                [4.0, 40.0],
-            ]
-        )
-        plan = build_adaptive_group_plan(
-            inputs,
-            AdaptiveParameterGroupingScopeOptions.ROWS,
-            2,
-            RowLayout.rows(4, context_sharing_restricted=False),
-        )
-
-        self.assertEqual(tuple(plan.grouped_members.shape), (2, 2, 2))
-        torch.testing.assert_close(
-            plan.grouped_members,
-            torch.tensor(
-                [
-                    [[1.0, 10.0], [2.0, 20.0]],
-                    [[3.0, 30.0], [4.0, 40.0]],
-                ]
-            ),
-        )
-        self.assertIsNone(plan.valid_members)
-
-        grouped_outputs = torch.tensor(
-            [
-                [[100.0], [101.0]],
-                [[200.0], [201.0]],
-            ]
-        )
-        torch.testing.assert_close(
-            plan.restore(grouped_outputs),
-            torch.tensor([[100.0], [101.0], [200.0], [201.0]]),
-        )
-
-    def test_batch_and_sequence_major_layouts_have_identical_logical_groups(self):
-        logical_inputs = torch.tensor(
-            [
-                [[1.0], [2.0], [3.0], [4.0]],
-                [[10.0], [20.0], [30.0], [40.0]],
-            ]
-        )
-        batch_major_plan = build_adaptive_group_plan(
-            logical_inputs.reshape(-1, 1),
-            AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-            2,
-            RowLayout.sequence(
-                leading_shape=(2, 4),
-                batch_axis=0,
-                sequence_axis=1,
-                context_sharing_restricted=False,
-            ),
-        )
-        sequence_major_inputs = logical_inputs.transpose(0, 1).reshape(-1, 1)
-        sequence_major_plan = build_adaptive_group_plan(
-            sequence_major_inputs,
-            AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-            2,
-            RowLayout.sequence(
-                leading_shape=(4, 2),
-                batch_axis=1,
-                sequence_axis=0,
-                context_sharing_restricted=False,
-            ),
-        )
-
-        expected_grouped_members = torch.tensor(
-            [
-                [[1.0], [2.0]],
-                [[3.0], [4.0]],
-                [[10.0], [20.0]],
-                [[30.0], [40.0]],
-            ]
-        )
-        torch.testing.assert_close(
-            batch_major_plan.grouped_members,
-            expected_grouped_members,
-        )
-        torch.testing.assert_close(
-            sequence_major_plan.grouped_members,
-            expected_grouped_members,
-        )
-
-        logical_grouped_outputs = torch.tensor(
-            [
-                [[101.0], [102.0]],
-                [[103.0], [104.0]],
-                [[201.0], [202.0]],
-                [[203.0], [204.0]],
-            ]
-        )
-        expected_logical_output = torch.tensor(
-            [
-                [[101.0], [102.0], [103.0], [104.0]],
-                [[201.0], [202.0], [203.0], [204.0]],
-            ]
-        )
-        torch.testing.assert_close(
-            batch_major_plan.restore(logical_grouped_outputs),
-            expected_logical_output.reshape(-1, 1),
-        )
-        torch.testing.assert_close(
-            sequence_major_plan.restore(logical_grouped_outputs),
-            expected_logical_output.transpose(0, 1).reshape(-1, 1),
-        )
-
-    def test_non_contiguous_rows_are_grouped_without_changing_logical_order(self):
-        inputs = torch.arange(8.0).reshape(2, 4).transpose(0, 1)
-        self.assertFalse(inputs.is_contiguous())
-
-        plan = build_adaptive_group_plan(
-            inputs,
-            AdaptiveParameterGroupingScopeOptions.ROWS,
-            2,
-            RowLayout.rows(4, context_sharing_restricted=False),
-        )
-
-        torch.testing.assert_close(
-            plan.grouped_members,
-            torch.tensor(
-                [
-                    [[0.0, 4.0], [1.0, 5.0]],
-                    [[2.0, 6.0], [3.0, 7.0]],
-                ]
-            ),
-        )
-
-    def test_padding_mask_aligns_without_compacting_absolute_positions(self):
-        inputs = torch.tensor(
-            [
-                [[1.0], [2.0], [1000.0], [2000.0]],
-                [[10.0], [100.0], [1000.0], [10000.0]],
-            ]
-        )
-        valid_rows = torch.tensor([True, True, False, False, True, False, False, False])
-
-        plan = build_adaptive_group_plan(
-            inputs.reshape(-1, 1),
-            AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-            2,
-            RowLayout.sequence(
-                leading_shape=(2, 4),
-                batch_axis=0,
-                sequence_axis=1,
-                valid_rows=valid_rows,
-                context_sharing_restricted=False,
-            ),
-        )
-
-        torch.testing.assert_close(
-            plan.grouped_members,
-            torch.tensor(
-                [
-                    [[1.0], [2.0]],
-                    [[1000.0], [2000.0]],
-                    [[10.0], [100.0]],
-                    [[1000.0], [10000.0]],
-                ]
-            ),
-        )
-        torch.testing.assert_close(
-            plan.valid_members,
-            torch.tensor(
-                [
-                    [True, True],
-                    [False, False],
-                    [True, False],
-                    [False, False],
-                ]
-            ),
-        )
-
-    def test_masking_excludes_non_finite_padding_without_zero_times_infinity(self):
-        model = grouped_adaptive_bias_linear(
-            AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-            2,
-        )
-        inputs = torch.tensor(
-            [
-                [
-                    [1.0, 10.0],
-                    [2.0, 20.0],
-                    [torch.inf, torch.inf],
-                    [-torch.inf, -torch.inf],
-                ]
-            ]
-        )
-
-        output = model(
-            inputs.reshape(-1, 2),
-            row_layout=RowLayout.sequence(
-                leading_shape=(1, 4),
-                batch_axis=0,
-                sequence_axis=1,
-                valid_rows=torch.tensor([True, True, False, False]),
-                context_sharing_restricted=False,
-            ),
-        ).reshape(1, 4, 2)
-
-        torch.testing.assert_close(
-            output[:, :2],
-            torch.tensor([[[3.0, 30.0], [3.0, 30.0]]]),
-        )
-
-    def test_grouping_rejects_restricted_or_mismatched_layout_before_reduction(self):
-        inputs = torch.ones(8, 2)
-
-        with self.assertRaisesRegex(
-            ValueError,
-            "context sharing is restricted",
-        ):
-            build_adaptive_group_plan(
-                inputs,
-                AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-                2,
-                RowLayout.sequence(
-                    leading_shape=(2, 4),
-                    batch_axis=0,
-                    sequence_axis=1,
-                    context_sharing_restricted=True,
-                ),
-            )
-
-        with self.assertRaisesRegex(
-            ValueError,
-            "row_count=6 does not match input row count 8",
-        ):
-            build_adaptive_group_plan(
-                inputs,
-                AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-                2,
-                RowLayout.sequence(
-                    leading_shape=(2, 3),
-                    batch_axis=0,
-                    sequence_axis=1,
-                    context_sharing_restricted=False,
-                ),
-            )
-
-    def test_scope_count_and_physical_divisibility_are_validated(self):
-        inputs = torch.ones(8, 2)
-        layout = RowLayout.sequence(
-            leading_shape=(2, 4),
-            batch_axis=0,
-            sequence_axis=1,
-            context_sharing_restricted=False,
-        )
-        invalid_cases = (
-            (
-                AdaptiveParameterGroupingScopeOptions.DISABLED,
-                2,
-                "Cannot build an adaptive group plan for DISABLED grouping",
-            ),
-            (
-                AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-                True,
-                "group_count must be a positive integer",
-            ),
-            (
-                AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-                0,
-                "group_count must be a positive integer",
-            ),
-            (
-                AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-                3,
-                "sequence length 4 must be divisible by group_count=3",
-            ),
-            (
-                AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-                5,
-                "group_count=5 cannot exceed sequence length 4",
-            ),
-        )
-
-        for grouping_scope, group_count, message in invalid_cases:
-            with self.subTest(
-                grouping_scope=grouping_scope,
-                group_count=group_count,
-            ):
-                with self.assertRaisesRegex((TypeError, ValueError), message):
-                    build_adaptive_group_plan(
-                        inputs,
-                        grouping_scope,
-                        group_count,
-                        layout,
-                    )
-
-    def test_restore_rejects_non_tensor_rank_and_leading_shape_before_reshape(self):
-        inputs = torch.tensor([[1.0, 10.0], [2.0, 20.0], [3.0, 30.0], [4.0, 40.0]])
-        valid_rows = torch.tensor([True, False, False, True])
-        inputs_before = inputs.clone()
-        valid_rows_before = valid_rows.clone()
-        layout = RowLayout.rows(
-            4,
-            valid_rows=valid_rows,
-            context_sharing_restricted=False,
-        )
-        plan = build_adaptive_group_plan(
-            inputs,
-            AdaptiveParameterGroupingScopeOptions.ROWS,
-            2,
-            layout,
-        )
-        cases = (
-            (
-                [1.0, 2.0],
-                TypeError,
-                "grouped_output must be a Tensor, received list.",
-            ),
-            (
-                torch.ones(2, 2),
-                ValueError,
-                "grouped_output must have shape (context_count, members_per_group, "
-                "output_dim), received (2, 2).",
-            ),
-            (
-                torch.ones(2, 3, 1),
-                ValueError,
-                "grouped_output leading dimensions must equal (2, 2), received (2, 3).",
-            ),
-        )
-
-        for grouped_output, exception_type, message in cases:
-            with self.subTest(grouped_output=grouped_output):
-                with self.assertRaises(exception_type) as caught:
-                    plan.restore(grouped_output)
-                self.assertEqual(str(caught.exception), message)
-
-        torch.testing.assert_close(
-            plan.valid_members,
-            torch.tensor([[True, False], [False, True]]),
-        )
-        torch.testing.assert_close(inputs, inputs_before)
-        torch.testing.assert_close(valid_rows, valid_rows_before)
-
-    def test_plan_input_scope_and_layout_guards_report_the_failing_value(self):
-        inputs = torch.ones(4, 2)
-        rows_layout = RowLayout.rows(4, context_sharing_restricted=False)
-        meta_mask_layout = RowLayout.rows(
-            4,
-            valid_rows=torch.ones(4, dtype=torch.bool, device="meta"),
-            context_sharing_restricted=False,
-        )
-        cases = (
-            (
-                [1.0, 2.0],
-                AdaptiveParameterGroupingScopeOptions.ROWS,
-                rows_layout,
-                TypeError,
-                "input_rows must be a Tensor, received list.",
-            ),
-            (
-                torch.ones(2, 2, 1),
-                AdaptiveParameterGroupingScopeOptions.ROWS,
-                rows_layout,
-                ValueError,
-                "input_rows must be a two-dimensional matrix, received shape "
-                "(2, 2, 1).",
-            ),
-            (
-                inputs,
-                "ROWS",
-                rows_layout,
-                TypeError,
-                "grouping_scope must be an AdaptiveParameterGroupingScopeOptions "
-                "value, received 'ROWS'.",
-            ),
-            (
-                inputs,
-                AdaptiveParameterGroupingScopeOptions.ROWS,
-                object(),
-                TypeError,
-                "row_layout must be a RowLayout, received object.",
-            ),
-            (
-                inputs,
-                AdaptiveParameterGroupingScopeOptions.ROWS,
-                meta_mask_layout,
-                ValueError,
-                "row_layout.valid_rows must be on the same device as input_rows, "
-                "received meta and cpu.",
-            ),
-        )
-
-        for input_rows, scope, layout, exception_type, message in cases:
-            with self.subTest(message=message):
-                with self.assertRaises(exception_type) as caught:
-                    build_adaptive_group_plan(input_rows, scope, 2, layout)
-                self.assertEqual(str(caught.exception), message)
-
-        torch.testing.assert_close(inputs, torch.ones(4, 2))
-
-    def test_grouping_scope_requires_matching_layout_semantics(self):
-        inputs = torch.ones(4, 2)
-        rows_layout = RowLayout.rows(4, context_sharing_restricted=False)
-        sequence_layout = RowLayout.sequence(
-            leading_shape=(2, 2),
-            batch_axis=0,
-            sequence_axis=1,
-            context_sharing_restricted=False,
-        )
-        cases = (
-            (
-                AdaptiveParameterGroupingScopeOptions.ROWS,
-                sequence_layout,
-                "ROWS grouping requires a one-axis row layout.",
-            ),
-            (
-                AdaptiveParameterGroupingScopeOptions.SEQUENCE,
-                rows_layout,
-                "SEQUENCE grouping requires a two-axis sequence layout.",
-            ),
-        )
-
-        for scope, layout, message in cases:
-            with self.subTest(scope=scope):
-                with self.assertRaises(ValueError) as caught:
-                    build_adaptive_group_plan(inputs, scope, 2, layout)
-                self.assertEqual(str(caught.exception), message)
-
-        future_scope = object.__new__(AdaptiveParameterGroupingScopeOptions)
-        object.__setattr__(future_scope, "_name_", "FUTURE")
-        object.__setattr__(future_scope, "_value_", 99)
-
-        with self.assertRaises(ValueError) as caught:
-            build_adaptive_group_plan(inputs, future_scope, 2, rows_layout)
-
-        self.assertEqual(
-            str(caught.exception),
-            "Unsupported adaptive parameter grouping scope "
-            "<AdaptiveParameterGroupingScopeOptions.FUTURE: 99>.",
-        )
-
-    def test_generated_parameter_context_and_grouped_bias_guards_are_exact(self):
-        input_batch = torch.ones(3, 2)
-        weights = torch.ones(2, 2, 2)
-        bias = torch.ones(4, 2)
-        grouped_bias = torch.ones(2, 2)
-        cases = (
-            (
-                lambda: AdaptiveLinearValidator.validate_weight_context_count(
-                    input_batch,
-                    weights,
-                ),
-                "Dynamic weights context count must match affine input, received "
-                "2 and 3.",
-            ),
-            (
-                lambda: AdaptiveLinearValidator.validate_bias_context_count(
-                    input_batch,
-                    bias,
-                ),
-                "Dynamic bias context count must match affine input, received 4 and 3.",
-            ),
-            (
-                lambda: (
-                    AdaptiveParameterAugmentationValidator.validate_grouped_base_parameters(
-                        torch.ones(2, 2),
-                        grouped_bias,
-                    )
-                ),
-                "Adaptive parameter grouping requires a shared one-dimensional base "
-                "bias; row-specific base bias is not supported.",
-            ),
-        )
-
-        for action, message in cases:
-            with self.subTest(message=message):
-                with self.assertRaises(ValueError) as caught:
-                    action()
-                self.assertEqual(str(caught.exception), message)
-
-
 class GroupedAdaptiveLinearTests(unittest.TestCase):
     def test_buildable_augmentation_owns_grouping_and_restoration(self):
         linear = grouped_adaptive_bias_linear(
@@ -658,10 +177,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
             linear.weight_params,
             linear.bias_params,
             inputs,
-            row_layout=RowLayout.rows(
-                4,
-                context_sharing_restricted=False,
-            ),
         )
 
         self.assertIs(
@@ -696,10 +211,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                     row_specific_weights,
                     linear.bias_params,
                     inputs,
-                    row_layout=RowLayout.rows(
-                        4,
-                        context_sharing_restricted=False,
-                    ),
                 )
         finally:
             hook.remove()
@@ -723,10 +234,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
 
         output = model(
             inputs,
-            row_layout=RowLayout.rows(
-                4,
-                context_sharing_restricted=False,
-            ),
         )
 
         expected = torch.tensor(
@@ -760,12 +267,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
 
         output = model(
             logical_inputs.reshape(-1, 2),
-            row_layout=RowLayout.sequence(
-                leading_shape=(2, 4),
-                batch_axis=0,
-                sequence_axis=1,
-                context_sharing_restricted=False,
-            ),
         ).reshape(2, 4, 2)
 
         expected = torch.tensor(
@@ -797,10 +298,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
         ) as grouped_matrix_multiply:
             output = model(
                 inputs,
-                row_layout=RowLayout.rows(
-                    4,
-                    context_sharing_restricted=False,
-                ),
             )
 
         contexts_repeated = torch.tensor(
@@ -832,12 +329,11 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                     [[1.0, 2.0], [3.0, -2.0], [-1.0, 1.0], [2.0, -2.0]],
                     dtype=dtype,
                 )
-                layout = RowLayout.rows(4, context_sharing_restricted=False)
                 optimizer = torch.optim.SGD(generator.parameters(), lr=0.05)
                 scale_before = generator.scale.detach().clone()
                 offset_before = generator.offset.detach().clone()
 
-                output = model(inputs, row_layout=layout)
+                output = model(inputs)
                 loss = (output * loss_coefficients).sum()
                 loss.backward()
 
@@ -886,40 +382,17 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                     offset_before - 0.05 * expected_offset_gradient,
                 )
 
-    def test_missing_or_restricted_layout_fails_before_generator_execution(self):
-        model = grouped_adaptive_bias_linear(
-            AdaptiveParameterGroupingScopeOptions.ROWS,
-            2,
-        )
-        generator = model.adaptive_behaviour.bias_model.model[0].model
-        calls = []
-        hook = generator.register_forward_hook(lambda *_args: calls.append(True))
-        inputs = torch.ones(4, 2)
-
-        try:
-            with self.assertRaisesRegex(ValueError, "requires an explicit RowLayout"):
-                model(inputs)
-            with self.assertRaisesRegex(ValueError, "context sharing is restricted"):
-                model(
-                    inputs,
-                    row_layout=RowLayout.rows(
-                        4,
-                        context_sharing_restricted=True,
-                    ),
-                )
-        finally:
-            hook.remove()
-
-        self.assertEqual(calls, [])
-
     def test_enabled_grouping_requires_an_active_adaptive_component(self):
         config = AdaptiveLinearLayerConfig(
             input_dim=2,
             output_dim=2,
             bias_flag=True,
             adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.ROWS,
-                group_count=2,
+                grouping_config=grouping_value(
+                    AdaptiveParameterGroupingScopeOptions.ROWS,
+                    2,
+                    input_order="BATCH_FIRST",
+                ),
             ),
         )
 
@@ -928,78 +401,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
             "enabled grouping requires at least one adaptive parameter component",
         ):
             AdaptiveLinearLayer(config)
-
-    def test_resolved_grouping_scope_is_required(self):
-        for group_count in (None, 2):
-            with self.subTest(group_count=group_count):
-                config = AdaptiveLinearLayerConfig(
-                    input_dim=2,
-                    output_dim=2,
-                    bias_flag=True,
-                    adaptive_augmentation_config=(
-                        AdaptiveParameterAugmentationConfig(
-                            group_count=group_count,
-                        )
-                    ),
-                )
-
-                with self.assertRaisesRegex(
-                    ValueError,
-                    "grouping_scope is required for a resolved",
-                ):
-                    AdaptiveLinearLayer(config)
-
-    def test_direct_augmentation_requires_a_resolved_grouping_scope(self):
-        with self.assertRaisesRegex(
-            ValueError,
-            "grouping_scope is required for a resolved",
-        ):
-            AdaptiveParameterAugmentation(
-                AdaptiveParameterAugmentationConfig(
-                    input_dim=2,
-                    output_dim=2,
-                )
-            )
-
-    def test_invalid_scope_without_components_is_not_silently_treated_as_static(self):
-        config = AdaptiveLinearLayerConfig(
-            input_dim=2,
-            output_dim=2,
-            bias_flag=True,
-            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                grouping_scope="ROWS",
-                group_count=2,
-            ),
-        )
-
-        with self.assertRaisesRegex(
-            TypeError,
-            "grouping_scope must be an AdaptiveParameterGroupingScopeOptions value",
-        ):
-            AdaptiveLinearLayer(config)
-
-    def test_disabled_scope_rejects_a_malformed_dormant_count(self):
-        for invalid_count in (True, 0, -1, "two"):
-            with self.subTest(invalid_count=invalid_count):
-                config = AdaptiveLinearLayerConfig(
-                    input_dim=2,
-                    output_dim=2,
-                    bias_flag=True,
-                    adaptive_augmentation_config=(
-                        AdaptiveParameterAugmentationConfig(
-                            grouping_scope=(
-                                AdaptiveParameterGroupingScopeOptions.DISABLED
-                            ),
-                            group_count=invalid_count,
-                        )
-                    ),
-                )
-
-                with self.assertRaisesRegex(
-                    ValueError,
-                    "group_count must be a positive integer",
-                ):
-                    AdaptiveLinearLayer(config)
 
     def test_public_augmentation_does_not_expose_application_input(self):
         self.assertNotIn(
@@ -1016,10 +417,9 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
             [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0], [7.0, 8.0]],
             requires_grad=True,
         )
-        layout = RowLayout.rows(4, context_sharing_restricted=False)
 
         jacobian = torch.autograd.functional.jacobian(
-            lambda value: model(value, row_layout=layout)[0, 0],
+            lambda value: model(value)[0, 0],
             inputs,
         )
 
@@ -1034,9 +434,8 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
             2,
         )
         inputs = torch.randn(4, 2, requires_grad=True)
-        layout = RowLayout.rows(4, context_sharing_restricted=False)
 
-        output = model(inputs, row_layout=layout)
+        output = model(inputs)
         first_gradient = torch.autograd.grad(
             output.pow(3).sum(),
             inputs,
@@ -1047,42 +446,38 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
         self.assertTrue(torch.isfinite(first_gradient).all())
         self.assertTrue(torch.isfinite(second_gradient).all())
 
-    def test_one_group_per_row_matches_legacy_per_row_adaptivity(self):
+    def test_one_group_per_row_matches_per_row_adaptivity(self):
         grouped = grouped_adaptive_bias_linear(
             AdaptiveParameterGroupingScopeOptions.ROWS,
             4,
         )
-        legacy_config = grouped.cfg
-        legacy_config.adaptive_augmentation_config.grouping_scope = (
-            AdaptiveParameterGroupingScopeOptions.DISABLED
+        per_row_config = grouped.cfg
+        per_row_config = replace(
+            per_row_config,
+            adaptive_augmentation_config=replace(
+                per_row_config.adaptive_augmentation_config, grouping_config=None
+            ),
         )
-        legacy_config.adaptive_augmentation_config.group_count = None
-        legacy = AdaptiveLinearLayer(legacy_config)
-        legacy.load_state_dict(grouped.state_dict(), strict=True)
+        per_row_model = AdaptiveLinearLayer(per_row_config)
+        per_row_model.load_state_dict(grouped.state_dict(), strict=True)
         inputs = torch.randn(4, 2)
 
         grouped_output = grouped(
             inputs,
-            row_layout=RowLayout.rows(
-                4,
-                context_sharing_restricted=False,
-            ),
         )
-        legacy_output = legacy(inputs)
+        per_row_output = per_row_model(inputs)
 
-        torch.testing.assert_close(grouped_output, legacy_output)
-        self.assertEqual(tuple(grouped.state_dict()), tuple(legacy.state_dict()))
+        torch.testing.assert_close(grouped_output, per_row_output)
+        self.assertEqual(tuple(grouped.state_dict()), tuple(per_row_model.state_dict()))
 
-    def test_explicit_disabled_scope_restores_legacy_call_contract(self):
+    def test_resolved_replacement_clears_grouping(self):
         grouped = grouped_adaptive_bias_linear(
             AdaptiveParameterGroupingScopeOptions.ROWS,
             2,
         )
-        disabled_augmentation = grouped.adaptive_behaviour.cfg.build(
-            AdaptiveParameterAugmentationConfig(
-                grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
-            )
-        )
+        disabled_augmentation = replace(
+            grouped.adaptive_behaviour.cfg, grouping_config=None
+        ).build()
         inputs = torch.randn(4, 2)
 
         output = disabled_augmentation(
@@ -1094,7 +489,7 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
 
         self.assertEqual(tuple(output.shape), (4, 2))
         self.assertFalse(disabled_augmentation.adaptive_parameter_grouping_enabled)
-        self.assertEqual(disabled_augmentation.group_count, 2)
+        self.assertIsNone(disabled_augmentation.grouping_config)
         self.assertEqual(
             tuple(disabled_augmentation.state_dict()),
             tuple(grouped.adaptive_behaviour.state_dict()),
@@ -1103,12 +498,8 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
             "adaptive_parameter_grouping_enabled",
             disabled_augmentation.__dict__,
         )
-        disabled_augmentation.grouping_scope = (
-            AdaptiveParameterGroupingScopeOptions.ROWS
-        )
-        self.assertTrue(disabled_augmentation.adaptive_parameter_grouping_enabled)
 
-    def test_partial_override_inherits_enabled_grouping_scope(self):
+    def test_partial_override_inherits_grouping_configuration(self):
         grouped = grouped_adaptive_bias_linear(
             AdaptiveParameterGroupingScopeOptions.ROWS,
             2,
@@ -1122,29 +513,11 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
         )
 
         self.assertEqual(
-            inherited.grouping_scope,
+            inherited.grouping_config.scope,
             AdaptiveParameterGroupingScopeOptions.ROWS,
         )
-        self.assertEqual(inherited.group_count, 2)
+        self.assertEqual(inherited.grouping_config.group_count, 2)
         self.assertTrue(inherited.adaptive_parameter_grouping_enabled)
-
-    def test_outer_override_must_supply_a_resolved_nested_scope(self):
-        grouped = grouped_adaptive_bias_linear(
-            AdaptiveParameterGroupingScopeOptions.ROWS,
-            2,
-        )
-        outer_override = AdaptiveLinearLayerConfig(
-            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                input_dim=2,
-                output_dim=2,
-            )
-        )
-
-        with self.assertRaisesRegex(
-            ValueError,
-            "grouping_scope is required for a resolved",
-        ):
-            AdaptiveLinearLayer(grouped.cfg, outer_override)
 
     def test_all_dynamic_weight_variants_generate_context_batched_matrices(self):
         common = dict(
@@ -1193,7 +566,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                 bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_ONE,
             ),
         )
-        layout = RowLayout.rows(4, context_sharing_restricted=False)
 
         for weight_config in variants:
             with self.subTest(weight_config=type(weight_config).__name__):
@@ -1206,10 +578,11 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                         adaptive_augmentation_config=(
                             AdaptiveParameterAugmentationConfig(
                                 weight_config=weight_config,
-                                grouping_scope=(
-                                    AdaptiveParameterGroupingScopeOptions.ROWS
+                                grouping_config=grouping_value(
+                                    AdaptiveParameterGroupingScopeOptions.ROWS,
+                                    2,
+                                    input_order="BATCH_FIRST",
                                 ),
-                                group_count=2,
                             )
                         ),
                     )
@@ -1222,7 +595,7 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                 )
                 inputs = torch.randn(4, 2, requires_grad=True)
                 try:
-                    output = model(inputs, row_layout=layout)
+                    output = model(inputs)
                 finally:
                     hook.remove()
 
@@ -1253,7 +626,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                 bank_expansion_factor=BankExpansionFactorOptions.FACTOR_OF_ONE,
             ),
         )
-        layout = RowLayout.rows(4, context_sharing_restricted=False)
 
         for bias_config in variants:
             with self.subTest(bias_config=type(bias_config).__name__):
@@ -1265,10 +637,11 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                         adaptive_augmentation_config=(
                             AdaptiveParameterAugmentationConfig(
                                 bias_config=bias_config,
-                                grouping_scope=(
-                                    AdaptiveParameterGroupingScopeOptions.ROWS
+                                grouping_config=grouping_value(
+                                    AdaptiveParameterGroupingScopeOptions.ROWS,
+                                    2,
+                                    input_order="BATCH_FIRST",
                                 ),
-                                group_count=2,
                             )
                         ),
                     )
@@ -1281,7 +654,7 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                 )
                 inputs = torch.randn(4, 2, requires_grad=True)
                 try:
-                    output = model(inputs, row_layout=layout)
+                    output = model(inputs)
                 finally:
                     hook.remove()
 
@@ -1301,7 +674,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
             AntiDynamicDiagonalConfig(**common),
             CombinedDynamicDiagonalConfig(**common),
         )
-        layout = RowLayout.rows(4, context_sharing_restricted=False)
 
         for diagonal_config in variants:
             with self.subTest(diagonal_config=type(diagonal_config).__name__):
@@ -1313,10 +685,11 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                         adaptive_augmentation_config=(
                             AdaptiveParameterAugmentationConfig(
                                 diagonal_config=diagonal_config,
-                                grouping_scope=(
-                                    AdaptiveParameterGroupingScopeOptions.ROWS
+                                grouping_config=grouping_value(
+                                    AdaptiveParameterGroupingScopeOptions.ROWS,
+                                    2,
+                                    input_order="BATCH_FIRST",
                                 ),
-                                group_count=2,
                             )
                         ),
                     )
@@ -1329,7 +702,7 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                 )
                 inputs = torch.randn(4, 2, requires_grad=True)
                 try:
-                    output = model(inputs, row_layout=layout)
+                    output = model(inputs)
                 finally:
                     hook.remove()
 
@@ -1380,7 +753,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                 mask_transition_width=1.0,
             ),
         )
-        layout = RowLayout.rows(4, context_sharing_restricted=False)
 
         for mask_config in variants:
             with self.subTest(mask_config=type(mask_config).__name__):
@@ -1392,10 +764,11 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                         adaptive_augmentation_config=(
                             AdaptiveParameterAugmentationConfig(
                                 mask_config=mask_config,
-                                grouping_scope=(
-                                    AdaptiveParameterGroupingScopeOptions.ROWS
+                                grouping_config=grouping_value(
+                                    AdaptiveParameterGroupingScopeOptions.ROWS,
+                                    2,
+                                    input_order="BATCH_FIRST",
                                 ),
-                                group_count=2,
                             )
                         ),
                     )
@@ -1408,7 +781,7 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                 )
                 inputs = torch.randn(4, 2, requires_grad=True)
                 try:
-                    output = model(inputs, row_layout=layout)
+                    output = model(inputs)
                 finally:
                     hook.remove()
 
@@ -1418,53 +791,7 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                 self.assertTrue(torch.isfinite(inputs.grad).all())
 
     def test_combined_pipeline_never_expands_dynamic_parameters_to_row_count(self):
-        generator_config = linear_stack_config(2, 3)
-        model = AdaptiveLinearLayer(
-            AdaptiveLinearLayerConfig(
-                input_dim=2,
-                output_dim=3,
-                bias_flag=True,
-                adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
-                    weight_config=DualModelDynamicWeightConfig(
-                        input_dim=2,
-                        output_dim=3,
-                        generator_depth=DynamicDepthOptions.DEPTH_OF_ONE,
-                        decay_schedule=WeightDecayScheduleOptions.DISABLED,
-                        decay_rate=0.0,
-                        decay_warmup_batches=0,
-                        normalization_option=WeightNormalizationOptions.DISABLED,
-                        normalization_position_option=(
-                            WeightNormalizationPositionOptions.DISABLED
-                        ),
-                        model_config=generator_config,
-                    ),
-                    diagonal_config=StandardDynamicDiagonalConfig(
-                        input_dim=2,
-                        output_dim=3,
-                        model_config=generator_config,
-                    ),
-                    bias_config=AdditiveDynamicBiasConfig(
-                        input_dim=2,
-                        output_dim=3,
-                        decay_schedule=WeightDecayScheduleOptions.DISABLED,
-                        decay_rate=0.0,
-                        decay_warmup_batches=0,
-                        model_config=generator_config,
-                    ),
-                    mask_config=PerAxisScoreMaskConfig(
-                        input_dim=2,
-                        output_dim=3,
-                        mask_dimension_option=MaskDimensionOptions.COLUMN,
-                        mask_threshold=0.5,
-                        mask_surrogate_scale=1.0,
-                        mask_floor=0.0,
-                        model_config=generator_config,
-                    ),
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.ROWS,
-                    group_count=2,
-                ),
-            )
-        )
+        model = combined_linear()
         observed_shapes = {}
         hooks = []
 
@@ -1482,10 +809,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
         try:
             output = model(
                 inputs,
-                row_layout=RowLayout.rows(
-                    4,
-                    context_sharing_restricted=False,
-                ),
             )
         finally:
             for hook in hooks:
@@ -1504,6 +827,45 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
         output.square().mean().backward()
         self.assertTrue(torch.isfinite(inputs.grad).all())
 
+    def test_generated_parameter_context_and_grouped_bias_guards_are_exact(self):
+        input_batch = torch.ones(3, 2)
+        weights = torch.ones(2, 2, 2)
+        bias = torch.ones(4, 2)
+        grouped_bias = torch.ones(2, 2)
+        cases = (
+            (
+                lambda: AdaptiveLinearValidator.validate_weight_context_count(
+                    input_batch,
+                    weights,
+                ),
+                "Dynamic weights context count must match affine input, received "
+                "2 and 3.",
+            ),
+            (
+                lambda: AdaptiveLinearValidator.validate_bias_context_count(
+                    input_batch,
+                    bias,
+                ),
+                "Dynamic bias context count must match affine input, received 4 and 3.",
+            ),
+            (
+                lambda: (
+                    AdaptiveParameterAugmentationValidator.validate_grouped_base_parameters(
+                        torch.ones(2, 2),
+                        grouped_bias,
+                    )
+                ),
+                "Adaptive parameter grouping requires a shared one-dimensional base "
+                "bias; row-specific base bias is not supported.",
+            ),
+        )
+
+        for action, message in cases:
+            with self.subTest(message=message):
+                with self.assertRaises(ValueError) as caught:
+                    action()
+                self.assertEqual(str(caught.exception), message)
+
     def test_low_precision_sum_uses_native_input_dtype(self):
         for dtype in (torch.float16, torch.bfloat16):
             with self.subTest(dtype=dtype):
@@ -1514,10 +876,6 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                 inputs = torch.full((64, 2), 1000.0, dtype=dtype)
                 output = model(
                     inputs,
-                    row_layout=RowLayout.rows(
-                        64,
-                        context_sharing_restricted=False,
-                    ),
                 )
 
                 self.assertEqual(output.dtype, dtype)
@@ -1527,7 +885,7 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
                     expected_context.expand_as(output),
                 )
 
-    def test_padding_has_zero_context_gradient_for_valid_row_objectives(self):
+    def test_objective_on_one_chunk_has_no_gradient_in_other_chunks(self):
         model = grouped_adaptive_bias_linear(
             AdaptiveParameterGroupingScopeOptions.SEQUENCE,
             2,
@@ -1536,17 +894,9 @@ class GroupedAdaptiveLinearTests(unittest.TestCase):
             [[[1.0, 10.0], [2.0, 20.0], [1000.0, 2000.0], [3000.0, 4000.0]]],
             requires_grad=True,
         )
-        valid_rows = torch.tensor([True, True, False, False])
 
         output = model(
             inputs.reshape(-1, 2),
-            row_layout=RowLayout.sequence(
-                leading_shape=(1, 4),
-                batch_axis=0,
-                sequence_axis=1,
-                valid_rows=valid_rows,
-                context_sharing_restricted=False,
-            ),
         ).reshape(1, 4, 2)
         output[:, :2].sum().backward()
 
