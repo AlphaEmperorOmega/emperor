@@ -5,7 +5,6 @@ import torch
 import emperor.parametric as parametric
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.experts import (
     DroppedTokenOptions,
@@ -126,7 +125,7 @@ class ParametricPresetMixin:
         return AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=None,
             weight_config=None,
             diagonal_config=None,
             bias_config=None,
@@ -152,6 +151,15 @@ class ParametricPresetMixin:
             "clip_range": 1.0,
         }
 
+    def bank_kwargs(self, input_dim=4, output_dim=3, top_k=2, num_experts=4):
+        return dict(
+            input_dim=input_dim,
+            output_dim=output_dim,
+            top_k=top_k,
+            num_experts=num_experts,
+            weighted_parameters_flag=True,
+        )
+
     def vector_weights_config(self, top_k: int = 2) -> VectorWeightsMixtureConfig:
         return VectorWeightsMixtureConfig(
             **self.mixture_kwargs(
@@ -170,7 +178,7 @@ class ParametricPresetMixin:
         num_experts: int = 4,
     ) -> MatrixWeightsMixtureConfig:
         return MatrixWeightsMixtureConfig(
-            **self.mixture_kwargs(
+            **self.bank_kwargs(
                 input_dim=input_dim,
                 output_dim=output_dim,
                 top_k=top_k,
@@ -185,7 +193,7 @@ class ParametricPresetMixin:
         num_experts: int = 4,
     ) -> MatrixBiasMixtureConfig:
         return MatrixBiasMixtureConfig(
-            **self.mixture_kwargs(
+            **self.bank_kwargs(
                 input_dim=4,
                 output_dim=output_dim,
                 top_k=top_k,

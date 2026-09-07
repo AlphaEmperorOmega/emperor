@@ -7,6 +7,10 @@ from emperor.augmentations.adaptive_parameters import (
 )
 from emperor.config import ConfigBase, optional_field
 from emperor.layers import LayerConfig
+from emperor.parametric._mixtures.config import (
+    MatrixBiasMixtureConfig,
+    MatrixWeightsMixtureConfig,
+)
 
 if TYPE_CHECKING:
     from emperor.parametric._mixtures.config import AdaptiveMixtureConfig
@@ -22,11 +26,11 @@ class AdaptiveRouterOptions(Enum):
 class ParametricLayerConfig(ConfigBase):
     input_dim: int | None = optional_field("Input feature dimension.")
     output_dim: int | None = optional_field("Output feature dimension.")
-    weight_mixture_config: "AdaptiveMixtureConfig | None" = optional_field(
+    weight_mixture_config: "AdaptiveMixtureConfig | MatrixWeightsMixtureConfig | None" = optional_field(
         "Config for the input-dependent weight mixture model."
     )
-    bias_mixture_config: "AdaptiveMixtureConfig | None" = optional_field(
-        "Optional config for the input-dependent bias mixture model."
+    bias_mixture_config: "AdaptiveMixtureConfig | MatrixBiasMixtureConfig | None" = (
+        optional_field("Optional config for the input-dependent bias mixture model.")
     )
     routing_initialization_mode: "AdaptiveRouterOptions | None" = optional_field(
         "Router/sampler sharing mode."

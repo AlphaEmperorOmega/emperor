@@ -41,22 +41,6 @@ class VectorWeightsMixtureConfig(AdaptiveMixtureConfig):
 
 
 @dataclass
-class MatrixWeightsMixtureConfig(AdaptiveMixtureConfig):
-    def _registry_owner(self) -> type:
-        from emperor.parametric._mixtures.matrix import MatrixWeightsMixture
-
-        return MatrixWeightsMixture
-
-
-@dataclass
-class MatrixBiasMixtureConfig(AdaptiveMixtureConfig):
-    def _registry_owner(self) -> type:
-        from emperor.parametric._mixtures.matrix import MatrixBiasMixture
-
-        return MatrixBiasMixture
-
-
-@dataclass
 class GeneratorWeightsMixtureConfig(AdaptiveMixtureConfig):
     generator_config: "MixtureOfExpertsConfig | None" = optional_field(
         "Mixture-of-experts config used to generate weight factors."
@@ -82,3 +66,35 @@ class GeneratorBiasMixtureConfig(AdaptiveMixtureConfig):
         )
 
         return GeneratorBiasMixture
+
+
+@dataclass
+class MatrixWeightsMixtureConfig(ConfigBase):
+    input_dim: int | None = optional_field("Mixture model input dimension.")
+    output_dim: int | None = optional_field("Mixture model output dimension.")
+    num_experts: int | None = optional_field("Number of mixture experts.")
+    top_k: int | None = optional_field("Number of selected experts.")
+    weighted_parameters_flag: bool | None = optional_field(
+        "When True, selected parameters are multiplied by their probabilities."
+    )
+
+    def _registry_owner(self) -> type:
+        from emperor.parametric._mixtures.matrix import MatrixWeightsMixture
+
+        return MatrixWeightsMixture
+
+
+@dataclass
+class MatrixBiasMixtureConfig(ConfigBase):
+    input_dim: int | None = optional_field("Mixture model input dimension.")
+    output_dim: int | None = optional_field("Mixture model output dimension.")
+    num_experts: int | None = optional_field("Number of mixture experts.")
+    top_k: int | None = optional_field("Number of selected experts.")
+    weighted_parameters_flag: bool | None = optional_field(
+        "When True, selected parameters are multiplied by their probabilities."
+    )
+
+    def _registry_owner(self) -> type:
+        from emperor.parametric._mixtures.matrix import MatrixBiasMixture
+
+        return MatrixBiasMixture
