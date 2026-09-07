@@ -283,7 +283,6 @@ focused_tests = [
   "tests/unit/test_recurrent_composition*.py",
   "tests/unit/test_recurrent_iteration_schedule.py",
   "tests/unit/test_recurrent_layer*.py",
-  "tests/unit/test_row_layout*.py",
 ]
 integration_tests = ["tests/integration/test_layer_monitor_lifecycle.py"]
 mutation_scope = ["src/emperor/layers/*"]
@@ -350,9 +349,6 @@ modules = [
   "src/emperor/layers/_monitoring/callbacks/recurrent.py",
   "src/emperor/layers/_monitoring/diagnostics.py",
   "src/emperor/layers/_options.py",
-  "src/emperor/layers/_row_layout/__init__.py",
-  "src/emperor/layers/_row_layout/core.py",
-  "src/emperor/layers/_row_layout/validation.py",
   "src/emperor/layers/_stack/__init__.py",
   "src/emperor/layers/_stack/builder.py",
   "src/emperor/layers/_stack/core.py",
@@ -369,6 +365,8 @@ modules = [
 [families.adaptive_parameters]
 status = "partial"
 focused_tests = [
+  "tests/unit/test_matrix_mixture_variants.py",
+  "tests/unit/test_adaptive_generation*.py",
   "tests/unit/test_augmentation*.py",
   "tests/unit/test_augmentations.py",
   "tests/unit/test_adaptive_parameter*.py",
@@ -382,6 +380,9 @@ focused_tests = [
 ]
 integration_tests = [
   "tests/integration/test_adaptive_parameter_monitor_lifecycle.py",
+  "tests/unit/test_expert_variable_chunking.py",
+  "tests/unit/test_attention_variable_chunking.py",
+  "tests/model_packages/transformer/test_variable_chunking_configuration.py",
 ]
 mutation_scope = ["src/emperor/augmentations/adaptive_parameters/*"]
 environment = ["cpu", "float32", "lightning-trainer"]
@@ -390,6 +391,10 @@ mutation_evidence = "tests/architecture/emperor_behavioral/evidence/adaptive_par
 review_evidence = "tests/architecture/emperor_behavioral/reviews/adaptive_parameters-b9454d04-review.toml"
 blocked_reason = ""
 modules = [
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/matrix_mixture.py",
+  "src/emperor/augmentations/adaptive_parameters/_biases/variants/matrix_mixture.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/variants/diagonally_modulated_low_rank.py",
+
   "src/emperor/augmentations/__init__.py",
   "src/emperor/augmentations/adaptive_parameters/__init__.py",
   "src/emperor/augmentations/adaptive_parameters/_augmentation.py",
@@ -406,7 +411,8 @@ modules = [
   "src/emperor/augmentations/adaptive_parameters/_biases/variants/weighted_bank.py",
   "src/emperor/augmentations/adaptive_parameters/_config.py",
   "src/emperor/augmentations/adaptive_parameters/_decay.py",
-  "src/emperor/augmentations/adaptive_parameters/_grouping.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/plan.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/splitter.py",
   "src/emperor/augmentations/adaptive_parameters/_diagonals/__init__.py",
   "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/__init__.py",
   "src/emperor/augmentations/adaptive_parameters/_diagonals/variants/anti.py",
@@ -431,10 +437,22 @@ modules = [
   "src/emperor/augmentations/adaptive_parameters/_monitoring/adaptive_parameters.py",
   "src/emperor/augmentations/adaptive_parameters/_monitoring/weight_banks.py",
   "src/emperor/augmentations/adaptive_parameters/_options.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/base.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/config.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/options.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/validation.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/variants/__init__.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/variants/attention.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/variants/mean.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/variants/mean_std.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/variants/rms.py",
+  "src/emperor/augmentations/adaptive_parameters/_grouping/variants/sum.py",
   "src/emperor/augmentations/adaptive_parameters/_validation.py",
   "src/emperor/augmentations/adaptive_parameters/_weights/__init__.py",
   "src/emperor/augmentations/adaptive_parameters/_weights/variants/__init__.py",
   "src/emperor/augmentations/adaptive_parameters/_weights/base.py",
+  "src/emperor/augmentations/adaptive_parameters/_weights/normalization.py",
   "src/emperor/augmentations/adaptive_parameters/_weights/config.py",
   "src/emperor/augmentations/adaptive_parameters/_weights/depth_mapping.py",
   "src/emperor/augmentations/adaptive_parameters/_weights/variants/dual_model.py",
@@ -481,7 +499,8 @@ modules = [
 ]
 
 [families.parametric]
-status = "complete"
+# Bank ownership migration requires fresh revision-specific certification.
+status = "partial"
 focused_tests = [
   "tests/unit/test_parametric*.py",
   "tests/unit/test_parametric_*_validator_adapter.py",
@@ -565,7 +584,6 @@ modules = [
   "src/emperor/attention/_ops/masking.py",
   "src/emperor/attention/_ops/processing.py",
   "src/emperor/attention/_ops/projection.py",
-  "src/emperor/attention/_ops/projection_layout.py",
   "src/emperor/attention/_ops/reshaping.py",
   "src/emperor/attention/_ops/zero_attention.py",
   "src/emperor/attention/_runtime.py",
@@ -618,7 +636,10 @@ focused_tests = [
   "tests/unit/test_transformer_translation_integration.py",
   "tests/unit/test_transformer_validator_adapter.py",
 ]
-integration_tests = ["tests/unit/test_transformer_translation_integration.py"]
+integration_tests = [
+  "tests/unit/test_transformer_translation_integration.py",
+  "tests/model_packages/transformer/test_variable_chunking_configuration.py",
+]
 mutation_scope = ["src/emperor/transformer/*"]
 environment = ["cpu", "float32", "lightning-trainer"]
 coverage_evidence = ""
@@ -690,19 +711,15 @@ modules = [
   "src/emperor/neuron/_axons/core.py",
   "src/emperor/neuron/_axons/validation.py",
   "src/emperor/neuron/_cluster/__init__.py",
-  "src/emperor/neuron/_cluster/beam_routes.py",
   "src/emperor/neuron/_cluster/checkpointing.py",
-  "src/emperor/neuron/_cluster/halting_lifecycle.py",
   "src/emperor/neuron/_cluster/model.py",
   "src/emperor/neuron/_cluster/plasticity.py",
-  "src/emperor/neuron/_cluster/recurrent_routes.py",
   "src/emperor/neuron/_cluster/routing/__init__.py",
   "src/emperor/neuron/_cluster/routing/beam.py",
   "src/emperor/neuron/_cluster/routing/delegate.py",
   "src/emperor/neuron/_cluster/routing/halting.py",
   "src/emperor/neuron/_cluster/routing/state.py",
   "src/emperor/neuron/_cluster/runtime_policy.py",
-  "src/emperor/neuron/_cluster/state.py",
   "src/emperor/neuron/_cluster/topology.py",
   "src/emperor/neuron/_cluster/validation.py",
   "src/emperor/neuron/_config.py",
