@@ -8,6 +8,8 @@ from emperor.attention import MixtureOfAttentionHeadsConfig
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
+    MatrixBiasMixtureConfig,
+    MatrixWeightsMixtureConfig,
 )
 from emperor.experts import (
     MixtureOfExpertsConfig,
@@ -84,6 +86,8 @@ def _leaf_config(option: type | None, values: dict):
     if option is None:
         return None
     accepted = {field.name for field in fields(option)}
+    if option in (MatrixWeightsMixtureConfig, MatrixBiasMixtureConfig):
+        accepted.discard("generator_depth")
     return option(**{key: value for key, value in values.items() if key in accepted})
 
 
@@ -131,10 +135,45 @@ def _adaptive_augmentation(
         options.generator_stack_options,
         residual_stack_options,
     )
+    factor_defaults = resolve_controller_stack_options(
+        options.weight_generator_stack_options, options.generator_stack_options
+    )
     weight = _leaf_config(
         options.weight_option if options.weight_option_flag else None,
         {
+            "num_experts": options.weight_mixture_num_experts,
+            "top_k": options.weight_mixture_top_k,
+            "sampler_config": SamplerConfig(
+                normalize_probabilities_flag=options.weight_mixture_normalize_probabilities_flag,
+                router_config=RouterConfig(
+                    model_config=_component_generator_stack(
+                        options.weight_mixture_router_generator_stack_options,
+                        resolve_controller_stack_options(
+                            options.weight_generator_stack_options,
+                            options.generator_stack_options,
+                        ),
+                        residual_stack_options,
+                    )
+                ),
+            ),
             "generator_depth": options.generator_depth,
+            "input_factor_source": options.weight_input_factor_source,
+            "output_factor_source": options.weight_output_factor_source,
+            "input_factor_model_config": _component_generator_stack(
+                options.weight_input_factor_generator_stack_options,
+                factor_defaults,
+                residual_stack_options,
+            ),
+            "output_factor_model_config": _component_generator_stack(
+                options.weight_output_factor_generator_stack_options,
+                factor_defaults,
+                residual_stack_options,
+            ),
+            "coefficient_model_config": _component_generator_stack(
+                options.weight_coefficient_generator_stack_options,
+                factor_defaults,
+                residual_stack_options,
+            ),
             "decay_schedule": options.weight_decay_schedule,
             "decay_rate": options.weight_decay_rate,
             "decay_warmup_batches": options.weight_decay_warmup_batches,
@@ -153,6 +192,21 @@ def _adaptive_augmentation(
     bias = _leaf_config(
         options.bias_option if options.bias_option_flag else None,
         {
+            "num_experts": options.bias_mixture_num_experts,
+            "top_k": options.bias_mixture_top_k,
+            "sampler_config": SamplerConfig(
+                normalize_probabilities_flag=options.bias_mixture_normalize_probabilities_flag,
+                router_config=RouterConfig(
+                    model_config=_component_generator_stack(
+                        options.bias_mixture_router_generator_stack_options,
+                        resolve_controller_stack_options(
+                            options.bias_generator_stack_options,
+                            options.generator_stack_options,
+                        ),
+                        residual_stack_options,
+                    )
+                ),
+            ),
             "decay_schedule": options.bias_decay_schedule,
             "decay_rate": options.bias_decay_rate,
             "decay_warmup_batches": options.bias_decay_warmup_batches,
@@ -190,8 +244,7 @@ def _adaptive_augmentation(
         },
     )
     return AdaptiveParameterAugmentationConfig(
-        grouping_scope=options.grouping_scope,
-        group_count=options.group_count,
+        grouping_config=options.grouping_config,
         weight_config=weight,
         bias_config=bias,
         diagonal_config=diagonal,
@@ -402,6 +455,7 @@ def _attention(
     runtime: RuntimeOptions,
     attention_options: TransformerAttentionOptions,
     projection_adaptive_options: AdaptiveParameterOptions,
+    attention_expert_adaptive_options: AdaptiveParameterOptions,
     *,
     target_length: int,
     source_length: int,
@@ -444,7 +498,7 @@ def _attention(
             runtime.model_dim,
             runtime.model_dim,
             experts,
-            runtime.attention_expert_adaptive_options,
+            attention_expert_adaptive_options,
         ),
         use_kv_expert_models_flag=(
             self_attention
@@ -580,6 +634,8 @@ def _encoder(runtime: RuntimeOptions):
             runtime,
             runtime.encoder_attention_options,
             runtime.encoder_attention_adaptive_options,
+            runtime.encoder_attention_expert_adaptive_options
+            or runtime.attention_expert_adaptive_options,
             target_length=runtime.source_sequence_length,
             source_length=runtime.source_sequence_length,
             causal=False,
@@ -626,6 +682,8 @@ def _decoder(runtime: RuntimeOptions):
             runtime,
             runtime.decoder_self_attention_options,
             runtime.decoder_self_attention_adaptive_options,
+            runtime.decoder_self_attention_expert_adaptive_options
+            or runtime.attention_expert_adaptive_options,
             target_length=runtime.target_sequence_length,
             source_length=runtime.target_sequence_length,
             causal=True,
@@ -635,6 +693,8 @@ def _decoder(runtime: RuntimeOptions):
             runtime,
             runtime.decoder_cross_attention_options,
             runtime.decoder_cross_attention_adaptive_options,
+            runtime.decoder_cross_attention_expert_adaptive_options
+            or runtime.attention_expert_adaptive_options,
             target_length=runtime.target_sequence_length,
             source_length=runtime.source_sequence_length,
             causal=False,

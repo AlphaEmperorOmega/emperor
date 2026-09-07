@@ -5,6 +5,14 @@ from dataclasses import dataclass, fields, replace
 from types import ModuleType
 from typing import Any, Final
 
+from emperor.augmentations.adaptive_parameters import (
+    AdaptiveParameterAugmentationConfig,
+    AttentionGroupingConfig,
+    GroupingConfig,
+    MeanStdGroupingConfig,
+    SumGroupingConfig,
+)
+from emperor.config import ConfigBase
 from model_runtime.packages.runtime_values import validate_runtime_default_values
 
 from . import config
@@ -248,13 +256,153 @@ def feed_forward_options_from_config(
     )
 
 
+_GROUPING_FIELDS = (
+    "grouping_scope",
+    "group_count",
+    "chunk_size",
+    "grouping_sequence_length",
+    "grouping_input_order",
+    "grouping_method",
+    "grouping_model_config",
+    "grouping_summary_normalization",
+    "grouping_attention_hidden_dim",
+    "grouping_rms_norm_epsilon",
+)
+
+
+def _grouping_from_fields(
+    values: dict[str, Any], *, prefix: str
+) -> GroupingConfig | None:
+    if all(values.get(field) is None for field in _GROUPING_FIELDS):
+        return None
+    grouping_values = {
+        "summary_normalization": values.get("grouping_summary_normalization"),
+        "rms_norm_epsilon": values.get("grouping_rms_norm_epsilon"),
+    }
+    model_config = values.get("grouping_model_config")
+    hidden_dim = values.get("grouping_attention_hidden_dim")
+    method = values.get("grouping_method")
+    config_type = SumGroupingConfig if method is None else method
+    if not isinstance(config_type, type) or not issubclass(config_type, GroupingConfig):
+        raise ValueError(
+            "grouping_method must be a concrete grouping configuration class."
+        )
+    if hidden_dim is not None:
+        if not issubclass(config_type, AttentionGroupingConfig):
+            raise ValueError(
+                "grouping_attention_hidden_dim requires attention grouping."
+            )
+        if not isinstance(model_config, ConfigBase):
+            raise ValueError(
+                "grouping_attention_hidden_dim requires a supplied grouping_model_config."
+            )
+        if "hidden_dim" not in {field.name for field in fields(model_config)}:
+            raise ValueError(
+                "grouping_attention_hidden_dim requires a model config with a hidden_dim field."
+            )
+        model_config = replace(model_config, hidden_dim=hidden_dim)
+    if model_config is not None:
+        if not issubclass(
+            config_type, (AttentionGroupingConfig, MeanStdGroupingConfig)
+        ):
+            raise ValueError(
+                "grouping_model_config requires attention or mean/std grouping."
+            )
+        grouping_values["model_config"] = model_config
+    grouping = config_type(
+        **grouping_values,
+        scope=values.get("grouping_scope"),
+        group_count=values.get("group_count"),
+        chunk_size=values.get("chunk_size"),
+        sequence_length=values.get("grouping_sequence_length"),
+        input_order=values.get("grouping_input_order"),
+    )
+    validator = AdaptiveParameterAugmentationConfig().registry_owner().VALIDATOR
+    try:
+        validator.validate_grouping_value(grouping)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{prefix} grouping requires complete scope-specific settings; "
+            "set all grouping fields to None to disable it. " + str(exc)
+        ) from exc
+    return grouping
+
+
+def _grouping_fields(
+    grouping: GroupingConfig | None,
+) -> dict[str, Any]:
+    if grouping is None:
+        return dict.fromkeys(_GROUPING_FIELDS)
+    model_config = None
+    if isinstance(grouping, (AttentionGroupingConfig, MeanStdGroupingConfig)):
+        model_config = grouping.model_config
+    return dict(
+        zip(
+            _GROUPING_FIELDS,
+            (
+                grouping.scope,
+                grouping.group_count,
+                grouping.chunk_size,
+                grouping.sequence_length,
+                grouping.input_order,
+                type(grouping),
+                model_config,
+                grouping.summary_normalization,
+                None,
+                grouping.rms_norm_epsilon,
+            ),
+            strict=True,
+        )
+    )
+
+
 def adaptive_options_from_config(
     config_module: ModuleType,
     prefix: str,
 ) -> AdaptiveParameterOptions:
     return AdaptiveParameterOptions(
-        grouping_scope=getattr(config_module, f"{prefix}_GROUPING_SCOPE"),
-        group_count=getattr(config_module, f"{prefix}_GROUP_COUNT"),
+        weight_input_factor_source=getattr(
+            config_module, f"{prefix}_WEIGHT_INPUT_FACTOR_SOURCE"
+        ),
+        weight_output_factor_source=getattr(
+            config_module, f"{prefix}_WEIGHT_OUTPUT_FACTOR_SOURCE"
+        ),
+        weight_mixture_num_experts=getattr(
+            config_module, f"{prefix}_WEIGHT_MIXTURE_NUM_EXPERTS"
+        ),
+        bias_mixture_num_experts=getattr(
+            config_module, f"{prefix}_BIAS_MIXTURE_NUM_EXPERTS"
+        ),
+        weight_mixture_top_k=getattr(config_module, f"{prefix}_WEIGHT_MIXTURE_TOP_K"),
+        bias_mixture_top_k=getattr(config_module, f"{prefix}_BIAS_MIXTURE_TOP_K"),
+        weight_mixture_normalize_probabilities_flag=getattr(
+            config_module, f"{prefix}_WEIGHT_MIXTURE_NORMALIZE_PROBABILITIES_FLAG"
+        ),
+        bias_mixture_normalize_probabilities_flag=getattr(
+            config_module, f"{prefix}_BIAS_MIXTURE_NORMALIZE_PROBABILITIES_FLAG"
+        ),
+        weight_input_factor_generator_stack_options=_controller_stack_from_config(
+            config_module, f"{prefix}_WEIGHT_INPUT_FACTOR_GENERATOR_STACK"
+        ),
+        weight_output_factor_generator_stack_options=_controller_stack_from_config(
+            config_module, f"{prefix}_WEIGHT_OUTPUT_FACTOR_GENERATOR_STACK"
+        ),
+        weight_coefficient_generator_stack_options=_controller_stack_from_config(
+            config_module, f"{prefix}_WEIGHT_COEFFICIENT_GENERATOR_STACK"
+        ),
+        weight_mixture_router_generator_stack_options=_controller_stack_from_config(
+            config_module, f"{prefix}_WEIGHT_MIXTURE_ROUTER_GENERATOR_STACK"
+        ),
+        bias_mixture_router_generator_stack_options=_controller_stack_from_config(
+            config_module, f"{prefix}_BIAS_MIXTURE_ROUTER_GENERATOR_STACK"
+        ),
+        grouping_config=_grouping_from_fields(
+            {
+                field: getattr(config_module, f"{prefix}_{field.upper()}")
+                for field in _GROUPING_FIELDS
+            },
+            prefix=prefix,
+        ),
         weight_option_flag=getattr(config_module, f"{prefix}_WEIGHT_OPTION_FLAG"),
         weight_option=getattr(config_module, f"{prefix}_WEIGHT_OPTION"),
         generator_depth=getattr(config_module, f"{prefix}_GENERATOR_DEPTH"),
@@ -572,6 +720,12 @@ def _pop_updates(
 
 
 _ADAPTIVE_NESTED_FIELDS = {
+    "weight_input_factor_generator_stack_options",
+    "weight_output_factor_generator_stack_options",
+    "weight_coefficient_generator_stack_options",
+    "weight_mixture_router_generator_stack_options",
+    "bias_mixture_router_generator_stack_options",
+    "grouping_config",
     "generator_stack_options",
     "weight_generator_stack_options",
     "bias_generator_stack_options",
@@ -587,12 +741,21 @@ def _pop_adaptive_options(
     values: MutableMapping[str, Any],
     prefix: str,
     current: AdaptiveParameterOptions,
+    grouping_fields: dict[str, Any],
+    *,
+    inherit_none: bool = False,
 ) -> AdaptiveParameterOptions:
+    for field in _GROUPING_FIELDS:
+        key = f"{prefix}{field}"
+        if key in values:
+            grouping_fields[field] = values.pop(key)
     updates = {}
     for field_name in _ADAPTIVE_VALUE_FIELDS:
         key = f"{prefix}{field_name}"
         if key in values:
-            updates[field_name] = values.pop(key)
+            value = values.pop(key)
+            if value is not None or not inherit_none:
+                updates[field_name] = value
 
     generator = current.generator_stack_options
     generator_updates = {}
@@ -602,11 +765,23 @@ def _pop_adaptive_options(
     for field_name in _STACK_OPTION_FIELDS:
         key = f"{generator_prefix}{field_name}"
         if key in values:
-            generator_updates[field_name] = values.pop(key)
+            value = values.pop(key)
+            if value is not None or not inherit_none:
+                generator_updates[field_name] = value
     generator = replace(generator, **generator_updates)
 
     component_stacks = {}
-    for component in ("weight", "bias", "diagonal", "mask"):
+    for component in (
+        "weight",
+        "bias",
+        "diagonal",
+        "mask",
+        "weight_input_factor",
+        "weight_output_factor",
+        "weight_coefficient",
+        "weight_mixture_router",
+        "bias_mixture_router",
+    ):
         field_name = f"{component}_generator_stack_options"
         stack = getattr(current, field_name)
         stack_updates = {}
@@ -614,7 +789,9 @@ def _pop_adaptive_options(
         for stack_field in _CONTROLLER_STACK_FIELDS:
             key = f"{component_prefix}{stack_field}"
             if key in values:
-                stack_updates[stack_field] = values.pop(key)
+                value = values.pop(key)
+                if value is not None or not inherit_none:
+                    stack_updates[stack_field] = value
         component_stacks[field_name] = replace(stack, **stack_updates)
 
     return replace(
@@ -630,15 +807,17 @@ def _pop_adaptive_broadcast(
     prefix: str,
     groups: dict[str, AdaptiveParameterOptions],
     names: tuple[str, ...],
+    grouping_fields: dict[str, dict[str, Any]],
 ) -> None:
     before = dict(values)
-    _pop_adaptive_options(values, prefix, AdaptiveParameterOptions())
+    _pop_adaptive_options(values, prefix, AdaptiveParameterOptions(), {})
     consumed = {key: value for key, value in before.items() if key not in values}
     for name in names:
         groups[name] = _pop_adaptive_options(
             dict(consumed),
             prefix,
             groups[name],
+            grouping_fields[name],
         )
 
 
@@ -739,6 +918,23 @@ def resolve_transformer_path_options(
         decoder_cross_attention_options=decoder_cross_attention,
         encoder_feed_forward_options=encoder_feed_forward,
         decoder_feed_forward_options=decoder_feed_forward,
+    )
+
+
+def _attention_expert_path_from_config(prefix: str) -> AdaptiveParameterOptions | None:
+    """Optional source settings inherit the shared expert configuration."""
+    values = {
+        name.lower(): value
+        for name, value in vars(config).items()
+        if name.startswith(prefix + "_") and value is not None
+    }
+    if not values:
+        return None
+    shared = adaptive_options_from_config(config, "ATTENTION_EXPERT_ADAPTIVE")
+    grouping = _grouping_fields(shared.grouping_config)
+    resolved = _pop_adaptive_options(values, prefix.lower() + "_", shared, grouping)
+    return replace(
+        resolved, grouping_config=_grouping_from_fields(grouping, prefix=prefix)
     )
 
 
@@ -855,6 +1051,15 @@ def runtime_from_config() -> RuntimeOptions:
         attention_expert_adaptive_options=adaptive_options_from_config(
             config,
             "ATTENTION_EXPERT_ADAPTIVE",
+        ),
+        encoder_attention_expert_adaptive_options=_attention_expert_path_from_config(
+            "ENCODER_ATTN_EXPERT_ADAPTIVE"
+        ),
+        decoder_self_attention_expert_adaptive_options=_attention_expert_path_from_config(
+            "DECODER_SELF_ATTN_EXPERT_ADAPTIVE"
+        ),
+        decoder_cross_attention_expert_adaptive_options=_attention_expert_path_from_config(
+            "DECODER_CROSS_ATTN_EXPERT_ADAPTIVE"
         ),
         router_adaptive_options=adaptive_options_from_config(
             config,
@@ -1048,6 +1253,12 @@ def _resolve_adaptive_groups(
     groups = {
         "attention_projection": runtime.attention_projection_adaptive_options,
         "attention_expert": runtime.attention_expert_adaptive_options,
+        "encoder_attention_expert": runtime.encoder_attention_expert_adaptive_options
+        or runtime.attention_expert_adaptive_options,
+        "decoder_self_attention_expert": runtime.decoder_self_attention_expert_adaptive_options
+        or runtime.attention_expert_adaptive_options,
+        "decoder_cross_attention_expert": runtime.decoder_cross_attention_expert_adaptive_options
+        or runtime.attention_expert_adaptive_options,
         "router": runtime.router_adaptive_options,
         "feed_forward": runtime.feed_forward_adaptive_options,
         "encoder_attention": runtime.encoder_attention_adaptive_options,
@@ -1056,7 +1267,11 @@ def _resolve_adaptive_groups(
         "encoder_feed_forward": runtime.encoder_feed_forward_adaptive_options,
         "decoder_feed_forward": runtime.decoder_feed_forward_adaptive_options,
     }
-    _pop_adaptive_broadcast(values, "", groups, tuple(groups))
+    grouping_fields = {
+        name: _grouping_fields(options.grouping_config)
+        for name, options in groups.items()
+    }
+    _pop_adaptive_broadcast(values, "", groups, tuple(groups), grouping_fields)
     for prefix, names in (
         (
             "attention_projection_adaptive_",
@@ -1076,11 +1291,22 @@ def _resolve_adaptive_groups(
                 "decoder_cross_attention",
             ),
         ),
-        ("attention_expert_adaptive_", ("attention_expert",)),
+        (
+            "attention_expert_adaptive_",
+            (
+                "attention_expert",
+                "encoder_attention_expert",
+                "decoder_self_attention_expert",
+                "decoder_cross_attention_expert",
+            ),
+        ),
         (
             "expert_adaptive_",
             (
                 "attention_expert",
+                "encoder_attention_expert",
+                "decoder_self_attention_expert",
+                "decoder_cross_attention_expert",
                 "feed_forward",
                 "encoder_feed_forward",
                 "decoder_feed_forward",
@@ -1104,8 +1330,11 @@ def _resolve_adaptive_groups(
             ),
         ),
     ):
-        _pop_adaptive_broadcast(values, prefix, groups, names)
+        _pop_adaptive_broadcast(values, prefix, groups, names, grouping_fields)
     for name, prefixes in (
+        ("encoder_attention_expert", ("encoder_attn_expert_adaptive_",)),
+        ("decoder_self_attention_expert", ("decoder_self_attn_expert_adaptive_",)),
+        ("decoder_cross_attention_expert", ("decoder_cross_attn_expert_adaptive_",)),
         ("encoder_attention", ("encoder_attn_", "encoder_attn_adaptive_")),
         (
             "decoder_self_attention",
@@ -1119,8 +1348,20 @@ def _resolve_adaptive_groups(
         ("decoder_feed_forward", ("decoder_ff_", "decoder_ff_adaptive_")),
     ):
         for prefix in prefixes:
-            groups[name] = _pop_adaptive_options(values, prefix, groups[name])
-    return groups
+            groups[name] = _pop_adaptive_options(
+                values,
+                prefix,
+                groups[name],
+                grouping_fields[name],
+                inherit_none=name.endswith("_attention_expert"),
+            )
+    return {
+        name: replace(
+            options,
+            grouping_config=_grouping_from_fields(grouping_fields[name], prefix=name),
+        )
+        for name, options in groups.items()
+    }
 
 
 def _reject_unknown_runtime_default(values: MutableMapping[str, Any]) -> None:
@@ -1167,6 +1408,15 @@ def runtime_from_flat(
         feed_forward_expert_options=experts.feed_forward,
         attention_projection_adaptive_options=adaptive_groups["attention_projection"],
         attention_expert_adaptive_options=adaptive_groups["attention_expert"],
+        encoder_attention_expert_adaptive_options=adaptive_groups[
+            "encoder_attention_expert"
+        ],
+        decoder_self_attention_expert_adaptive_options=adaptive_groups[
+            "decoder_self_attention_expert"
+        ],
+        decoder_cross_attention_expert_adaptive_options=adaptive_groups[
+            "decoder_cross_attention_expert"
+        ],
         router_adaptive_options=adaptive_groups["router"],
         feed_forward_adaptive_options=adaptive_groups["feed_forward"],
         encoder_attention_adaptive_options=adaptive_groups["encoder_attention"],
