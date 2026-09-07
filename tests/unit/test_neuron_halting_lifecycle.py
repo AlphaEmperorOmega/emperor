@@ -8,7 +8,7 @@ from emperor.halting import (
     SoftHalting,
     SoftHaltingConfig,
 )
-from emperor.neuron._cluster.halting_lifecycle import _NeuronHaltingLifecycle
+from emperor.neuron._cluster.routing.halting import _NeuronHaltingLifecycle
 
 
 class _HaltingModelStub:
