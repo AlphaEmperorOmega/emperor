@@ -15,7 +15,6 @@ from torch.utils.data import DataLoader, TensorDataset
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.layers import (
     ActivationOptions,
@@ -82,8 +81,6 @@ def _parametric_layer(*, top_k: int = 2) -> torch.nn.Module:
         "top_k": top_k,
         "num_experts": num_experts,
         "weighted_parameters_flag": True,
-        "clip_parameter_option": ClipParameterOptions.DISABLED,
-        "clip_range": 1.0,
     }
     router_config = RouterConfig(
         input_dim=input_dim,
@@ -115,7 +112,7 @@ def _parametric_layer(*, top_k: int = 2) -> torch.nn.Module:
         adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=None,
             weight_config=None,
             diagonal_config=None,
             bias_config=None,
@@ -160,8 +157,6 @@ def _weight_only_parametric_layer(
         "top_k": top_k,
         "num_experts": num_experts,
         "weighted_parameters_flag": True,
-        "clip_parameter_option": ClipParameterOptions.DISABLED,
-        "clip_range": 1.0,
     }
     router_config = RouterConfig(
         input_dim=input_dim,
@@ -193,7 +188,7 @@ def _weight_only_parametric_layer(
         adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=None,
             weight_config=None,
             diagonal_config=None,
             bias_config=None,
@@ -248,7 +243,7 @@ def _dense_vector_parametric_layer() -> torch.nn.Module:
         adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
             input_dim=input_dim,
             output_dim=output_dim,
-            grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+            grouping_config=None,
             weight_config=None,
             diagonal_config=None,
             bias_config=None,
@@ -505,8 +500,8 @@ class ParametricMonitorLifecycleTests(unittest.TestCase):
         expected_scalars = {
             "parametric/parametric/generated_weight_norm": 3.0,
             "parametric/parametric/generated_bias_norm": math.sqrt(8.0),
-            "parametric/parametric/weight_clip_saturation_fraction": 0.5,
-            "parametric/parametric/bias_clip_saturation_fraction": 0.5,
+            "parametric/parametric/weight_clip_saturation_fraction": 0.0,
+            "parametric/parametric/bias_clip_saturation_fraction": 0.0,
             "parametric/parametric/auxiliary_loss": 0.0,
             "parametric/parametric/skip_fraction": 1.0,
             "parametric/parametric/drop_fraction": 0.0,
