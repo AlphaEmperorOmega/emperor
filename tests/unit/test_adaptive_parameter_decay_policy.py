@@ -48,10 +48,10 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     LayerState,
-    RowLayout,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.nn import Module
+from support.adaptive_grouping import grouping_value
 
 
 def linear_stack_config(input_dim: int, output_dim: int) -> LayerStackConfig:
@@ -294,7 +294,7 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
                             rate=0.25,
                             warmup_batches=1,
                         ),
-                        grouping_scope=(AdaptiveParameterGroupingScopeOptions.DISABLED),
+                        grouping_config=None,
                     )
                 ),
             )
@@ -734,24 +734,23 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
                             WeightDecayScheduleOptions.MULTIPLICATIVE,
                             rate=0.25,
                         ),
-                        grouping_scope=AdaptiveParameterGroupingScopeOptions.ROWS,
-                        group_count=2,
+                        grouping_config=grouping_value(
+                            AdaptiveParameterGroupingScopeOptions.ROWS,
+                            2,
+                            input_order="BATCH_FIRST",
+                        ),
                     )
                 ),
             )
         )
         inputs = torch.tensor([[1.0, -2.0], [0.5, 3.0], [-1.0, 4.0], [2.0, -0.5]])
-        row_layout = RowLayout.rows(
-            4,
-            context_sharing_restricted=False,
-        )
 
-        linear(inputs, row_layout=row_layout)
+        linear(inputs)
         self.assertEqual(
             linear.adaptive_behaviour.bias_model._decay_policy.decay_step.item(),
             1.0,
         )
-        linear(inputs, row_layout=row_layout)
+        linear(inputs)
         self.assertEqual(
             linear.adaptive_behaviour.bias_model._decay_policy.decay_step.item(),
             2.0,

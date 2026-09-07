@@ -55,7 +55,7 @@ class _GroupingOwnerWithoutValidator:
 @dataclass
 class _GroupingProbeConfig(ConfigBase):
     grouping_enabled: bool = False
-    grouping_scope: str = ""
+    scope: str = ""
     nested: object = None
 
     def _registry_owner(self) -> type:
@@ -198,11 +198,11 @@ class TestValidatorBase(unittest.TestCase):
     ) -> None:
         first = _GroupingProbeConfig(
             grouping_enabled=True,
-            grouping_scope="sequence",
+            scope="sequence",
         )
         second = _GroupingProbeConfig(
             grouping_enabled=True,
-            grouping_scope="rows",
+            scope="rows",
         )
         root = _GroupingProbeConfig()
         nested: dict[str, object] = {"root_cycle": root}
@@ -224,7 +224,7 @@ class TestValidatorBase(unittest.TestCase):
             _first_adaptive_grouping_path(
                 root,
                 root="Root",
-                predicate=lambda config: config.grouping_scope == "rows",
+                predicate=lambda config: config.scope == "rows",
             ),
             "Root.nested['matches'][1][0]",
         )
