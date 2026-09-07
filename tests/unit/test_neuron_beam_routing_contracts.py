@@ -5,8 +5,8 @@ from unittest.mock import patch
 import torch
 
 from emperor.neuron._cluster.plasticity import ClusterPlasticityDelegate
-from emperor.neuron._cluster.recurrent_routes import ClusterRoutingDelegate
-from emperor.neuron._cluster.state import (
+from emperor.neuron._cluster.routing.delegate import ClusterRoutingDelegate
+from emperor.neuron._cluster.routing.state import (
     NeuronClusterRouteState,
     _NeuronClusterForwardContext,
 )
