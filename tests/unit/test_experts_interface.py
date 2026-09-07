@@ -97,16 +97,6 @@ LAYER_CONFIG_FIELDS = (
     "layer_model_config",
 )
 
-STATE_FIELDS = (
-    "hidden",
-    "loss",
-    "halting_state",
-    "residual_state",
-    "row_layout",
-    "probabilities",
-    "indices",
-    "skip_mask",
-)
 
 RNG_DIGESTS = {
     "disabled_sparse": (
@@ -555,3 +545,13 @@ print(json.dumps({
 
 if __name__ == "__main__":
     unittest.main()
+
+STATE_FIELDS = (
+    "hidden",
+    "loss",
+    "halting_state",
+    "residual_state",
+    "probabilities",
+    "indices",
+    "skip_mask",
+)
