@@ -17,7 +17,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     RecurrentCompositionConfig,
-    RowLayout,
     TinyRecursiveModelRecurrentConfig,
 )
 from emperor.linears import LinearLayerConfig
@@ -157,15 +156,8 @@ def _state(
     key_padding_mask: torch.Tensor | None = None,
 ) -> AttentionLayerState:
     hidden = torch.randn(2, sequence_length, model_dim, requires_grad=True)
-    row_layout = RowLayout.sequence(
-        leading_shape=(2, sequence_length),
-        batch_axis=0,
-        sequence_axis=1,
-        context_sharing_restricted=False,
-    )
     return AttentionLayerState(
         hidden=hidden,
-        row_layout=row_layout,
         key_padding_mask=key_padding_mask,
     )
 
@@ -186,14 +178,12 @@ class TestTinyRecursiveModelRecurrentSharedBlocks(unittest.TestCase):
             sequence_length=sequence_length,
             key_padding_mask=key_padding_mask,
         )
-        row_layout = state.row_layout
         inputs = state.hidden
 
         result = runtime(state)
         result.hidden.sum().backward()
 
         self.assertEqual(result.hidden.shape, (2, sequence_length, model_dim))
-        self.assertIs(result.row_layout, row_layout)
         self.assertIs(result.key_padding_mask, key_padding_mask)
         self.assertIsNotNone(inputs.grad)
         self.assertTrue(
@@ -259,14 +249,12 @@ class TestHierarchicalReasoningModelRecurrentSharedBlocks(unittest.TestCase):
             sequence_length=sequence_length,
             key_padding_mask=key_padding_mask,
         )
-        row_layout = state.row_layout
         inputs = state.hidden
 
         result = runtime(state)
         result.hidden.sum().backward()
 
         self.assertEqual(result.hidden.shape, (2, sequence_length, model_dim))
-        self.assertIs(result.row_layout, row_layout)
         self.assertIs(result.key_padding_mask, key_padding_mask)
         self.assertIsNotNone(inputs.grad)
         self.assertTrue(
