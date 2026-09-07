@@ -11,7 +11,6 @@ import models.experts.linear.config as experts_linear_config
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     AdaptiveParameterAugmentationConfig,
-    AdaptiveParameterGroupingScopeOptions,
 )
 from emperor.layers import (
     ActivationOptions,
@@ -129,7 +128,7 @@ class InspectionGraphConfigurationTests(unittest.TestCase):
                 adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
                     input_dim=4,
                     output_dim=3,
-                    grouping_scope=AdaptiveParameterGroupingScopeOptions.DISABLED,
+                    grouping_config=None,
                 ),
             )
         )
