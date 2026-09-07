@@ -60,6 +60,8 @@ class LinearAdaptiveConfigBuilder:
         runtime = self.runtime
         return ControlConfigFactory(
             ControlConfigDependencies(
+                grouping_config=runtime.grouping_config,
+                router_grouping_config=runtime.router_grouping_config,
                 stack_options=runtime.stack_options,
                 submodule_stack_options=runtime.submodule_stack_options,
                 mixture_options=runtime.mixture_options,
