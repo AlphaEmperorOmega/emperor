@@ -1,7 +1,8 @@
 import unittest
 from copy import deepcopy
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
+import pytest
 import torch
 
 from emperor.attention import (
@@ -21,6 +22,7 @@ from emperor.experts import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
     MixtureOfExpertsConfig,
+    MixtureOfExpertsLayerConfig,
     RoutingInitializationMode,
 )
 from emperor.experts._layers.mixture import MixtureOfExperts
@@ -38,7 +40,6 @@ from emperor.layers import (
     LayerState,
     RecurrentLayer,
     RecurrentLayerConfig,
-    RowLayout,
     TinyRecursiveModelRecurrentConfig,
 )
 from emperor.linears import LinearLayerConfig
@@ -53,6 +54,7 @@ from emperor.transformer import (
     TransformerEncoderBlockLayerConfig,
     TransformerEncoderLayerConfig,
 )
+from support.adaptive_grouping import grouping_value
 from support.attention import build_attention_config
 
 
@@ -105,8 +107,7 @@ def grouped_linear_config(
                 decay_warmup_batches=0,
                 model_config=linear_stack(dimension, dimension),
             ),
-            grouping_scope=scope,
-            group_count=2,
+            grouping_config=grouping_value(scope, 2, input_order="BATCH_FIRST"),
         ),
     )
 
@@ -221,15 +222,17 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
 
         self.assertIsNot(cloned_augmentation, original_augmentation)
         self.assertEqual(
-            cloned_augmentation.grouping_scope,
-            original_augmentation.grouping_scope,
+            cloned_augmentation.grouping_config.scope,
+            original_augmentation.grouping_config.scope,
         )
         self.assertEqual(
-            cloned_augmentation.group_count,
-            original_augmentation.group_count,
+            cloned_augmentation.grouping_config.group_count,
+            original_augmentation.grouping_config.group_count,
         )
-        cloned_augmentation.group_count = 1
-        self.assertEqual(original_augmentation.group_count, 2)
+        cloned_augmentation.grouping_config = replace(
+            cloned_augmentation.grouping_config, group_count=1
+        )
+        self.assertEqual(original_augmentation.grouping_config.group_count, 2)
 
     def test_layer_and_shared_stack_controllers_reject_grouping_at_build_time(self):
         grouped_model = grouped_linear_config(
@@ -321,10 +324,6 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
             output_state = model(
                 LayerState(
                     hidden=inputs,
-                    row_layout=RowLayout.rows(
-                        4,
-                        context_sharing_restricted=False,
-                    ),
                 )
             )
         finally:
@@ -387,10 +386,6 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
             output_state = model(
                 LayerState(
                     hidden=inputs,
-                    row_layout=RowLayout.rows(
-                        4,
-                        context_sharing_restricted=False,
-                    ),
                 )
             )
         finally:
@@ -689,9 +684,9 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
             MixtureOfExperts(config)
         self.assertEqual(
             str(error.exception),
-            "Adaptive parameter grouping is not supported inside routed expert "
-            "models because routing changes row membership and order. Found "
-            "grouping at MixtureOfExpertsConfig.expert_model_config.layer_config."
+            "Routed expert adaptive grouping requires ROWS with chunk_size; "
+            "fixed-count and SEQUENCE grouping are unsupported. Found grouping at "
+            "MixtureOfExpertsConfig.expert_model_config.layer_config."
             "layer_model_config.nested['matches'][0].",
         )
         self.assertTrue(torch.equal(torch.random.get_rng_state(), rng_state))
@@ -775,7 +770,7 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "not supported by mixture-of-attention-heads projections",
+            "input_order must be SEQUENCE_FIRST",
         ):
             config.build()
 
@@ -809,9 +804,9 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
 
         self.assertEqual(
             str(caught.exception),
-            "Adaptive parameter grouping is not supported by mixture-of-attention-"
-            "heads projections because expert routing changes row membership and "
-            "order. Found grouping at MixtureOfAttentionHeadsConfig.experts_config."
+            "Routed expert adaptive grouping requires ROWS with chunk_size; "
+            "fixed-count and SEQUENCE grouping are unsupported. Found grouping at "
+            "MixtureOfAttentionHeadsConfig.experts_config."
             "expert_model_config.layer_config.layer_model_config.nested"
             "['matches'][0].",
         )
@@ -820,3 +815,58 @@ class AdaptiveParameterGroupingBoundaryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.parametrize("reduce,top_k", [(False, 2), (True, 2), (False, 1)])
+def test_expert_expansion_is_checked_before_grouped_downstream_gate(reduce, top_k):
+    expert_config = MixtureOfExpertsConfig(
+        input_dim=2,
+        output_dim=2,
+        top_k=top_k,
+        num_experts=2,
+        capacity_factor=0.0,
+        dropped_token_behavior=DroppedTokenOptions.ZEROS,
+        compute_expert_mixture_flag=reduce,
+        weighted_parameters_flag=True,
+        weighting_position_option=ExpertWeightingPositionOptions.AFTER_EXPERTS,
+        routing_initialization_mode=RoutingInitializationMode.DISABLED,
+        sampler_config=None,
+        expert_model_config=linear_stack(2, 2),
+    )
+    config = MixtureOfExpertsLayerConfig(
+        input_dim=2,
+        output_dim=2,
+        activation=ActivationOptions.DISABLED,
+        layer_norm_position=LayerNormPositionOptions.DISABLED,
+        residual_config=None,
+        dropout_probability=0.0,
+        halting_config=None,
+        memory_config=None,
+        gate_config=GateConfig(
+            gate_dim=2,
+            option=LayerGateOptions.ADDITION,
+            activation=ActivationOptions.DISABLED,
+            model_config=grouped_stack(2, AdaptiveParameterGroupingScopeOptions.ROWS),
+        ),
+        layer_model_config=expert_config,
+    )
+    before = torch.get_rng_state().clone()
+    if not reduce and top_k > 1:
+        with pytest.raises(ValueError, match="unreduced expert rows"):
+            config.build()
+        torch.testing.assert_close(torch.get_rng_state(), before)
+        return
+    from emperor.experts import MixtureOfExpertsLayerState
+
+    model = config.build()
+    inputs = torch.randn(4, 2, requires_grad=True)
+    probabilities = torch.ones(4, top_k) if top_k > 1 else torch.ones(4)
+    indices = None if top_k == 2 else torch.tensor([0, 1, 0, 1])
+    result = model(
+        MixtureOfExpertsLayerState(
+            hidden=inputs, probabilities=probabilities, indices=indices
+        )
+    )
+    assert result.hidden.shape == inputs.shape
+    result.hidden.square().sum().backward()
+    assert torch.isfinite(inputs.grad).all()

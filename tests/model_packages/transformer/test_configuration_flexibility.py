@@ -2,6 +2,7 @@ import unittest
 
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveParameterGroupingScopeOptions,
+    AdaptiveParameterInputOrderOptions,
     BankExpansionFactorOptions,
     DynamicDepthOptions,
     MaskDimensionOptions,
@@ -217,7 +218,11 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
         ) in _ADAPTIVE_TRANSFORMER_PACKAGES:
             overrides = {
                 **common,
-                f"{prefix}grouping_scope": (AdaptiveParameterGroupingScopeOptions.ROWS),
+                f"{prefix}grouping_scope": (
+                    AdaptiveParameterGroupingScopeOptions.SEQUENCE
+                ),
+                f"{prefix}grouping_sequence_length": 4,
+                f"{prefix}grouping_input_order": AdaptiveParameterInputOrderOptions.SEQUENCE_FIRST,
                 f"{prefix}group_count": 2,
                 f"{prefix}weight_option": SingleModelDynamicWeightConfig,
                 f"{prefix}generator_depth": DynamicDepthOptions.DEPTH_OF_THREE,
@@ -301,10 +306,10 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
                 cross_augmentation = decoder.cross_attention_config.projection_model_config.layer_config.layer_model_config.adaptive_augmentation_config
 
                 self.assertIs(
-                    augmentation.grouping_scope,
-                    AdaptiveParameterGroupingScopeOptions.ROWS,
+                    augmentation.grouping_config.scope,
+                    AdaptiveParameterGroupingScopeOptions.SEQUENCE,
                 )
-                self.assertEqual(augmentation.group_count, 2)
+                self.assertEqual(augmentation.grouping_config.group_count, 2)
                 self.assertEqual(augmentation.model_config.hidden_dim, 23)
                 self.assertEqual(cross_augmentation.model_config.hidden_dim, 29)
                 self.assertIsInstance(
@@ -372,7 +377,6 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
             "encoder_attn_adaptive_weight_option": (SingleModelDynamicWeightConfig),
             "encoder_attn_adaptive_generator_stack_hidden_dim": 27,
             "router_adaptive_weight_option": SingleModelDynamicWeightConfig,
-            "router_adaptive_group_count": 2,
             "router_adaptive_generator_stack_hidden_dim": 33,
         }
         package = model_package("transformer/expert_linear_adaptive")
@@ -398,7 +402,7 @@ class TestTransformerConfigurationFlexibility(unittest.TestCase):
             projection_augmentation.weight_config,
             SingleModelDynamicWeightConfig,
         )
-        self.assertEqual(router_augmentation.group_count, 2)
+        self.assertIsNone(router_augmentation.grouping_config)
         self.assertEqual(router_augmentation.model_config.hidden_dim, 33)
         self.assertIsInstance(
             router_augmentation.weight_config,
