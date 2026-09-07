@@ -39,8 +39,6 @@ class ParametricCommitRegressionTests(unittest.TestCase):
             top_k=2,
             num_experts=2,
             weighted_parameters_flag=False,
-            clip_parameter_option=ClipParameterOptions.DISABLED,
-            clip_range=1.0,
         ).build()
         parameter_bank = torch.tensor(
             [
@@ -50,10 +48,7 @@ class ParametricCommitRegressionTests(unittest.TestCase):
         )
         with torch.no_grad():
             mixture.parameter_bank.copy_(parameter_bank)
-        generated_weights = mixture.compute_mixture(
-            torch.full((3, 2), 0.5),
-            None,
-        )
+        generated_weights = mixture.compute_mixture(torch.full((3, 2), 0.5), None)
         inputs = torch.tensor([[1.0, 2.0], [-1.0, 0.5], [3.0, -2.0]])
         layer = ParametricLayer.__new__(ParametricLayer)
         nn.Module.__init__(layer)
@@ -75,8 +70,6 @@ class ParametricCommitRegressionTests(unittest.TestCase):
             top_k=2,
             num_experts=2,
             weighted_parameters_flag=True,
-            clip_parameter_option=ClipParameterOptions.DISABLED,
-            clip_range=1.0,
         ).build()
         parameter_bank = torch.tensor(
             [
@@ -336,9 +329,7 @@ class ParametricCommitRegressionTests(unittest.TestCase):
             "^GeneratorWeightsMixtureConfig with weighted_parameters_flag=True "
             "requires SHARED_ROUTER routing\\.$",
         ):
-            ParametricLayerValidator._validate_generator_routing(
-                independently_weighted
-            )
+            ParametricLayerValidator._validate_generator_routing(independently_weighted)
 
         shared_layer_owned = SimpleNamespace(
             weight_mixture_config=GeneratorWeightsMixtureConfig(
@@ -357,9 +348,7 @@ class ParametricCommitRegressionTests(unittest.TestCase):
 
     def test_top_one_router_entropy_is_zero_per_routing_unit(self) -> None:
         matrix_probabilities = torch.tensor([0.9, 0.2, 0.4])
-        vector_probabilities = torch.tensor(
-            [[0.9, 0.2, 0.4], [0.1, 0.8, 0.3]]
-        )
+        vector_probabilities = torch.tensor([[0.9, 0.2, 0.4], [0.1, 0.8, 0.3]])
 
         torch.testing.assert_close(
             _ParametricDiagnostics.router_entropy(
