@@ -49,6 +49,9 @@ class MixtureOfExpertsModel(Module):
         existing_routing_probabilities = getattr(state, "probabilities", None)
         existing_expert_indices = getattr(state, "indices", None)
         existing_skip_mask = getattr(state, "skip_mask", None)
+        self.VALIDATOR.validate_grouping_forward_inputs(
+            self, state.hidden, existing_skip_mask
+        )
         probabilities, indices, skip_mask, shared_sampler_loss = (
             self.__maybe_apply_shared_routing(
                 state.hidden,
@@ -57,6 +60,7 @@ class MixtureOfExpertsModel(Module):
                 existing_skip_mask,
             )
         )
+        self.VALIDATOR.validate_grouping_forward_inputs(self, state.hidden, skip_mask)
         mixture_of_experts_state = MixtureOfExpertsLayerState(
             hidden=state.hidden,
             probabilities=probabilities,
@@ -64,7 +68,6 @@ class MixtureOfExpertsModel(Module):
             skip_mask=skip_mask,
             loss=state.loss,
             halting_state=state.halting_state,
-            row_layout=state.row_layout,
         )
         mixture_of_experts_state = self.expert_stack(mixture_of_experts_state)
         mixture_of_experts_state.loss = self.__combine_losses(

@@ -6,7 +6,11 @@ from typing import TYPE_CHECKING, cast
 import torch
 from torch import Tensor
 
-from emperor._validation import ValidatorBase, _adaptive_grouping_paths
+from emperor._validation import (
+    ValidatorBase,
+    _adaptive_grouping_configs,
+    _adaptive_grouping_paths,
+)
 from emperor.experts._options import (
     DroppedTokenOptions,
     ExpertWeightingPositionOptions,
@@ -32,7 +36,7 @@ class MixtureOfExpertsValidator(ValidatorBase):
         cls.validate_capacity_factor_is_non_negative(model)
         cls.validate_capacity_factor_consistent_with_top_k(model)
         cls.validate_dims_match_when_capacity_enabled(model)
-        cls.validate_adaptive_grouping_is_not_routed(model)
+        cls.validate_expert_adaptive_grouping(model)
 
     @classmethod
     def validate_config(
@@ -221,20 +225,48 @@ class MixtureOfExpertsValidator(ValidatorBase):
             )
 
     @staticmethod
-    def validate_adaptive_grouping_is_not_routed(
-        model: "MixtureOfExperts",
-    ) -> None:
-        grouping_paths = _adaptive_grouping_paths(
-            model.expert_model_config,
-            root="MixtureOfExpertsConfig.expert_model_config",
-        )
-        if not grouping_paths:
+    def validate_grouped_row_preservation(config, *, path: str) -> None:
+        if (
+            config.compute_expert_mixture_flag is False
+            and config.top_k is not None
+            and config.top_k != 1
+        ):
+            raise ValueError(
+                f"{path} cannot precede grouping with multiple unreduced expert rows; enable expert mixture reduction or use top_k=1."
+            )
+
+    @staticmethod
+    def grouping_child_boundaries(config):
+        return {"expert_model_config": "expert"}
+
+    @staticmethod
+    def validate_expert_adaptive_grouping(model: "MixtureOfExperts") -> None:
+        for path, augmentation in _adaptive_grouping_configs(
+            model.expert_model_config, root="MixtureOfExpertsConfig.expert_model_config"
+        ):
+            augmentation.registry_owner().VALIDATOR.validate_grouping_expert_input(
+                augmentation, path=path
+            )
+
+    @staticmethod
+    def validate_grouping_skip_mask(model, skip_mask) -> None:
+        if skip_mask is None or not (skip_mask == 0).any():
             return
-        raise ValueError(
-            "Adaptive parameter grouping is not supported inside routed expert "
-            "models because routing changes row membership and order. Found "
-            f"grouping at {grouping_paths[0]}."
-        )
+        if _adaptive_grouping_paths(model.cfg, root="MixtureOfExpertsConfig"):
+            raise ValueError(
+                "Adaptive grouping requires all-active skip_mask rows; inactive rows are not removed by dispatch."
+            )
+
+    @staticmethod
+    def validate_expert_output_rows(model, expert_samples, output) -> None:
+        if _adaptive_grouping_paths(
+            model.expert_model_config, root="MixtureOfExpertsConfig.expert_model_config"
+        ):
+            expected = (expert_samples.size(0), model.output_dim)
+            if not isinstance(output, Tensor) or tuple(output.shape) != expected:
+                raise ValueError(
+                    f"Grouped expert must return one row per retained assignment: expected {expected}."
+                )
 
     @staticmethod
     def validate_sampler_is_initialized(model: "MixtureOfExperts") -> None:
@@ -298,6 +330,7 @@ class MixtureOfExpertsValidator(ValidatorBase):
         cls.validate_indices(model, input_batch, indices)
         cls.validate_external_routing_inputs(model, probabilities, indices)
         cls.validate_skip_mask(input_batch, skip_mask, input_batch.shape[0])
+        cls.validate_grouping_skip_mask(model, skip_mask)
 
     @classmethod
     def validate_reduce_forward_inputs(
@@ -347,6 +380,7 @@ class MixtureOfExpertsValidator(ValidatorBase):
             skip_mask,
             validated_probabilities.shape[0],
         )
+        cls.validate_grouping_skip_mask(model, skip_mask)
 
     @staticmethod
     def validate_skip_mask(
