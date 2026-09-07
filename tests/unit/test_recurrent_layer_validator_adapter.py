@@ -152,7 +152,6 @@ class TestRecurrentLayerValidatorAdapter(unittest.TestCase):
                     RecurrentLayerValidator.validate_transition_output(
                         output_state,
                         transition_input,
-                        None,
                         expected_feature_dim=3,
                     )
 
