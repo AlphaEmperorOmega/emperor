@@ -542,11 +542,23 @@ print(json.dumps({
         )
         self.assertEqual(
             tuple(field.name for field in fields(MatrixWeightsMixtureConfig)),
-            MIXTURE_CONFIG_FIELDS,
+            (
+                "input_dim",
+                "output_dim",
+                "num_experts",
+                "top_k",
+                "weighted_parameters_flag",
+            ),
         )
         self.assertEqual(
             tuple(field.name for field in fields(MatrixBiasMixtureConfig)),
-            MIXTURE_CONFIG_FIELDS,
+            (
+                "input_dim",
+                "output_dim",
+                "num_experts",
+                "top_k",
+                "weighted_parameters_flag",
+            ),
         )
         self.assertEqual(
             tuple(field.name for field in fields(GeneratorWeightsMixtureConfig)),
