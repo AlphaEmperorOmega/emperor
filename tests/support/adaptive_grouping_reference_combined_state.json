@@ -1,0 +1,171 @@
+{
+  "revision": "13792f69d4ca11307a6f7677baf87b2a55682bc5",
+  "provenance": "Captured from an isolated git archive of the untouched starting revision. All-component ROWS reference supplements the bias-only snapshot captured before implementation edits.",
+  "source_path": "tests/unit/test_adaptive_parameter_grouping_contracts.py",
+  "components": [
+    "DualModelDynamicWeightConfig",
+    "StandardDynamicDiagonalConfig",
+    "AdditiveDynamicBiasConfig",
+    "PerAxisScoreMaskConfig"
+  ],
+  "input": [
+    [
+      1.0,
+      2.0
+    ],
+    [
+      -1.0,
+      3.0
+    ],
+    [
+      4.0,
+      -2.0
+    ],
+    [
+      0.5,
+      1.5
+    ]
+  ],
+  "output": [
+    [
+      4.637129306793213,
+      1.7043521404266357,
+      2.742741346359253
+    ],
+    [
+      4.637129306793213,
+      1.7043521404266357,
+      2.742741346359253
+    ],
+    [
+      -19.443876266479492,
+      -0.9991587400436401,
+      15.401071548461914
+    ],
+    [
+      -5.445090293884277,
+      -0.9991587400436401,
+      -1.2129290103912354
+    ]
+  ],
+  "state_dict": {
+    "weight_params": [
+      [
+        -0.2493593394756317,
+        0.8624519109725952,
+        -0.16876207292079926
+      ],
+      [
+        0.7710419297218323,
+        1.0528013706207275,
+        0.8063352108001709
+      ]
+    ],
+    "bias_params": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "adaptive_behaviour.weight_model._decay_policy.decay_step": [
+      0.0
+    ],
+    "adaptive_behaviour.weight_model._decay_policy.warmup_step": [
+      0.0
+    ],
+    "adaptive_behaviour.weight_model._normalization_policy.scale": 1.0,
+    "adaptive_behaviour.weight_model._normalization_policy.clamp_limit": 1.0,
+    "adaptive_behaviour.weight_model.input_model.model.layers.0.model.weight_params": [
+      [
+        [
+          0.8120390176773071,
+          -0.15755677223205566
+        ],
+        [
+          -0.7793111801147461,
+          -0.876618504524231
+        ]
+      ]
+    ],
+    "adaptive_behaviour.weight_model.input_model.model.layers.0.model.bias_params": [
+      [
+        1.3127225637435913,
+        0.2129882574081421
+      ]
+    ],
+    "adaptive_behaviour.weight_model.output_model.model.layers.0.model.weight_params": [
+      [
+        [
+          -0.4383883476257324,
+          0.22353780269622803,
+          0.6212113499641418
+        ],
+        [
+          0.11922235041856766,
+          0.19873525202274323,
+          0.6922457814216614
+        ]
+      ]
+    ],
+    "adaptive_behaviour.weight_model.output_model.model.layers.0.model.bias_params": [
+      [
+        0.8462355136871338,
+        0.9367664456367493,
+        -0.5528979301452637
+      ]
+    ],
+    "adaptive_behaviour.diagonal_model.model.layers.0.model.weight_params": [
+      [
+        0.0589277446269989,
+        -0.11142224818468094
+      ],
+      [
+        -0.20659750699996948,
+        -0.5861479043960571
+      ]
+    ],
+    "adaptive_behaviour.diagonal_model.model.layers.0.model.bias_params": [
+      0.0,
+      0.0
+    ],
+    "adaptive_behaviour.bias_model._decay_policy.decay_step": [
+      0.0
+    ],
+    "adaptive_behaviour.bias_model._decay_policy.warmup_step": [
+      0.0
+    ],
+    "adaptive_behaviour.bias_model.model.layers.0.model.weight_params": [
+      [
+        -0.8735249638557434,
+        -0.18416078388690948,
+        -0.8942347764968872
+      ],
+      [
+        0.9274258613586426,
+        0.3408704400062561,
+        0.5485482811927795
+      ]
+    ],
+    "adaptive_behaviour.bias_model.model.layers.0.model.bias_params": [
+      0.0,
+      0.0,
+      0.0
+    ],
+    "adaptive_behaviour.mask_model.model.layers.0.model.weight_params": [
+      [
+        0.1992182731628418,
+        -0.610863447189331,
+        -0.05530669912695885
+      ],
+      [
+        -0.5470356941223145,
+        -0.3804255723953247,
+        -0.8448362350463867
+      ]
+    ],
+    "adaptive_behaviour.mask_model.model.layers.0.model.bias_params": [
+      0.0,
+      0.0,
+      0.0
+    ]
+  }
+}
