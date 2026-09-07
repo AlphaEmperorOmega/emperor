@@ -7,6 +7,7 @@ from emperor.layers._options import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
 )
 
 if TYPE_CHECKING:
@@ -67,6 +68,15 @@ class LayerConfig(ConfigBase):
     )
     layer_model_config: ConfigBase | None = optional_field(
         "Config for the wrapped module, such as LinearLayerConfig."
+    )
+    normalization: NormalizationOptions | None = optional_field(
+        "Normalization or learned replacement applied at layer_norm_position, "
+        "over the last feature dimension. Choose RMS_NORM, LAYER_NORM, "
+        "DYNAMIC_TANH, DERF, or experimental DYISRU. Defaults to RMS_NORM when "
+        "unspecified. RMS_NORM and LAYER_NORM use epsilon 1e-5. DYNAMIC_TANH "
+        "and DERF start with scalar alpha=0.5; DERF shift starts at zero. "
+        "DYISRU starts with beta=4, learned through softplus with a 1e-5 floor. "
+        "Disable with layer_norm_position=DISABLED."
     )
 
     def _registry_owner(self) -> type:

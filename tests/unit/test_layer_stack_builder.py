@@ -15,6 +15,12 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStack,
     LayerStackConfig,
+    NormalizationOptions,
+)
+from emperor.layers._layer.pipeline.normalization_variants import (
+    DynamicErf,
+    DynamicISRU,
+    DynamicTanh,
 )
 from emperor.layers._stack.builder import LayerStackBuilder
 from emperor.linears import LinearLayerConfig
@@ -97,6 +103,41 @@ def make_stack_config(
 
 
 class TestLayerStackBuilder(unittest.TestCase):
+    def test_preserves_normalization_selection_through_stack_overrides(self):
+        module_types = {
+            NormalizationOptions.RMS_NORM: nn.RMSNorm,
+            NormalizationOptions.LAYER_NORM: nn.LayerNorm,
+            NormalizationOptions.DYNAMIC_TANH: DynamicTanh,
+            NormalizationOptions.DERF: DynamicErf,
+            NormalizationOptions.DYISRU: DynamicISRU,
+        }
+        for normalization in NormalizationOptions:
+            for output_postprocessing in (True, False):
+                with self.subTest(
+                    normalization=normalization,
+                    output_postprocessing=output_postprocessing,
+                ):
+                    cfg = make_stack_config(
+                        apply_output_postprocessing=output_postprocessing,
+                        last_layer_bias=LastLayerBiasOptions.DISABLED,
+                    )
+                    cfg.layer_config.normalization = normalization
+                    original = deepcopy(cfg)
+                    stack = LayerStack(cfg)
+                    first, final = stack.layers
+                    expected_type = module_types[normalization]
+
+                    self.assertIsInstance(first.normalization.module, expected_type)
+                    self.assertIs(final.cfg.normalization, normalization)
+                    if output_postprocessing:
+                        self.assertIsInstance(final.normalization.module, expected_type)
+                        self.assertIsNot(
+                            first.normalization.module, final.normalization.module
+                        )
+                    else:
+                        self.assertIsNone(final.normalization.module)
+                    self.assertEqual(cfg, original)
+
     def test_builds_layers_in_dimension_order_and_marks_only_the_last(self):
         builder = LayerStackBuilder(
             make_stack_config(),
