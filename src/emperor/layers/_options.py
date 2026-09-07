@@ -27,6 +27,16 @@ class ActivationOptions(BaseOptions):
     MISH = member(F.mish)
 
 
+class NormalizationOptions(BaseOptions):
+    """Last-dimension normalization and learned elementwise replacements."""
+
+    RMS_NORM = 1
+    LAYER_NORM = 2
+    DYNAMIC_TANH = 3
+    DERF = 4
+    DYISRU = 5
+
+
 class LayerNormPositionOptions(BaseOptions):
     DISABLED = 0
     DEFAULT = 1

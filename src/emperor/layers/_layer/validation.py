@@ -9,7 +9,11 @@ from emperor.layers._composition.gate.validation import LayerGateValidator
 from emperor.layers._composition.residual.validation import (
     ResidualConnectionValidator,
 )
-from emperor.layers._options import ActivationOptions, LayerNormPositionOptions
+from emperor.layers._options import (
+    ActivationOptions,
+    LayerNormPositionOptions,
+    NormalizationOptions,
+)
 from emperor.layers._validation.common import (
     _HALTING_CONFIG_FIELDS,
     _MEMORY_CONFIG_FIELDS,
@@ -20,6 +24,8 @@ from emperor.layers._validation.common import (
 )
 
 if TYPE_CHECKING:
+    from torch import Tensor
+
     from emperor.halting import HaltingConfig, HaltingInterface, HaltingStateBase
     from emperor.layers._composition.gate import LayerGate
     from emperor.layers._composition.residual.base import ResidualConnectionAbstract
@@ -108,11 +114,24 @@ class LayerMemoryDelegateValidator(ValidatorBase):
 class LayerNormalizationDelegateValidator(ValidatorBase):
     @classmethod
     def validate(cls, model: LayerNormalizationDelegate) -> None:
+        cls.validate_normalization_option(model.cfg.normalization)
         cls.validate_resolved_position(model.cfg.layer_norm_position)
         cls.validate_resolved_dimensions(
             model.cfg.input_dim,
             model.cfg.output_dim,
         )
+
+    @staticmethod
+    def validate_normalization_option(
+        normalization: NormalizationOptions | None,
+    ) -> None:
+        if normalization is not None and not isinstance(
+            normalization, NormalizationOptions
+        ):
+            raise TypeError(
+                "normalization must be a NormalizationOptions value or None, "
+                f"got {type(normalization).__name__}."
+            )
 
     @staticmethod
     def validate_resolved_position(
@@ -130,6 +149,18 @@ class LayerNormalizationDelegateValidator(ValidatorBase):
             raise ValueError(
                 "Layer normalization requires resolved input and output dimensions."
             )
+
+
+class ElementwiseNormalizationValidator(ValidatorBase):
+    @staticmethod
+    def validate_forward_input(hidden: Tensor, dimension: int) -> None:
+        if hidden.ndim == 0 or hidden.shape[-1] != dimension:
+            raise ValueError(
+                f"Normalization requires last dimension {dimension}, "
+                f"got shape {tuple(hidden.shape)}."
+            )
+        if not hidden.is_floating_point():
+            raise TypeError("Normalization requires floating-point inputs.")
 
 
 class LayerPostprocessingDelegateValidator(ValidatorBase):
@@ -220,6 +251,7 @@ class LayerResidualDelegateValidator(ValidatorBase):
 class LayerValidator(ValidatorBase):
     GATE_VALIDATOR = LayerGateValidator
     RESIDUAL_VALIDATOR = ResidualConnectionValidator
+    NORMALIZATION_VALIDATOR = LayerNormalizationDelegateValidator
 
     OPTIONAL_FIELDS = {
         "gate_config",
@@ -228,6 +260,7 @@ class LayerValidator(ValidatorBase):
         "layer_model_config",
         "residual_config",
         "override_config",
+        "normalization",
     }
 
     @classmethod
@@ -235,6 +268,7 @@ class LayerValidator(ValidatorBase):
         cfg = model.cfg
         cls.validate_required_fields(cfg)
         cls.validate_field_types(cfg)
+        cls.NORMALIZATION_VALIDATOR.validate_normalization_option(cfg.normalization)
         cls.validate_dimensions(input_dim=cfg.input_dim, output_dim=cfg.output_dim)
         cls._validate_dropout_probability(cfg.dropout_probability)
         cls._validate_residual_config(cfg.residual_config)
@@ -317,7 +351,7 @@ class LayerValidator(ValidatorBase):
         raise ValueError(
             f"layer_norm_position must be DISABLED when layer_model_config "
             f"is a spatial (Conv2d-like) module, received "
-            f"{cfg.layer_norm_position}. nn.RMSNorm normalizes over the last "
+            f"{cfg.layer_norm_position}. Layer normalization operates over the last "
             f"tensor dim; for (B, C, H, W) inputs that is W, which is not "
             f"channel normalization. Use BatchNorm2d or GroupNorm externally, "
             f"or disable layer norm."
