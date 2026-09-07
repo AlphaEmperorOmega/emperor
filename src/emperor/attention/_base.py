@@ -6,7 +6,6 @@ from torch import Tensor
 
 from emperor.attention._ops.batching import BatchDimensionManager
 from emperor.attention._ops.bias import KeyValueBias
-from emperor.attention._ops.projection_layout import ProjectionRowLayoutManager
 from emperor.attention._ops.zero_attention import ZeroAttention
 from emperor.attention._runtime import MultiHeadAttentionInputs
 from emperor.attention._validation import MultiHeadAttentionValidator
@@ -51,7 +50,6 @@ class MultiHeadAttentionAbstract(Module):
         self.head_dim = self.embedding_dim // self.num_heads
 
         self.batch_manager = BatchDimensionManager(self.cfg)
-        self.layout_manager = ProjectionRowLayoutManager(self.VALIDATOR)
         self.bias = self.BIAS_HANDLER(self.cfg)
         self.zero_attention = self.ZERO_ATTENTION_HANDLER(self.cfg)
         self._build_attention_components()
@@ -83,9 +81,10 @@ class MultiHeadAttentionAbstract(Module):
         self.VALIDATOR.validate_runtime_tensors(self, attention_inputs)
         self.VALIDATOR.validate_static_key_value_inputs(self, attention_inputs)
         self.VALIDATOR.validate_runtime_layout(self, attention_inputs)
+        unprepared_attention_inputs = attention_inputs
         attention_inputs = self.masks.prepare_attention_masks(attention_inputs)
-        attention_inputs = self.layout_manager.attach_projection_row_layout(
-            attention_inputs
+        self.VALIDATOR.validate_grouping_forward_inputs(
+            self, unprepared_attention_inputs
         )
         attention_inputs = self.projector.compute_qkv_projections(attention_inputs)
         attention_inputs = self.reshaper.reshape_qkv_for_attention(attention_inputs)

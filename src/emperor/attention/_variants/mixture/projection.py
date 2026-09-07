@@ -19,7 +19,6 @@ from emperor.experts._layers.mixture import MixtureOfExperts
 
 if TYPE_CHECKING:
     from emperor.attention._runtime import (
-        AttentionRuntimeLayout,
         MultiHeadAttentionInputs,
     )
     from emperor.attention._variants.mixture.config import (
@@ -154,8 +153,5 @@ class MixtureOfAttentionHeadsProjector(ProjectorBase):
     def compute_output_projection(
         self,
         weighted_values: Tensor,
-        *,
-        runtime_layout: "AttentionRuntimeLayout | None" = None,
     ) -> Tensor:
-        del runtime_layout
         return self._compute_projection(weighted_values, self.output_model)

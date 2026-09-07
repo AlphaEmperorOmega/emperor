@@ -14,7 +14,6 @@ from emperor.attention._variants.self_attention.config import (
 if TYPE_CHECKING:
     from emperor.attention._config import MultiHeadAttentionConfig
     from emperor.attention._runtime import MultiHeadAttentionInputs
-    from emperor.layers import RowLayout
 
 
 class SelfAttentionProjector(ProjectorBase):
@@ -66,26 +65,21 @@ class SelfAttentionProjector(ProjectorBase):
         self,
         attention_inputs: "MultiHeadAttentionInputs",
     ) -> "MultiHeadAttentionInputs":
-        runtime_layout = attention_inputs.runtime_layout
-        row_layout = runtime_layout.row_layout if runtime_layout is not None else None
         match self.projection_strategy:
             case SelfAttentionProjectionStrategy.FUSED:
                 query, key, value = self.__compute_fused_qkv_projections(
                     attention_inputs.query,
-                    row_layout=row_layout,
                 )
             case SelfAttentionProjectionStrategy.FUSED_KEY_VALUE:
                 query, key, value = self.__compute_fused_key_value_projections(
                     attention_inputs.query,
                     attention_inputs.key,
-                    row_layout=row_layout,
                 )
             case SelfAttentionProjectionStrategy.SEPARATE:
                 query, key, value = self.__compute_separate_qkv_projections(
                     attention_inputs.query,
                     attention_inputs.key,
                     attention_inputs.value,
-                    row_layout=row_layout,
                 )
             case _:
                 raise AssertionError(
@@ -96,13 +90,10 @@ class SelfAttentionProjector(ProjectorBase):
     def __compute_fused_qkv_projections(
         self,
         query: Tensor,
-        *,
-        row_layout: "RowLayout | None",
     ) -> tuple[Tensor, Tensor, Tensor]:
         qkv_projection = self._compute_projection(
             query,
             self.qkv_model,
-            row_layout=row_layout,
         )
         return self.__split_self_attention_projection(qkv_projection)
 
@@ -110,18 +101,14 @@ class SelfAttentionProjector(ProjectorBase):
         self,
         query: Tensor,
         key: Tensor,
-        *,
-        row_layout: "RowLayout | None",
     ) -> tuple[Tensor, Tensor, Tensor]:
         q_projection = self._compute_projection(
             query,
             self.query_model,
-            row_layout=row_layout,
         )
         key_value_projection = self._compute_projection(
             key,
             self.key_value_model,
-            row_layout=row_layout,
         )
         k_projection, v_projection = self.__split_key_value_projection(
             key_value_projection
@@ -133,23 +120,18 @@ class SelfAttentionProjector(ProjectorBase):
         query: Tensor,
         key: Tensor,
         value: Tensor,
-        *,
-        row_layout: "RowLayout | None",
     ) -> tuple[Tensor, Tensor, Tensor]:
         q_projection = self._compute_projection(
             query,
             self.query_model,
-            row_layout=row_layout,
         )
         k_projection = self._compute_projection(
             key,
             self.key_model,
-            row_layout=row_layout,
         )
         v_projection = self._compute_projection(
             value,
             self.value_model,
-            row_layout=row_layout,
         )
         return q_projection, k_projection, v_projection
 
