@@ -1,10 +1,18 @@
 # ruff: noqa: E501
-
 from collections.abc import Mapping
+from dataclasses import fields, replace
 from types import ModuleType
 from typing import Final
 
 import models.neuron.expert_linear_adaptive.config as config
+from models.neuron.expert_linear_adaptive._generation import (
+    apply_generation_options,
+    generation_keys,
+)
+from models.neuron.expert_linear_adaptive._grouping import (
+    apply_grouping_options,
+    grouping_keys,
+)
 from models.neuron.expert_linear_adaptive._hidden._config_implementation import (
     _RuntimeDefaultsResolver,
     _RuntimeDefaultValues,
@@ -70,7 +78,16 @@ def runtime_from_flat(
     flat_kwargs: Mapping[str, object] | None = None,
     config_module: ModuleType = config,
 ) -> RuntimeOptions:
-    flat_values = builder_kwargs_from_flat(flat_kwargs or {}, config_module)
+    generation_values = dict(flat_kwargs or {})
+    feature_keys = generation_keys(config_module) | grouping_keys(config_module)
+    flat_values = builder_kwargs_from_flat(
+        {
+            key: value
+            for key, value in generation_values.items()
+            if key not in feature_keys
+        },
+        config_module,
+    )
     try:
         values = _RuntimeDefaultValues(**flat_values)
     except TypeError as error:
@@ -79,7 +96,17 @@ def runtime_from_flat(
             "_RuntimeDefaultsResolver.__init__",
         )
         raise TypeError(message) from None
-    return _runtime_from_resolver(resolve_runtime_defaults(values))
+    runtime = _runtime_from_resolver(resolve_runtime_defaults(values))
+    runtime_values = {
+        item.name: getattr(runtime, item.name) for item in fields(runtime)
+    }
+    runtime_values = apply_generation_options(
+        runtime_values, generation_values, config_module
+    )
+    return replace(
+        runtime,
+        **apply_grouping_options(runtime_values, generation_values, config_module),
+    )
 
 
 DEFAULT_RUNTIME: Final[RuntimeOptions] = runtime_from_flat()
