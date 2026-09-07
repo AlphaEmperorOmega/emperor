@@ -1,10 +1,11 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import torch
 
 from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
 )
+from emperor.augmentations.adaptive_parameters import GroupingConfig
 from emperor.experts import MixtureOfExpertsConfig, MixtureOfExpertsModelConfig
 from emperor.layers import LastLayerBiasOptions, LayerStackConfig, RecurrentLayerConfig
 from models.vit.expert_linear_adaptive._expert_control_config_factory import (
@@ -53,6 +54,8 @@ class VitExpertConfigDependencies:
 
 @dataclass(frozen=True)
 class VitExpertAdaptiveConfigDependencies(VitExpertConfigDependencies):
+    grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
+    router_grouping_config: GroupingConfig | None = field(default=None, kw_only=True)
     mixture_submodule_stack_options: ExpertsSubmoduleStackOptions
     mixture_layer_controller_options: ExpertsLayerControllerOptions
     mixture_dynamic_memory_options: ExpertsDynamicMemoryOptions
@@ -242,6 +245,7 @@ class VitExpertAdaptiveConfigFactory(_VitExpertConfigFactoryBase):
                 adaptive_generator_stack_options=(
                     dependencies.adaptive_generator_stack_options
                 ),
+                grouping_config=dependencies.grouping_config,
                 hidden_adaptive_weight_options=(
                     dependencies.hidden_adaptive_weight_options
                 ),
@@ -250,6 +254,7 @@ class VitExpertAdaptiveConfigFactory(_VitExpertConfigFactoryBase):
                     dependencies.hidden_adaptive_diagonal_options
                 ),
                 hidden_adaptive_mask_options=dependencies.hidden_adaptive_mask_options,
+                router_grouping_config=dependencies.router_grouping_config,
                 router_adaptive_weight_options=(
                     dependencies.router_adaptive_weight_options
                 ),

@@ -16,6 +16,7 @@ SEARCH_SPACE_WEIGHT_OPTION: list = [
     None,
     SingleModelDynamicWeightConfig,
     DualModelDynamicWeightConfig,
+    DiagonallyModulatedLowRankDynamicWeightConfig,
     LowRankDynamicWeightConfig,
     HypernetworkDynamicWeightConfig,
     LayeredWeightedBankDynamicWeightConfig,
