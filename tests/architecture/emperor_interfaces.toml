@@ -39,7 +39,6 @@ retired_modules = [
   "emperor.layers._mirrored",
   "emperor.layers._validation.gate",
   "emperor.layers._validation.layer",
-  "emperor.layers._validation.row_layout",
   "emperor.layers._validation.stack",
   "emperor.layers._composition.attention_residual",
   "emperor.layers._composition.pairwise_residual",
@@ -101,7 +100,6 @@ retired_symbol_imports = [
   { module = "emperor.layers._composition.residual.pairwise", name = "WeightedResidual" },
   { module = "emperor.layers._validation", name = "AttentionResidualValidator" },
   { module = "emperor.layers._validation", name = "LayerGateValidator" },
-  { module = "emperor.layers._validation", name = "RowLayoutValidator" },
   { module = "emperor.layers._validation", name = "ResidualConnectionValidator" },
   { module = "emperor.layers._config", name = "RecurrentLayerConfig" },
   { module = "emperor.layers._validation", name = "RecurrentLayerValidator" },
@@ -190,38 +188,11 @@ owners = ["emperor.augmentations"]
 [[interfaces]]
 module = "emperor.augmentations.adaptive_parameters"
 kind = "runtime"
-exports = [
-  "AdaptiveParameterAugmentationConfig", "AdaptiveLinearLayerConfig",
-  "DynamicWeightConfig", "SingleModelDynamicWeightConfig", "DualModelDynamicWeightConfig",
-  "LowRankDynamicWeightConfig", "HypernetworkDynamicWeightConfig",
-  "LayeredWeightedBankDynamicWeightConfig", "SoftWeightedBankDynamicWeightConfig",
-  "DynamicBiasConfig", "AffineTransformDynamicBiasConfig", "AdditiveDynamicBiasConfig",
-  "MultiplicativeDynamicBiasConfig", "SigmoidGatedDynamicBiasConfig",
-  "TanhGatedDynamicBiasConfig", "GeneratorDynamicBiasConfig", "WeightedBankDynamicBiasConfig",
-  "DynamicDiagonalConfig", "StandardDynamicDiagonalConfig", "AntiDynamicDiagonalConfig",
-  "CombinedDynamicDiagonalConfig", "AxisMaskConfig", "WeightInformedScoreAxisMaskConfig",
-  "PerAxisScoreMaskConfig", "TopSliceAxisMaskConfig", "OuterProductMaskConfig",
-  "DiagonalAxisMaskConfig", "BankExpansionFactorOptions", "DynamicDepthOptions",
-  "MaskDimensionOptions", "WeightDecayScheduleOptions", "WeightNormalizationOptions",
-  "WeightNormalizationPositionOptions", "AdaptiveParameterGroupingScopeOptions", "AdaptiveParameterMonitorCallback",
-  "WeightBankUtilizationMonitorCallback",
-]
-owners = [
-  "emperor.augmentations.adaptive_parameters._config", "emperor.augmentations.adaptive_parameters._config",
-  "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._weights.config",
-  "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._weights.config",
-  "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._weights.config",
-  "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config",
-  "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config",
-  "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config",
-  "emperor.augmentations.adaptive_parameters._diagonals.config", "emperor.augmentations.adaptive_parameters._diagonals.config", "emperor.augmentations.adaptive_parameters._diagonals.config",
-  "emperor.augmentations.adaptive_parameters._diagonals.config", "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._masks.config",
-  "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._masks.config",
-  "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options",
-  "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options",
-  "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._monitoring.adaptive_parameters",
-  "emperor.augmentations.adaptive_parameters._monitoring.weight_banks",
-]
+# Grouping variants own sizing and reduction together; their exclusive
+# group_count/chunk_size field contract is checked by the grouping-config and
+# variable-chunking suites. Internal validity is not a public runtime export.
+exports = ["DecayPolicy", "WeightNormalizationPolicy", "MatrixWeightsMixtureConfig", "MatrixBiasMixtureConfig", "MatrixWeightsMixture", "MatrixBiasMixture", "DiagonallyModulatedLowRankDynamicWeightConfig", "LowRankFactorSourceOptions", "AttentionGroupingConfig", "GroupingConfig", "MeanGroupingConfig", "MeanStdGroupingConfig", "RMSGroupingConfig", "SumGroupingConfig", "SummaryNormalizationOptions", "AdaptiveParameterAugmentationConfig", "AdaptiveParameterInputOrderOptions", "AdaptiveLinearLayerConfig", "DynamicWeightConfig", "SingleModelDynamicWeightConfig", "DualModelDynamicWeightConfig", "LowRankDynamicWeightConfig", "HypernetworkDynamicWeightConfig", "LayeredWeightedBankDynamicWeightConfig", "SoftWeightedBankDynamicWeightConfig", "DynamicBiasConfig", "AffineTransformDynamicBiasConfig", "AdditiveDynamicBiasConfig", "MultiplicativeDynamicBiasConfig", "SigmoidGatedDynamicBiasConfig", "TanhGatedDynamicBiasConfig", "GeneratorDynamicBiasConfig", "WeightedBankDynamicBiasConfig", "DynamicDiagonalConfig", "StandardDynamicDiagonalConfig", "AntiDynamicDiagonalConfig", "CombinedDynamicDiagonalConfig", "AxisMaskConfig", "WeightInformedScoreAxisMaskConfig", "PerAxisScoreMaskConfig", "TopSliceAxisMaskConfig", "OuterProductMaskConfig", "DiagonalAxisMaskConfig", "BankExpansionFactorOptions", "DynamicDepthOptions", "MaskDimensionOptions", "WeightDecayScheduleOptions", "WeightNormalizationOptions", "WeightNormalizationPositionOptions", "AdaptiveParameterGroupingScopeOptions", "AdaptiveParameterMonitorCallback", "WeightBankUtilizationMonitorCallback"]
+owners = ["emperor.augmentations.adaptive_parameters._decay", "emperor.augmentations.adaptive_parameters._weights.normalization", "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._weights.variants.matrix_mixture", "emperor.augmentations.adaptive_parameters._biases.variants.matrix_mixture", "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._grouping.config", "emperor.augmentations.adaptive_parameters._grouping.config", "emperor.augmentations.adaptive_parameters._grouping.config", "emperor.augmentations.adaptive_parameters._grouping.config", "emperor.augmentations.adaptive_parameters._grouping.config", "emperor.augmentations.adaptive_parameters._grouping.config", "emperor.augmentations.adaptive_parameters._grouping.options", "emperor.augmentations.adaptive_parameters._config", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._config", "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._weights.config", "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._biases.config", "emperor.augmentations.adaptive_parameters._diagonals.config", "emperor.augmentations.adaptive_parameters._diagonals.config", "emperor.augmentations.adaptive_parameters._diagonals.config", "emperor.augmentations.adaptive_parameters._diagonals.config", "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._masks.config", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._options", "emperor.augmentations.adaptive_parameters._monitoring.adaptive_parameters", "emperor.augmentations.adaptive_parameters._monitoring.weight_banks"]
 
 [[interfaces]]
 module = "emperor.experts"
