@@ -9,6 +9,11 @@ from typing import Any, TypeVar
 
 from models.vit.linear_adaptive import _config_defaults as config_defaults
 from models.vit.linear_adaptive._flat_updates import pop_updates as _pop_updates
+from models.vit.linear_adaptive._generation import (
+    apply_generation_options,
+    generation_keys,
+)
+from models.vit.linear_adaptive._grouping import apply_grouping_options, grouping_keys
 from models.vit.linear_adaptive._linears_builder_adapter import (
     _adaptive_generator_stack_options_from_kwargs,
     _hidden_adaptive_bias_options_from_kwargs,
@@ -106,6 +111,11 @@ _ADAPTIVE_GENERATOR_STACK_FIELD_MAP = {
 def linear_adaptive_builder_kwargs_from_flat(
     flat_kwargs: dict[str, Any], config_module: ModuleType
 ) -> dict[str, Any]:
+    generation_values = dict(flat_kwargs)
+    generation_fields = generation_keys(config_module) | grouping_keys(config_module)
+    flat_kwargs = {
+        key: value for key, value in flat_kwargs.items() if key not in generation_fields
+    }
     kwargs = dict(flat_kwargs)
     consumed: set[str] = set()
     builder_kwargs = _top_level_kwargs(kwargs, consumed)
@@ -122,7 +132,10 @@ def linear_adaptive_builder_kwargs_from_flat(
         consumed,
     )
     builder_kwargs.update(_leftover_kwargs(kwargs, consumed))
-    return builder_kwargs
+    builder_kwargs = apply_generation_options(
+        builder_kwargs, generation_values, config_module
+    )
+    return apply_grouping_options(builder_kwargs, generation_values, config_module)
 
 
 _RESIDUAL_STACK_FLAT_FIELDS = {

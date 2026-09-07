@@ -30,6 +30,10 @@ from emperor.layers import (
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 from model_runtime.packages.runtime_values import ResolvedRuntimeOptions
+from models.vit.linear_adaptive._generation import (
+    BiasGenerationOptions,
+    WeightGenerationOptions,
+)
 from models.vit.linear_adaptive._residual import ResidualStackOptions
 
 
@@ -265,6 +269,9 @@ class AdaptiveGeneratorStackOptions:
 
 @dataclass(frozen=True)
 class HiddenAdaptiveWeightOptions:
+    generation: WeightGenerationOptions = field(
+        default_factory=WeightGenerationOptions, kw_only=True
+    )
     generator_depth: DynamicDepthOptions
     option_flag: bool
     option: type[DynamicWeightConfig] | None
@@ -279,6 +286,9 @@ class HiddenAdaptiveWeightOptions:
 
 @dataclass(frozen=True)
 class HiddenAdaptiveBiasOptions:
+    generation: BiasGenerationOptions = field(
+        default_factory=BiasGenerationOptions, kw_only=True
+    )
     option_flag: bool
     option: type[DynamicBiasConfig] | None
     decay_schedule: WeightDecayScheduleOptions
