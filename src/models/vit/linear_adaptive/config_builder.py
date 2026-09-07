@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 import models.vit.linear_adaptive.config as config
+from emperor.augmentations.adaptive_parameters import GroupingConfig
 from models.vit.linear_adaptive._boundary_config_factory import (
     BoundaryConfigDependencies,
     BoundaryConfigFactory,
@@ -85,6 +86,7 @@ class _VitLinearAdaptiveConfigBuilderImplementation:
         dynamic_memory_options: DynamicMemoryOptions | None = (None),
         recurrent_controller_options: RecurrentControllerOptions | None = (None),
         adaptive_generator_stack_options: AdaptiveGeneratorStackOptions | None = None,
+        grouping_config: GroupingConfig | None = None,
         hidden_adaptive_weight_options: HiddenAdaptiveWeightOptions | None = None,
         hidden_adaptive_bias_options: HiddenAdaptiveBiasOptions | None = None,
         hidden_adaptive_diagonal_options: HiddenAdaptiveDiagonalOptions | None = None,
@@ -92,6 +94,7 @@ class _VitLinearAdaptiveConfigBuilderImplementation:
         attention_adaptive_generator_stack_options: (
             AdaptiveGeneratorStackOptions | None
         ) = None,
+        attention_grouping_config: GroupingConfig | None = None,
         attention_hidden_adaptive_weight_options: (
             HiddenAdaptiveWeightOptions | None
         ) = None,
@@ -103,6 +106,7 @@ class _VitLinearAdaptiveConfigBuilderImplementation:
         feed_forward_adaptive_generator_stack_options: (
             AdaptiveGeneratorStackOptions | None
         ) = None,
+        feed_forward_grouping_config: GroupingConfig | None = None,
         feed_forward_hidden_adaptive_weight_options: (
             HiddenAdaptiveWeightOptions | None
         ) = None,
@@ -152,6 +156,7 @@ class _VitLinearAdaptiveConfigBuilderImplementation:
         self.encoder_recurrent_controller_options = recurrent_controller_options
         self.adaptive_generator_stack_options = adaptive_generator_stack_options
         self.hidden_adaptive_weight_options = hidden_adaptive_weight_options
+        self.grouping_config = grouping_config
         self.hidden_adaptive_bias_options = hidden_adaptive_bias_options
         self.hidden_adaptive_diagonal_options = hidden_adaptive_diagonal_options
         self.hidden_adaptive_mask_options = hidden_adaptive_mask_options
@@ -161,6 +166,7 @@ class _VitLinearAdaptiveConfigBuilderImplementation:
         self.attention_hidden_adaptive_weight_options = (
             attention_hidden_adaptive_weight_options
         )
+        self.attention_grouping_config = attention_grouping_config
         self.attention_hidden_adaptive_bias_options = (
             attention_hidden_adaptive_bias_options
         )
@@ -176,6 +182,7 @@ class _VitLinearAdaptiveConfigBuilderImplementation:
         self.feed_forward_hidden_adaptive_weight_options = (
             feed_forward_hidden_adaptive_weight_options
         )
+        self.feed_forward_grouping_config = feed_forward_grouping_config
         self.feed_forward_hidden_adaptive_bias_options = (
             feed_forward_hidden_adaptive_bias_options
         )
@@ -213,6 +220,7 @@ class _VitLinearAdaptiveConfigBuilderImplementation:
             hidden_dim=self.hidden_dim,
             output_dim=self.output_dim,
             adaptive_generator_stack_options=self.adaptive_generator_stack_options,
+            grouping_config=self.grouping_config,
             hidden_adaptive_weight_options=self.hidden_adaptive_weight_options,
             hidden_adaptive_bias_options=self.hidden_adaptive_bias_options,
             hidden_adaptive_diagonal_options=self.hidden_adaptive_diagonal_options,
@@ -237,6 +245,7 @@ class _VitLinearAdaptiveConfigBuilderImplementation:
             if self.attention_hidden_adaptive_weight_options is not None
             else self.hidden_adaptive_weight_options
         )
+        grouping_config = self.attention_grouping_config
         hidden_adaptive_bias_options = (
             self.attention_hidden_adaptive_bias_options
             if self.attention_hidden_adaptive_bias_options is not None
@@ -257,6 +266,7 @@ class _VitLinearAdaptiveConfigBuilderImplementation:
             hidden_dim=self.hidden_dim,
             output_dim=self.output_dim,
             adaptive_generator_stack_options=adaptive_generator_stack_options,
+            grouping_config=grouping_config,
             hidden_adaptive_weight_options=hidden_adaptive_weight_options,
             hidden_adaptive_bias_options=hidden_adaptive_bias_options,
             hidden_adaptive_diagonal_options=hidden_adaptive_diagonal_options,
@@ -281,6 +291,7 @@ class _VitLinearAdaptiveConfigBuilderImplementation:
             if self.feed_forward_hidden_adaptive_weight_options is not None
             else self.hidden_adaptive_weight_options
         )
+        grouping_config = self.feed_forward_grouping_config
         hidden_adaptive_bias_options = (
             self.feed_forward_hidden_adaptive_bias_options
             if self.feed_forward_hidden_adaptive_bias_options is not None
@@ -301,6 +312,7 @@ class _VitLinearAdaptiveConfigBuilderImplementation:
             hidden_dim=self.hidden_dim,
             output_dim=self.output_dim,
             adaptive_generator_stack_options=adaptive_generator_stack_options,
+            grouping_config=grouping_config,
             hidden_adaptive_weight_options=hidden_adaptive_weight_options,
             hidden_adaptive_bias_options=hidden_adaptive_bias_options,
             hidden_adaptive_diagonal_options=hidden_adaptive_diagonal_options,
