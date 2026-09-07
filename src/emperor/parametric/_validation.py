@@ -75,7 +75,9 @@ class ParametricLayerValidator(ValidatorBase):
             raise ValueError(f"{name} must be a positive integer, received {value!r}.")
 
     @staticmethod
-    def _validate_weight_mixture_config(config: AdaptiveMixtureConfig) -> None:
+    def _validate_weight_mixture_config(
+        config: AdaptiveMixtureConfig | MatrixWeightsMixtureConfig,
+    ) -> None:
         weight_configs = (
             VectorWeightsMixtureConfig,
             MatrixWeightsMixtureConfig,
@@ -89,7 +91,7 @@ class ParametricLayerValidator(ValidatorBase):
 
     @staticmethod
     def _validate_bias_mixture_config(
-        config: AdaptiveMixtureConfig | None,
+        config: AdaptiveMixtureConfig | MatrixBiasMixtureConfig | None,
     ) -> None:
         if config is None:
             return
@@ -198,6 +200,12 @@ class ParametricLayerValidator(ValidatorBase):
         from emperor.augmentations.adaptive_parameters import (
             AdaptiveParameterAugmentationConfig,
         )
+        from emperor.augmentations.adaptive_parameters import (
+            MatrixBiasMixtureConfig as AdaptiveMatrixBiasMixtureConfig,
+        )
+        from emperor.augmentations.adaptive_parameters import (
+            MatrixWeightsMixtureConfig as AdaptiveMatrixWeightsMixtureConfig,
+        )
 
         if not isinstance(
             model.adaptive_augmentation_config, AdaptiveParameterAugmentationConfig
@@ -210,6 +218,21 @@ class ParametricLayerValidator(ValidatorBase):
         augmentation_validator = (
             model.adaptive_augmentation_config.registry_owner().VALIDATOR
         )
+        if isinstance(
+            model.adaptive_augmentation_config.weight_config,
+            AdaptiveMatrixWeightsMixtureConfig,
+        ):
+            raise ValueError(
+                "ParametricLayer already owns generated parameters; weight_config cannot replace them in its application augmentation."
+            )
+        if isinstance(
+            model.adaptive_augmentation_config.bias_config,
+            AdaptiveMatrixBiasMixtureConfig,
+        ):
+            raise ValueError(
+                "ParametricLayer does not support adaptive MatrixBiasMixtureConfig; "
+                "use its parametric bias_mixture_config instead."
+            )
         if augmentation_validator.grouping_is_enabled(
             model.adaptive_augmentation_config
         ):

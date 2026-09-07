@@ -243,3 +243,96 @@ def test_linear_owns_bias_policy_and_constructs_base_parameters(bias, monkeypatc
     assert (layer.bias_params is not None) is bias
     assert (layer.adaptive_behaviour.bias_model is not None) is bias
     assert layer(torch.randn(2, 2)).shape == (2, 3)
+
+
+@pytest.mark.parametrize("overrides", [{"input_dim": 4}, {"output_dim": 4}])
+@pytest.mark.parametrize(
+    "slot, config_factory",
+    [("weight_config", weight_mixture_config), ("bias_config", bias_mixture_config)],
+)
+def test_mixture_cannot_disagree_with_owning_linear(overrides, slot, config_factory):
+    from emperor.augmentations.adaptive_parameters import (
+        AdaptiveLinearLayerConfig,
+        AdaptiveParameterAugmentationConfig,
+    )
+
+    rng = torch.get_rng_state().clone()
+    with pytest.raises(ValueError, match="match"):
+        AdaptiveLinearLayerConfig(
+            input_dim=2,
+            output_dim=3,
+            bias_flag=True,
+            adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+                **{slot: config_factory(**overrides)}
+            ),
+        ).build()
+    torch.testing.assert_close(torch.get_rng_state(), rng, rtol=0, atol=0)
+
+
+def test_parametric_application_rejects_a_second_parameter_set_owner():
+    from emperor.augmentations.adaptive_parameters import (
+        AdaptiveParameterAugmentationConfig,
+    )
+    from emperor.parametric import (
+        AdaptiveRouterOptions,
+        MatrixWeightsMixtureConfig,
+        ParametricLayerConfig,
+    )
+
+    provider = weight_mixture_config().build()
+    cfg = ParametricLayerConfig(
+        input_dim=2,
+        output_dim=3,
+        weight_mixture_config=MatrixWeightsMixtureConfig(
+            input_dim=2,
+            output_dim=3,
+            num_experts=3,
+            top_k=2,
+            weighted_parameters_flag=True,
+        ),
+        routing_initialization_mode=AdaptiveRouterOptions.SHARED_ROUTER,
+        router_config=provider.cfg.sampler_config.router_config,
+        sampler_config=provider.cfg.sampler_config,
+        adaptive_augmentation_config=AdaptiveParameterAugmentationConfig(
+            weight_config=weight_mixture_config()
+        ),
+    )
+    with pytest.raises(ValueError, match="weight_config"):
+        cfg.build()
+
+
+def test_adaptive_and_parametric_matrix_implementations_are_separate():
+    from dataclasses import fields
+
+    from emperor import parametric
+    from emperor.augmentations import adaptive_parameters
+    from emperor.augmentations.adaptive_parameters import MatrixWeightsMixtureConfig
+
+    expected = {
+        "input_dim",
+        "output_dim",
+        "num_experts",
+        "top_k",
+        "sampler_config",
+    }
+    assert expected <= {field.name for field in fields(MatrixWeightsMixtureConfig)}
+    assert "clip_parameter_option" not in {
+        field.name for field in fields(MatrixWeightsMixtureConfig)
+    }
+    assert all(
+        field.default is None and field.metadata["help"]
+        for field in fields(MatrixWeightsMixtureConfig)
+    )
+    for name in (
+        "MatrixWeightsMixtureConfig",
+        "MatrixBiasMixtureConfig",
+        "MatrixWeightsMixture",
+        "MatrixBiasMixture",
+    ):
+        adaptive = getattr(adaptive_parameters, name)
+        external = getattr(parametric, name)
+        assert adaptive is not external
+        assert adaptive.__module__.startswith(
+            "emperor.augmentations.adaptive_parameters."
+        )
+        assert external.__module__.startswith("emperor.parametric._mixtures.")
