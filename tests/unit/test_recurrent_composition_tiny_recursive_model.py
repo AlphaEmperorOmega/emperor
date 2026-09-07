@@ -17,7 +17,6 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerState,
     RecurrentLayerConfig,
-    RowLayout,
     TinyRecursiveModelRecurrentConfig,
 )
 from emperor.layers._composition.recurrent.base import RecurrentCompositionAbstract
@@ -56,12 +55,10 @@ class _RecordingBlock(Module):
         self.scale = torch.nn.Parameter(torch.tensor(1.0))
         self.inputs: list[torch.Tensor] = []
         self.grad_modes: list[bool] = []
-        self.row_layouts: list[RowLayout | None] = []
 
     def forward(self, state: LayerState) -> LayerState:
         self.inputs.append(state.hidden.detach().clone())
         self.grad_modes.append(torch.is_grad_enabled())
-        self.row_layouts.append(state.row_layout)
         state.hidden = state.hidden * self.scale + self.cfg.increment
         if self.cfg.auxiliary_loss is not None:
             state.loss = state.hidden.new_tensor(self.cfg.auxiliary_loss)
@@ -523,40 +520,18 @@ class TestTinyRecursiveModelRecurrentValidation(unittest.TestCase):
         self,
     ) -> None:
         transition_input = torch.ones(2, 1)
-        row_layout = RowLayout.rows(2, context_sharing_restricted=False)
         cases = (
             (object(), TypeError, "must return LayerState"),
+            (LayerState(hidden=torch.ones(1, 1)), ValueError, "preserve hidden shape"),
             (
-                LayerState(hidden=torch.ones(1, 1), row_layout=row_layout),
-                ValueError,
-                "preserve hidden shape",
-            ),
-            (
-                LayerState(
-                    hidden=torch.ones(2, 1, dtype=torch.float64),
-                    row_layout=row_layout,
-                ),
+                LayerState(hidden=torch.ones(2, 1, dtype=torch.float64)),
                 ValueError,
                 "preserve hidden dtype",
             ),
             (
-                LayerState(
-                    hidden=torch.empty(2, 1, device="meta"),
-                    row_layout=row_layout,
-                ),
+                LayerState(hidden=torch.empty(2, 1, device="meta")),
                 ValueError,
                 "preserve hidden device",
-            ),
-            (
-                LayerState(
-                    hidden=torch.ones(2, 1),
-                    row_layout=RowLayout.rows(
-                        2,
-                        context_sharing_restricted=False,
-                    ),
-                ),
-                ValueError,
-                "preserve the exact row_layout",
             ),
         )
 
@@ -566,7 +541,6 @@ class TestTinyRecursiveModelRecurrentValidation(unittest.TestCase):
                     TinyRecursiveModelRecurrentValidator.validate_transition_output(
                         output_state,
                         transition_input,
-                        row_layout,
                         expected_feature_dim=1,
                     )
 
@@ -852,8 +826,7 @@ class TestTinyRecursiveModelRecurrentRuntime(unittest.TestCase):
     def test_exact_schedule_reuses_one_block_and_returns_the_final_answer(self) -> None:
         runtime = _config().build()
         fixed_input = torch.full((2, 1), 2.0)
-        row_layout = RowLayout.rows(2, context_sharing_restricted=False)
-        state = LayerState(hidden=fixed_input, row_layout=row_layout)
+        state = LayerState(hidden=fixed_input)
 
         result = runtime(state)
 
@@ -867,9 +840,6 @@ class TestTinyRecursiveModelRecurrentRuntime(unittest.TestCase):
             strict=True,
         ):
             torch.testing.assert_close(actual, torch.full_like(actual, expected))
-        self.assertTrue(
-            all(layout is row_layout for layout in runtime.block_model.row_layouts)
-        )
 
     def test_residual_uses_the_previous_target_state_for_each_transition(self) -> None:
         config = _config(
@@ -1018,17 +988,11 @@ class TestTinyRecursiveModelRecurrentRuntime(unittest.TestCase):
         )
         config.halting_config = _RecordingHaltingConfig(halt_after_updates=2)
         runtime = config.build()
-        owner_layout = RowLayout.rows(1, context_sharing_restricted=False)
-        state = LayerState(hidden=torch.ones(1, 1), row_layout=owner_layout)
+        state = LayerState(hidden=torch.ones(1, 1))
 
         result = runtime(state)
-
-        internal_layouts = runtime.block_model.row_layouts
-        self.assertEqual(len(internal_layouts), 2)
-        self.assertIsNot(internal_layouts[0], owner_layout)
-        self.assertIs(internal_layouts[0], internal_layouts[1])
-        self.assertTrue(internal_layouts[0].context_sharing_restricted)
-        self.assertIs(result.row_layout, owner_layout)
+        self.assertEqual(result.hidden.shape, (1, 1))
+        self.assertTrue(torch.isfinite(result.hidden).all())
 
     def test_shared_controllers_follow_the_transition_gradient_window(self) -> None:
         runtime = _config(
@@ -1119,7 +1083,6 @@ class TestTinyRecursiveModelRecurrentRuntime(unittest.TestCase):
             initial_loss=None,
             auxiliary_losses=(),
             context_state=LayerState(hidden=source),
-            row_layout=None,
             transition_index=2,
         )
         detached = TinyRecursiveModelRecurrent._detach_recurrent_execution_state(
