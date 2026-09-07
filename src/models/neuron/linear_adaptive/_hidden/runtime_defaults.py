@@ -29,6 +29,7 @@ from models.neuron.linear_adaptive._hidden._runtime_default_values import (
     _WEIGHT_GENERATOR_STACK_FIELDS,
     BiasValues,
     DiagonalValues,
+    GenerationValues,
     MaskValues,
     OptionalStackFields,
     OptionalStackValues,
@@ -42,6 +43,7 @@ from models.neuron.linear_adaptive._hidden._runtime_default_values import (
 from models.neuron.linear_adaptive._hidden.runtime_options import (
     AdaptiveBiasOptions,
     AdaptiveDiagonalOptions,
+    AdaptiveGenerationOptions,
     AdaptiveMaskOptions,
     AdaptiveProjectionOptions,
     AdaptiveWeightOptions,
@@ -594,12 +596,64 @@ def _resolve_adaptive_defaults(
     )
 
 
+def _resolve_generation(
+    values: GenerationValues, defaults: StackOptions, factor_defaults: StackOptions
+) -> AdaptiveGenerationOptions:
+    for name in (
+        "weight_input_factor",
+        "weight_output_factor",
+        "weight_coefficient",
+        "weight_mixture_router",
+        "bias_mixture_router",
+    ):
+        stack = getattr(values, f"{name}_generator_stack")
+        if stack.hidden_dim is not None:
+            _positive(f"{name}_generator_stack_hidden_dim", stack.hidden_dim)
+        if stack.num_layers is not None:
+            _positive(f"{name}_generator_stack_num_layers", stack.num_layers)
+        if stack.dropout_probability is not None:
+            _probability(
+                f"{name}_generator_stack_dropout_probability", stack.dropout_probability
+            )
+    return AdaptiveGenerationOptions(
+        weight_input_factor_source=values.weight_input_factor_source,
+        weight_output_factor_source=values.weight_output_factor_source,
+        weight_mixture_num_experts=values.weight_mixture_num_experts,
+        bias_mixture_num_experts=values.bias_mixture_num_experts,
+        weight_mixture_top_k=values.weight_mixture_top_k,
+        bias_mixture_top_k=values.bias_mixture_top_k,
+        weight_mixture_normalize_probabilities_flag=values.weight_mixture_normalize_probabilities_flag,
+        bias_mixture_normalize_probabilities_flag=values.bias_mixture_normalize_probabilities_flag,
+        weight_input_factor_generator_stack=_generator_stack(
+            values.weight_input_factor_generator_stack, factor_defaults
+        ),
+        weight_output_factor_generator_stack=_generator_stack(
+            values.weight_output_factor_generator_stack, factor_defaults
+        ),
+        weight_coefficient_generator_stack=_generator_stack(
+            values.weight_coefficient_generator_stack, factor_defaults
+        ),
+        weight_mixture_router_generator_stack=_generator_stack(
+            values.weight_mixture_router_generator_stack, defaults
+        ),
+        bias_mixture_router_generator_stack=_generator_stack(
+            values.bias_mixture_router_generator_stack, defaults
+        ),
+    )
+
+
 def _runtime(values: RuntimeDefaultValues) -> RuntimeOptions:
     stacks = _resolve_stacks(values)
     control = _resolve_control_defaults(values, stacks)
     adaptive = _resolve_adaptive_defaults(values, stacks.adaptive_generator)
     dimensions = values.dimensions
     return RuntimeOptions(
+        grouping_config=values.grouping,
+        generation=_resolve_generation(
+            values.generation,
+            stacks.adaptive_generator,
+            _resolved_stack(values.weight_generator_stack, stacks.adaptive_generator),
+        ),
         batch_size=dimensions.batch_size,
         learning_rate=dimensions.learning_rate,
         input_dim=dimensions.input_dim,
@@ -617,8 +671,24 @@ def _runtime(values: RuntimeDefaultValues) -> RuntimeOptions:
         bias=adaptive.bias,
         diagonal=adaptive.diagonal,
         mask=adaptive.mask,
-        input_projection=adaptive.input_projection,
-        output_projection=adaptive.output_projection,
+        input_projection=replace(
+            adaptive.input_projection,
+            grouping_config=values.input_grouping,
+            generation=_resolve_generation(
+                values.input_generation,
+                stacks.adaptive_generator,
+                stacks.adaptive_generator,
+            ),
+        ),
+        output_projection=replace(
+            adaptive.output_projection,
+            grouping_config=values.output_grouping,
+            generation=_resolve_generation(
+                values.output_generation,
+                stacks.adaptive_generator,
+                stacks.adaptive_generator,
+            ),
+        ),
         halting_option=values.control.halting_option,
         recurrent_halting_option=values.control.recurrent_halting_option,
     )
