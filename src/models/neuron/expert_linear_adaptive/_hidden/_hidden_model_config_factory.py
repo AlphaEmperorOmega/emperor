@@ -77,12 +77,14 @@ class HiddenModelConfigFactory:
                 adaptive_generator_stack_options=(
                     runtime.adaptive_generator_stack_options
                 ),
+                grouping_config=runtime.grouping_config,
                 hidden_adaptive_weight_options=(runtime.hidden_adaptive_weight_options),
                 hidden_adaptive_bias_options=runtime.hidden_adaptive_bias_options,
                 hidden_adaptive_diagonal_options=(
                     runtime.hidden_adaptive_diagonal_options
                 ),
                 hidden_adaptive_mask_options=runtime.hidden_adaptive_mask_options,
+                router_grouping_config=runtime.router_grouping_config,
                 router_adaptive_weight_options=(runtime.router_adaptive_weight_options),
                 router_adaptive_bias_options=runtime.router_adaptive_bias_options,
                 router_adaptive_diagonal_options=(
