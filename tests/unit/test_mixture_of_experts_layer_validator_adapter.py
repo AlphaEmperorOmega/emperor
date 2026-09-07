@@ -10,7 +10,6 @@ from emperor.layers import (
     ActivationOptions,
     LayerConfig,
     LayerNormPositionOptions,
-    RowLayout,
 )
 from emperor.layers._layer.validation import LayerValidator
 
@@ -84,34 +83,10 @@ class TestMixtureOfExpertsLayerValidatorAdapter(unittest.TestCase):
         ):
             MixtureOfExpertsLayerValidator.validate(layer)
 
-    def test_pre_routing_dispatches_through_substituted_validator(self) -> None:
-        class RejectingValidator(MixtureOfExpertsLayerValidator):
-            @staticmethod
-            def validate_layout_can_cross_routing(
-                layer,
-                state,
-                main_model_input,
-            ) -> None:
-                raise RuntimeError("substituted pre-routing validator was called")
-
-        class RejectingLayer(MixtureOfExpertsLayer):
-            VALIDATOR = RejectingValidator
-
-        layer = RejectingLayer.__new__(RejectingLayer)
-        torch.nn.Module.__init__(layer)
-
-        with self.assertRaisesRegex(
-            RuntimeError,
-            "substituted pre-routing validator was called",
-        ):
-            layer._handle_model_processing(
-                MixtureOfExpertsLayerState(hidden=torch.ones(2, 3)),
-            )
-
     def test_post_routing_dispatches_through_substituted_validator(self) -> None:
         class RejectingValidator(MixtureOfExpertsLayerValidator):
             @staticmethod
-            def validate_layout_restored(state, output) -> None:
+            def validate_output_rows(layer, main_model_input, output) -> None:
                 raise RuntimeError("substituted post-routing validator was called")
 
         class RejectingLayer(MixtureOfExpertsLayer):
@@ -129,32 +104,10 @@ class TestMixtureOfExpertsLayerValidatorAdapter(unittest.TestCase):
                 MixtureOfExpertsLayerState(hidden=torch.ones(2, 3)),
             )
 
-    def test_rejects_layout_with_wrong_input_row_count_before_routing(self) -> None:
-        layer = _layer_with_routing_output(torch.ones(2, 3))
-        state = MixtureOfExpertsLayerState(
-            hidden=torch.ones(2, 3),
-            row_layout=RowLayout.rows(
-                3,
-                context_sharing_restricted=False,
-            ),
-        )
-
-        with self.assertRaisesRegex(
-            ValueError,
-            "row_layout row_count=3 does not match input row count 2",
-        ):
-            layer._handle_model_processing(state)
-
-        self.assertEqual(layer.model.call_count, 0)
-
-    def test_rejects_output_that_does_not_restore_layout_row_count(self) -> None:
+    def test_rejects_output_that_does_not_restore_input_row_count(self) -> None:
         layer = _layer_with_routing_output(torch.ones(3, 3))
         state = MixtureOfExpertsLayerState(
             hidden=torch.ones(2, 3),
-            row_layout=RowLayout.rows(
-                2,
-                context_sharing_restricted=False,
-            ),
         )
 
         with self.assertRaisesRegex(

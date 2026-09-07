@@ -7,7 +7,6 @@ from emperor.experts import MixtureOfExpertsModelConfig
 from emperor.layers import (
     HierarchicalReasoningModelRecurrentConfig,
     RecurrentLayerConfig,
-    RowLayout,
 )
 from emperor.transformer import FeedForward, FeedForwardConfig
 from emperor.transformer._validation import FeedForwardValidator
@@ -109,7 +108,7 @@ class TestFeedForwardValidatorAdapter(unittest.TestCase):
     def test_forward_dispatches_through_substituted_validator(self):
         class TrackingValidator(FeedForwardValidator):
             @staticmethod
-            def validate_forward_inputs(flattened_input, row_layout):
+            def validate_forward_inputs(model, input_batch):
                 raise RuntimeError("substituted runtime validator was called")
 
         class TrackingFeedForward(FeedForward):
@@ -129,24 +128,25 @@ class TestFeedForwardValidatorAdapter(unittest.TestCase):
         ):
             model(torch.randn(3, 2))
 
-    def test_row_layout_row_count_error_contract_is_preserved(self):
-        model = FeedForward(
-            FeedForwardConfig(
-                input_dim=2,
-                output_dim=2,
-                stack_config=linear_stack_config(2),
-            )
+    def test_grouped_input_checks_actual_sequence_length_before_flattening(self):
+        from emperor.augmentations.adaptive_parameters import (
+            AdaptiveParameterGroupingScopeOptions,
         )
-        row_layout = RowLayout.rows(
-            2,
-            context_sharing_restricted=False,
-        )
+        from support.adaptive_grouping import bias_linear, grouping_value
 
-        with self.assertRaisesRegex(
-            ValueError,
-            "row_layout row_count=2 does not match feed-forward row count 3",
-        ):
-            model(torch.randn(3, 2), row_layout=row_layout)
+        stack = linear_stack_config(2)
+        stack.layer_config.layer_model_config = bias_linear(
+            grouping_value(
+                AdaptiveParameterGroupingScopeOptions.SEQUENCE,
+                2,
+                sequence_length=4,
+            )
+        ).cfg
+        model = FeedForward(
+            FeedForwardConfig(input_dim=2, output_dim=2, stack_config=stack)
+        )
+        with self.assertRaisesRegex(ValueError, "actual sequence length"):
+            model(torch.randn(4, 2, 2))
 
 
 if __name__ == "__main__":
