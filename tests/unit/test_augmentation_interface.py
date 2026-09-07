@@ -10,7 +10,23 @@ from emperor.augmentations.adaptive_parameters import (
 )
 
 EXPECTED_EXPORTS = (
+    "DecayPolicy",
+    "WeightNormalizationPolicy",
+    "MatrixWeightsMixtureConfig",
+    "MatrixBiasMixtureConfig",
+    "MatrixWeightsMixture",
+    "MatrixBiasMixture",
+    "DiagonallyModulatedLowRankDynamicWeightConfig",
+    "LowRankFactorSourceOptions",
+    "AttentionGroupingConfig",
+    "GroupingConfig",
+    "MeanGroupingConfig",
+    "MeanStdGroupingConfig",
+    "RMSGroupingConfig",
+    "SumGroupingConfig",
+    "SummaryNormalizationOptions",
     "AdaptiveParameterAugmentationConfig",
+    "AdaptiveParameterInputOrderOptions",
     "AdaptiveLinearLayerConfig",
     "DynamicWeightConfig",
     "SingleModelDynamicWeightConfig",
@@ -59,6 +75,8 @@ import emperor.augmentations as augmentations
 import emperor.augmentations.adaptive_parameters as adaptive_parameters
 
 expected_eager_modules = (
+    "emperor.augmentations.adaptive_parameters._grouping.config",
+    "emperor.augmentations.adaptive_parameters._grouping.options",
     "emperor.augmentations.adaptive_parameters._config",
     "emperor.augmentations.adaptive_parameters._options",
     "emperor.augmentations.adaptive_parameters._biases.config",
@@ -67,6 +85,14 @@ expected_eager_modules = (
     "emperor.augmentations.adaptive_parameters._weights.config",
 )
 heavy_modules = (
+    "emperor.augmentations.adaptive_parameters._grouping.base",
+    "emperor.augmentations.adaptive_parameters._grouping.validation",
+    "emperor.augmentations.adaptive_parameters._grouping.variants",
+    "emperor.augmentations.adaptive_parameters._grouping.variants.attention",
+    "emperor.augmentations.adaptive_parameters._grouping.variants.mean",
+    "emperor.augmentations.adaptive_parameters._grouping.variants.mean_std",
+    "emperor.augmentations.adaptive_parameters._grouping.variants.rms",
+    "emperor.augmentations.adaptive_parameters._grouping.variants.sum",
     "emperor.augmentations.adaptive_parameters._augmentation",
     "emperor.augmentations.adaptive_parameters._linear_adapter",
     "emperor.augmentations.adaptive_parameters._validation",
@@ -153,6 +179,20 @@ print(json.dumps({
             dict.fromkeys(result["expected_eager_modules"], True),
         )
         expected_heavy_modules = dict.fromkeys(result["heavy_modules"], False)
+        expected_heavy_modules[
+            "emperor.augmentations.adaptive_parameters._weights.variants"
+        ] = True
+        expected_heavy_modules[
+            "emperor.augmentations.adaptive_parameters._biases.variants"
+        ] = True
+        # Public matrix variants now import their family-owned validators.
+        for validator_module in (
+            "emperor.augmentations.adaptive_parameters._weights.validation",
+            "emperor.augmentations.adaptive_parameters._biases.validation",
+            "emperor.augmentations.adaptive_parameters._validation",
+            "emperor.augmentations.adaptive_parameters._grouping.validation",
+        ):
+            expected_heavy_modules[validator_module] = True
         expected_heavy_modules[
             "emperor.augmentations.adaptive_parameters._monitoring.adaptive_parameters"
         ] = True

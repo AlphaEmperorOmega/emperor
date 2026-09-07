@@ -63,7 +63,23 @@ from emperor.linears import LinearLayerConfig
 from emperor.nn import Module
 
 ADAPTIVE_PARAMETER_PUBLIC_EXPORTS = (
+    "DecayPolicy",
+    "WeightNormalizationPolicy",
+    "MatrixWeightsMixtureConfig",
+    "MatrixBiasMixtureConfig",
+    "MatrixWeightsMixture",
+    "MatrixBiasMixture",
+    "DiagonallyModulatedLowRankDynamicWeightConfig",
+    "LowRankFactorSourceOptions",
+    "AttentionGroupingConfig",
+    "GroupingConfig",
+    "MeanGroupingConfig",
+    "MeanStdGroupingConfig",
+    "RMSGroupingConfig",
+    "SumGroupingConfig",
+    "SummaryNormalizationOptions",
     "AdaptiveParameterAugmentationConfig",
+    "AdaptiveParameterInputOrderOptions",
     "AdaptiveLinearLayerConfig",
     "DynamicWeightConfig",
     "SingleModelDynamicWeightConfig",
