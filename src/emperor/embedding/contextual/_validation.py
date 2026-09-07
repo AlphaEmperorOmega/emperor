@@ -296,7 +296,6 @@ class ByteContextualEmbeddingValidator:
         from emperor.augmentations.adaptive_parameters import (
             AdaptiveLinearLayerConfig,
             AdaptiveParameterAugmentationConfig,
-            AdaptiveParameterGroupingScopeOptions,
         )
         from emperor.layers import LayerConfig, LayerStackConfig
 
@@ -338,13 +337,9 @@ class ByteContextualEmbeddingValidator:
                 "AdaptiveParameterAugmentationConfig, "
                 f"got {type(augmentation_config).__name__}"
             )
-        if (
-            augmentation_config.grouping_scope
-            is not AdaptiveParameterGroupingScopeOptions.DISABLED
-        ):
+        if augmentation_config.grouping_config is not None:
             raise ValueError(
-                f"{name}.expert adaptive grouping must be "
-                "AdaptiveParameterGroupingScopeOptions.DISABLED"
+                f"{name}.expert adaptive grouping must be absent (grouping_config=None)"
             )
         adaptive_components = (
             augmentation_config.diagonal_config,
