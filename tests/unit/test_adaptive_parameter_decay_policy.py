@@ -232,6 +232,12 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
         )
 
     def test_all_leaves_register_decay_buffers_in_the_policy_submodule(self) -> None:
+        from support.adaptive_generation import (
+            bias_mixture_config,
+            modulated_config,
+            weight_mixture_config,
+        )
+
         models = [config.build() for config in weight_configs()]
         models.extend(
             bias_config(
@@ -242,6 +248,15 @@ class AdaptiveParameterDecayPolicyTests(unittest.TestCase):
             ).build()
             for config_type in all_bias_config_types()
         )
+        models.extend(
+            config_factory().build()
+            for config_factory in (
+                weight_mixture_config,
+                bias_mixture_config,
+                modulated_config,
+            )
+        )
+
         for model in models:
             with self.subTest(model_type=type(model).__name__):
                 self.assertTupleEqual(
