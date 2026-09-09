@@ -94,6 +94,8 @@ SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 SUBMODULE_STACK_RESIDUAL_MODEL_FLAG: bool = False
+SUBMODULE_STACK_RESIDUAL_BLOCK_SIZE: int | None = None
+SUBMODULE_STACK_RESIDUAL_RMS_NORM_EPSILON: float | None = None
 SUBMODULE_STACK_DROPOUT_PROBABILITY: float = 0.0
 SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = (
     LastLayerBiasOptions.DEFAULT
@@ -103,10 +105,14 @@ SUBMODULE_STACK_BIAS_FLAG: bool = STACK_BIAS_FLAG
 
 #########################################################################
 # Residual Options
-# - False uses the residual variant's learned coefficient parameters.
-# - True uses the residual stack for data-dependent coefficients.
+# - False uses the residual variant's learned query or coefficient parameters.
+# - True uses the residual stack for input-dependent queries or coefficients.
+# - For every attention residual selector, supply its RESIDUAL_BLOCK_SIZE and
+#   RESIDUAL_RMS_NORM_EPSILON explicitly (suggested: 1 for full attention, 1e-6).
 STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 STACK_RESIDUAL_MODEL_FLAG: bool = False
+STACK_RESIDUAL_BLOCK_SIZE: int | None = None
+STACK_RESIDUAL_RMS_NORM_EPSILON: float | None = None
 ## Residual Stack Options
 # - If False, residual stack options inherit layer stack submodule options.
 RESIDUAL_STACK_INDEPENDENT_FLAG: bool = False
@@ -117,6 +123,8 @@ RESIDUAL_STACK_NUM_LAYERS: int | None = None
 RESIDUAL_STACK_ACTIVATION: ActivationOptions | None = None
 RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 RESIDUAL_STACK_RESIDUAL_MODEL_FLAG: bool = False
+RESIDUAL_STACK_RESIDUAL_BLOCK_SIZE: int | None = None
+RESIDUAL_STACK_RESIDUAL_RMS_NORM_EPSILON: float | None = None
 RESIDUAL_STACK_DROPOUT_PROBABILITY: float | None = None
 RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG: bool | None = None
@@ -138,6 +146,8 @@ GATE_STACK_NUM_LAYERS: int | None = None
 GATE_STACK_ACTIVATION: ActivationOptions | None = ActivationOptions.TANH
 GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 GATE_STACK_RESIDUAL_MODEL_FLAG: bool = False
+GATE_STACK_RESIDUAL_BLOCK_SIZE: int | None = None
+GATE_STACK_RESIDUAL_RMS_NORM_EPSILON: float | None = None
 GATE_STACK_DROPOUT_PROBABILITY: float | None = None
 GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG: bool | None = True
@@ -165,6 +175,8 @@ HALTING_STACK_NUM_LAYERS: int | None = None
 HALTING_STACK_ACTIVATION: ActivationOptions | None = None
 HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 HALTING_STACK_RESIDUAL_MODEL_FLAG: bool = False
+HALTING_STACK_RESIDUAL_BLOCK_SIZE: int | None = None
+HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON: float | None = None
 HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
 HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = (
     LastLayerBiasOptions.DISABLED
@@ -190,6 +202,8 @@ MEMORY_STACK_NUM_LAYERS: int | None = None
 MEMORY_STACK_ACTIVATION: ActivationOptions | None = None
 MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 MEMORY_STACK_RESIDUAL_MODEL_FLAG: bool = False
+MEMORY_STACK_RESIDUAL_BLOCK_SIZE: int | None = None
+MEMORY_STACK_RESIDUAL_RMS_NORM_EPSILON: float | None = None
 MEMORY_STACK_DROPOUT_PROBABILITY: float | None = None
 MEMORY_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG: bool | None = None
@@ -225,6 +239,8 @@ RECURRENT_GATE_STACK_NUM_LAYERS: int | None = None
 RECURRENT_GATE_STACK_ACTIVATION: ActivationOptions | None = None
 RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG: bool = False
+RECURRENT_GATE_STACK_RESIDUAL_BLOCK_SIZE: int | None = None
+RECURRENT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON: float | None = None
 RECURRENT_GATE_STACK_DROPOUT_PROBABILITY: float | None = None
 RECURRENT_GATE_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG: bool | None = None
@@ -248,6 +264,8 @@ RECURRENT_HALTING_STACK_NUM_LAYERS: int | None = None
 RECURRENT_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
 RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG: bool = False
+RECURRENT_HALTING_STACK_RESIDUAL_BLOCK_SIZE: int | None = None
+RECURRENT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON: float | None = None
 RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY: float | None = None
 RECURRENT_HALTING_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG: bool | None = None
