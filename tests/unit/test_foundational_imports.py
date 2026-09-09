@@ -224,6 +224,7 @@ print(json.dumps({
                     "LayerStackConfig",
                     "MirroredLayerStackConfig",
                     "HierarchicalReasoningModelRecurrentConfig",
+                    "InnerThinkingRecurrentConfig",
                     "RecurrentCompositionConfig",
                     "RecurrentLayerConfig",
                     "TinyRecursiveModelRecurrentConfig",
