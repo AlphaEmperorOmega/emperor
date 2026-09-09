@@ -21,6 +21,8 @@ _SUBMODULE_STACK_FIELD_MAP = {
     "layer_norm_position": "layer_norm_position",
     "normalization": "normalization",
     "residual_connection_option": "residual_connection_option",
+    "residual_block_size": "residual_block_size",
+    "residual_rms_norm_epsilon": "residual_rms_norm_epsilon",
     "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
     "bias_flag": "bias_flag",
