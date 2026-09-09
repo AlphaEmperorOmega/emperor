@@ -188,13 +188,23 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                         runtime_defaults.has_current_value(model_flag_key),
                         model_flag_key,
                     )
-                    self.assertIs(
+                    inherits_shared_flag = (
+                        package.catalog_key == "transformer/expert_linear_adaptive"
+                        and model_flag_key.startswith(
+                            (
+                                "ENCODER_ATTN_EXPERT_ADAPTIVE_",
+                                "DECODER_SELF_ATTN_EXPERT_ADAPTIVE_",
+                                "DECODER_CROSS_ATTN_EXPERT_ADAPTIVE_",
+                            )
+                        )
+                    )
+                    self.assertEqual(
                         runtime_defaults.annotations.get(model_flag_key),
-                        bool,
+                        bool | None if inherits_shared_flag else bool,
                     )
                     self.assertIs(
                         runtime_defaults.current_value(model_flag_key),
-                        False,
+                        None if inherits_shared_flag else False,
                     )
                     self.assertEqual(
                         metadata[model_flag_key]["sectionPath"],
@@ -207,7 +217,9 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
 
                     field = schema_fields[model_flag_key]
                     self.assertEqual(field.value_type, "bool")
-                    self.assertIs(field.default, False)
+                    self.assertIs(
+                        field.default, None if inherits_shared_flag else False
+                    )
                     self.assertIn(
                         "Residual Stack Options as a data-dependent coefficient model",
                         field.description,
