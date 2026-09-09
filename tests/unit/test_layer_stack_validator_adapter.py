@@ -1,12 +1,14 @@
 import copy
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from unittest.mock import patch
 
 import torch
 
+from emperor.halting import StickBreakingConfig
 from emperor.layers import (
     ActivationOptions,
+    AdditiveResidualConfig,
     AttentionResidualConfig,
     LastLayerBiasOptions,
     LayerConfig,
@@ -14,8 +16,11 @@ from emperor.layers import (
     LayerStack,
     LayerStackConfig,
     ResidualConfig,
+    WeightedBlendResidualConfig,
+    WeightedResidualConfig,
 )
-from emperor.layers._composition.residual.base import ResidualStackRequirements
+from emperor.layers._composition.residual.validation import ResidualConnectionValidator
+from emperor.layers._composition.residual.variants.additive import AdditiveResidual
 from emperor.layers._stack.shared_controllers import LayerStackSharedControllers
 from emperor.layers._stack.validation import LayerStackValidator
 from emperor.linears import LinearLayerConfig
@@ -95,11 +100,18 @@ class TestLayerStackValidatorAdapter(unittest.TestCase):
                 )
             )
 
-    def test_stack_requirements_are_read_from_the_registered_residual_owner(self):
-        class SyntheticResidualOwner:
-            STACK_REQUIREMENTS = ResidualStackRequirements(
-                requires_output_postprocessing=True,
-            )
+    def test_stack_validation_uses_the_registered_residual_validator(self):
+        class SyntheticResidualValidator(ResidualConnectionValidator):
+            @staticmethod
+            def validate_stack_config(config):
+                if not config.apply_output_postprocessing_flag:
+                    raise ValueError("synthetic residual requires final processing")
+
+        class SyntheticResidualOwner(AdditiveResidual):
+            VALIDATOR = SyntheticResidualValidator
+
+            def __init__(self, *args, **kwargs):
+                raise AssertionError("residual constructed before stack validation")
 
         @dataclass
         class SyntheticResidualConfig(ResidualConfig):
@@ -108,8 +120,7 @@ class TestLayerStackValidatorAdapter(unittest.TestCase):
 
         with self.assertRaisesRegex(
             ValueError,
-            "apply_output_postprocessing_flag must be True when "
-            "SyntheticResidualConfig is enabled",
+            "synthetic residual requires final processing",
         ):
             LayerStack(
                 make_config(
@@ -119,6 +130,82 @@ class TestLayerStackValidatorAdapter(unittest.TestCase):
                     ),
                 )
             )
+
+    def test_attention_stack_rejections_preserve_configuration_and_rng(self):
+        cases = (
+            ("input_dim", 2, "input_dim, hidden_dim, and output_dim"),
+            ("hidden_dim", 4, "input_dim, hidden_dim, and output_dim"),
+            ("output_dim", 4, "input_dim, hidden_dim, and output_dim"),
+            (
+                "apply_output_postprocessing_flag",
+                False,
+                "apply_output_postprocessing_flag must be True",
+            ),
+            (
+                "shared_halting_config",
+                StickBreakingConfig(),
+                "halting cannot be combined with AttentionResidualConfig",
+            ),
+            (
+                "halting_config",
+                StickBreakingConfig(),
+                "halting cannot be combined with AttentionResidualConfig",
+            ),
+        )
+        for field_name, value, message in cases:
+            with self.subTest(field=field_name):
+                config = make_config(
+                    num_layers=2,
+                    apply_output_postprocessing_flag=True,
+                    layer_config=attention_residual_layer_config(),
+                )
+                if field_name == "halting_config":
+                    config.layer_config.halting_config = value
+                else:
+                    setattr(config, field_name, value)
+                original = copy.deepcopy(config)
+                random_state = torch.get_rng_state().clone()
+
+                with self.assertRaisesRegex(ValueError, message):
+                    LayerStack(config)
+
+                self.assertEqual(config, original)
+                torch.testing.assert_close(torch.get_rng_state(), random_state)
+
+    def test_dimension_rejection_precedes_output_processing_rejection(self):
+        config = make_config(
+            input_dim=2,
+            apply_output_postprocessing_flag=False,
+            layer_config=attention_residual_layer_config(),
+        )
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "input_dim, hidden_dim, and output_dim must all be equal",
+        ):
+            LayerStack(config)
+
+    def test_pairwise_and_disabled_residuals_allow_rectangular_output_stacks(self):
+        for residual_config in (
+            None,
+            AdditiveResidualConfig(),
+            WeightedResidualConfig(),
+            WeightedBlendResidualConfig(),
+        ):
+            with self.subTest(residual=residual_config):
+                config = make_config(
+                    input_dim=2,
+                    hidden_dim=3,
+                    output_dim=4,
+                    num_layers=2,
+                    apply_output_postprocessing_flag=False,
+                    layer_config=replace(
+                        attention_residual_layer_config(),
+                        residual_config=residual_config,
+                    ),
+                )
+
+                self.assertIsNone(LayerStackValidator.validate_config(config))
 
     def test_module_exposes_validator_adapter(self):
         self.assertIs(LayerStack.VALIDATOR, LayerStackValidator)

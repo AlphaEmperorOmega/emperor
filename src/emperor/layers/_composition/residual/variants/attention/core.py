@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 import torch
 import torch.nn as nn
@@ -9,39 +9,27 @@ from torch import Tensor
 
 from emperor.layers._composition.residual.base import (
     ResidualConnectionAbstract,
-    ResidualRuntimeRequirement,
-    ResidualStackRequirements,
     ResidualState,
 )
 from emperor.layers._composition.residual.config import AttentionResidualConfig
-from emperor.layers._composition.residual.validation import (
-    ResidualConnectionValidator,
+from emperor.layers._composition.residual.validation import AttentionResidualValidator
+from emperor.layers._composition.residual.variants.attention.lifecycle import (
+    AttentionResidualStateLifecycle,
+)
+from emperor.layers._composition.residual.variants.attention.state import (
+    AttentionResidualState,
 )
 
 if TYPE_CHECKING:
+    from emperor.layers import LayerStack, LayerStackConfig
     from emperor.layers._state import LayerState
-
-
-from emperor.layers._composition.residual.variants.attention.state import AttentionResidualState
-from emperor.layers._composition.residual.variants.attention.lifecycle import AttentionResidualStateLifecycle
+    from emperor.linears import LinearAbstract, LinearLayerConfig
 
 
 class AttentionResidual(ResidualConnectionAbstract):
     """Learned softmax routing across raw residual-depth sources."""
 
-    DEFAULT_BLOCK_SIZE = 1
-    DEFAULT_RMS_NORM_EPSILON = 1e-6
-    RUNTIME_REQUIREMENTS = frozenset(
-        {
-            ResidualRuntimeRequirement.FORWARD_LOCAL_STATE,
-            ResidualRuntimeRequirement.DEPTH_SPECIFIC_CONNECTIONS,
-        }
-    )
-    STACK_REQUIREMENTS = ResidualStackRequirements(
-        requires_uniform_dimensions=True,
-        requires_output_postprocessing=True,
-        allows_halting=False,
-    )
+    VALIDATOR = AttentionResidualValidator
 
     def __init__(
         self,
@@ -49,36 +37,13 @@ class AttentionResidual(ResidualConnectionAbstract):
         overrides: AttentionResidualConfig | None = None,
     ) -> None:
         super().__init__(cfg, overrides)
-        self.__initialize_from_config()
+        self.block_size = 1 if self.cfg.block_size is None else self.cfg.block_size
+        self.rms_norm_epsilon = 1e-6 if self.cfg.rms_norm_epsilon is None else float(self.cfg.rms_norm_epsilon)
+
         self.query = nn.Parameter(torch.zeros(self.residual_dim))
         self.key_norm = self.__build_key_norm()
-        self.__residual_state_lifecycle = self.__build_residual_state_lifecycle()
+        self.residual_state_lifecycle = self.__build_residual_state_lifecycle()
 
-    def __initialize_from_config(self) -> None:
-        self.block_size = self.__resolve_block_size(self.cfg.block_size)
-        self.rms_norm_epsilon = self.__resolve_rms_norm_epsilon(
-            self.cfg.rms_norm_epsilon
-        )
-
-    @classmethod
-    def __resolve_block_size(cls, configured_block_size: int | None) -> int:
-        return (
-            cls.DEFAULT_BLOCK_SIZE
-            if configured_block_size is None
-            else configured_block_size
-        )
-
-    @classmethod
-    def __resolve_rms_norm_epsilon(
-        cls,
-        configured_rms_norm_epsilon: float | None,
-    ) -> float:
-        configured_rms_norm_epsilon = (
-            cls.DEFAULT_RMS_NORM_EPSILON
-            if configured_rms_norm_epsilon is None
-            else configured_rms_norm_epsilon
-        )
-        return float(configured_rms_norm_epsilon)
 
     def __build_key_norm(self) -> nn.RMSNorm:
         return nn.RMSNorm(
@@ -96,10 +61,6 @@ class AttentionResidual(ResidualConnectionAbstract):
             validator=self.VALIDATOR,
         )
 
-    @property
-    def residual_state_lifecycle(self) -> ResidualStateLifecycle:
-        return self.__residual_state_lifecycle
-
     def apply_to_layer_state(
         self,
         state: LayerState,
@@ -107,10 +68,11 @@ class AttentionResidual(ResidualConnectionAbstract):
     ) -> LayerState:
         if state.residual_state is None:
             created_residual_state = self.new_state(previous)
-            state.residual_state = self.VALIDATOR.validate_created_attention_state(
+            self.VALIDATOR.validate_created_attention_state(
+                self,
                 created_residual_state,
-                block_size=self.block_size,
             )
+            state.residual_state = created_residual_state
         return super().apply_to_layer_state(state, previous)
 
     def forward(
@@ -120,9 +82,8 @@ class AttentionResidual(ResidualConnectionAbstract):
         *,
         residual_state: ResidualState | None = None,
     ) -> Tensor:
-        attention_state = self.__validate_attention_forward_inputs(
-            current, residual_state
-        )
+        self.__validate_attention_forward_inputs(current, residual_state)
+        attention_state = cast(AttentionResidualState, residual_state)
         residual_sources = self.__append_and_stack_residual_sources(
             attention_state, current
         )
@@ -132,7 +93,9 @@ class AttentionResidual(ResidualConnectionAbstract):
         normalized_source_keys = self.__normalize_residual_source_keys(
             accumulator_sources,
         )
-        depth_weights = self.__calculate_residual_depth_weights(normalized_source_keys)
+        depth_weights = self.__calculate_residual_depth_weights(
+            normalized_source_keys
+        )
         mixed_residual_sources = self.__mix_depth_weighted_residual_sources(
             accumulator_sources, depth_weights
         )
@@ -142,13 +105,13 @@ class AttentionResidual(ResidualConnectionAbstract):
         self,
         current: Tensor,
         residual_state: ResidualState | None,
-    ) -> AttentionResidualState:
-        return self.VALIDATOR.validate_attention_forward_inputs(
+    ) -> None:
+        self.VALIDATOR.validate_attention_forward_inputs(
+            self,
             current,
             residual_state,
-            residual_dim=self.residual_dim,
-            block_size=self.block_size,
         )
+
 
     @staticmethod
     def __append_and_stack_residual_sources(
@@ -203,7 +166,4 @@ class AttentionResidual(ResidualConnectionAbstract):
         depth_weighted_residual_sources = (
             feature_broadcast_depth_weights * accumulator_sources
         )
-        return torch.sum(
-            depth_weighted_residual_sources,
-            dim=0,
-        )
+        return torch.sum(depth_weighted_residual_sources, dim=0)

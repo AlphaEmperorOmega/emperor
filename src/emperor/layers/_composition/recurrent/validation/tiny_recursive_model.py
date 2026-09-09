@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import fields
+from typing import TYPE_CHECKING
 
 from torch import Tensor
 
@@ -10,7 +11,6 @@ from emperor.layers._composition.recurrent.validation.common import (
     _RECURRENT_SHARED_OPTIONAL_FIELDS,
     _RecurrentCompositionValidator,
     _validate_initialization_standard_deviation,
-    _validate_recurrent_controller_config,
     _validate_recurrent_iteration_controls,
     _validate_smooth_iteration_growth_controls,
     _validate_variant_hidden,
@@ -21,6 +21,11 @@ from emperor.layers._validation.common import (
     _validate_halting_required_update_count,
 )
 
+if TYPE_CHECKING:
+    from emperor.layers._composition.recurrent.config import (
+        TinyRecursiveModelRecurrentConfig,
+    )
+
 
 class TinyRecursiveModelRecurrentValidator(_RecurrentCompositionValidator):
     OPTIONAL_FIELDS = {
@@ -30,11 +35,26 @@ class TinyRecursiveModelRecurrentValidator(_RecurrentCompositionValidator):
 
     @classmethod
     def validate(cls, model: object) -> None:
+        config = model.cfg
+        cls.__validate_config_fields(config)
+        transitions_per_iteration = config.latent_updates_per_answer_update + 1
+        cls.__validate_iteration_controls(config, transitions_per_iteration)
+        cls.__validate_stable_dimensions(config)
+        cls.__validate_controllers(config, transitions_per_iteration)
+        cls.__validate_block_config(config.block_config)
+        _validate_initialization_standard_deviation(
+            config.initialization_standard_deviation
+        )
+        cls.__validate_runtime_owner(model, config)
+
+    @classmethod
+    def __validate_config_fields(
+        cls, config: TinyRecursiveModelRecurrentConfig
+    ) -> None:
         from emperor.layers._composition.recurrent.config import (
             TinyRecursiveModelRecurrentConfig,
         )
 
-        config = model.cfg
         if not isinstance(config, TinyRecursiveModelRecurrentConfig):
             raise TypeError(
                 "TinyRecursiveModelRecurrent cfg must be a TinyRecursiveModelRecurrentConfig, "
@@ -54,7 +74,11 @@ class TinyRecursiveModelRecurrentValidator(_RecurrentCompositionValidator):
             latent_updates_per_answer_update=(config.latent_updates_per_answer_update),
             answer_update_count=config.answer_update_count,
         )
-        transitions_per_iteration = config.latent_updates_per_answer_update + 1
+
+    @staticmethod
+    def __validate_iteration_controls(
+        config: TinyRecursiveModelRecurrentConfig, transitions_per_iteration: int
+    ) -> None:
         _validate_recurrent_iteration_controls(
             config,
             maximum_iterations=config.answer_update_count,
@@ -64,13 +88,21 @@ class TinyRecursiveModelRecurrentValidator(_RecurrentCompositionValidator):
             config,
             transitions_per_iteration=transitions_per_iteration,
         )
+
+    @staticmethod
+    def __validate_stable_dimensions(config: TinyRecursiveModelRecurrentConfig) -> None:
         if config.input_dim != config.output_dim:
             raise ValueError(
                 "input_dim and output_dim must be equal for TinyRecursiveModelRecurrentConfig, "
                 f"got input_dim={config.input_dim} and "
                 f"output_dim={config.output_dim}."
             )
-        _validate_recurrent_controller_config(config)
+
+    @classmethod
+    def __validate_controllers(
+        cls, config: TinyRecursiveModelRecurrentConfig, transitions_per_iteration: int
+    ) -> None:
+        cls._validate_recurrent_controller_config(config)
         if (
             config.gradient_transition_count is not None
             and config.halting_config is not None
@@ -83,10 +115,11 @@ class TinyRecursiveModelRecurrentValidator(_RecurrentCompositionValidator):
                 required_update_count=required_update_count,
                 owner_name=type(config).__name__,
             )
-        cls.__validate_block_config(config.block_config)
-        _validate_initialization_standard_deviation(
-            config.initialization_standard_deviation
-        )
+
+    @staticmethod
+    def __validate_runtime_owner(
+        model: object, config: TinyRecursiveModelRecurrentConfig
+    ) -> None:
         expected_owner = config.registry_owner()
         if not isinstance(model, expected_owner):
             raise TypeError(

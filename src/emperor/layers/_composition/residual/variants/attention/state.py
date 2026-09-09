@@ -6,14 +6,14 @@ from typing import ClassVar
 from torch import Tensor
 
 from emperor.layers._composition.residual.base import ResidualState
-from emperor.layers._composition.residual.validation import ResidualConnectionValidator
+from emperor.layers._composition.residual.validation import AttentionResidualValidator
 
 
 @dataclass(slots=True)
 class AttentionResidualState(ResidualState):
     """Forward-local sources mixed once per physical residual-depth execution."""
 
-    VALIDATOR: ClassVar[type[ResidualConnectionValidator]] = ResidualConnectionValidator
+    VALIDATOR: ClassVar[type[AttentionResidualValidator]] = AttentionResidualValidator
 
     initial_source: Tensor
     block_size: int

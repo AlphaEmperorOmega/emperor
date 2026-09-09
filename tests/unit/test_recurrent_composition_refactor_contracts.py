@@ -445,3 +445,70 @@ class TestRecurrentRefactorContracts(unittest.TestCase):
         self.assertEqual(
             model.recurrent_iteration_schedule.forward_call_progress.item(), 0
         )
+
+    def test_recurrent_validation_preserves_first_failure_across_variants(self):
+        shared = dict(
+            input_dim=2,
+            output_dim=2,
+            initial_iterations=1,
+            iteration_increment=1,
+            forward_calls_before_iteration_increment=1,
+        )
+        configs = (
+            RecurrentLayerConfig(
+                **shared, max_steps=2, block_config=RecordingBlockConfig()
+            ),
+            TinyRecursiveModelRecurrentConfig(
+                **shared,
+                answer_update_count=2,
+                latent_updates_per_answer_update=1,
+                block_config=RecordingBlockConfig(),
+                initialization_standard_deviation=0.0,
+            ),
+            HierarchicalReasoningModelRecurrentConfig(
+                **shared,
+                high_cycles=2,
+                low_cycles=1,
+                high_block_config=RecordingBlockConfig(),
+                low_block_config=RecordingBlockConfig(),
+                initialization_standard_deviation=0.0,
+            ),
+        )
+        for cfg in configs:
+            cases = (
+                (
+                    {"initial_iterations": 0, "gradient_transition_count": -1},
+                    ValueError,
+                    "initial_iterations",
+                ),
+                (
+                    {
+                        "no_gradient_transition_count": -1,
+                        "gradient_transition_count": -1,
+                    },
+                    ValueError,
+                    "no_gradient_transition_count",
+                ),
+                (
+                    {"gradient_transition_count": 1, "no_gradient_transition_count": 0},
+                    ValueError,
+                    "mutually exclusive",
+                ),
+                (
+                    {
+                        "recurrent_layer_norm_position": object(),
+                        "gate_config": object(),
+                    },
+                    TypeError,
+                    "recurrent_layer_norm_position",
+                ),
+                (
+                    {"gate_config": object(), "memory_config": object()},
+                    TypeError,
+                    "gate_config",
+                ),
+            )
+            for changes, error, message in cases:
+                with self.subTest(variant=type(cfg).__name__, changes=changes):
+                    with self.assertRaisesRegex(error, message):
+                        replace(cfg, **changes).build()

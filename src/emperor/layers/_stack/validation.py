@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, TypeGuard
 
 from emperor._validation import ValidatorBase, _validate_grouped_row_preservation
 from emperor.layers._composition.gate.validation import LayerGateValidator
-from emperor.layers._composition.residual.base import ResidualStackRequirements
 from emperor.layers._config import MirroredLayerStackConfig
 from emperor.layers._validation.common import (
     _HALTING_CONFIG_FIELDS,
@@ -66,7 +65,7 @@ class LayerStackValidator(ValidatorBase):
         cls._validate_halting_config(cfg)
         cls._validate_memory_config(cfg)
         _validate_grouped_row_preservation(cfg, root=type(cfg).__name__)
-        cls._validate_residual_stack_requirements(cfg)
+        cls._validate_residual_config(cfg)
         _validate_no_grouping_with_context_controllers(
             cfg,
             owner_name="LayerStackConfig",
@@ -106,43 +105,12 @@ class LayerStackValidator(ValidatorBase):
         return model
 
     @staticmethod
-    def _validate_residual_stack_requirements(cfg: LayerStackConfig) -> None:
+    def _validate_residual_config(cfg: LayerStackConfig) -> None:
         residual_config = cfg.layer_config.residual_config
         if residual_config is None:
             return
         residual_owner = residual_config.registry_owner()
-        requirements = getattr(
-            residual_owner,
-            "STACK_REQUIREMENTS",
-            ResidualStackRequirements(),
-        )
-        config_name = type(residual_config).__name__
-        if requirements.requires_uniform_dimensions and (
-            cfg.input_dim != cfg.hidden_dim or cfg.hidden_dim != cfg.output_dim
-        ):
-            raise ValueError(
-                "input_dim, hidden_dim, and output_dim must all be equal when "
-                f"{config_name} is enabled, "
-                f"got input_dim={cfg.input_dim}, hidden_dim={cfg.hidden_dim}, "
-                f"output_dim={cfg.output_dim}."
-            )
-        if (
-            requirements.requires_output_postprocessing
-            and not cfg.apply_output_postprocessing_flag
-        ):
-            raise ValueError(
-                "apply_output_postprocessing_flag must be True when "
-                f"{config_name} is enabled so the final layer performs the "
-                "required final aggregation."
-            )
-        if not requirements.allows_halting and (
-            cfg.shared_halting_config is not None
-            or cfg.layer_config.halting_config is not None
-        ):
-            raise ValueError(
-                f"halting cannot be combined with {config_name} until residual "
-                "history masking and finalization semantics are defined."
-            )
+        residual_owner.VALIDATOR.validate_stack_config(cfg)
 
     @classmethod
     def _validate_gate_config(cls, cfg: LayerStackConfig) -> None:
