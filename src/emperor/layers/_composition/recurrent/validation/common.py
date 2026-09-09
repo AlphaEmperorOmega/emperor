@@ -29,6 +29,7 @@ _GRADIENT_WINDOW_FIELDS = {
 _RECURRENT_SHARED_OPTIONAL_FIELDS = {
     "smooth_iteration_growth_flag",
     "recurrent_layer_norm_position",
+    "recurrent_normalization",
     "gate_config",
     "residual_config",
     "halting_config",
