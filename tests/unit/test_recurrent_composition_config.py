@@ -12,6 +12,7 @@ from emperor.config import ConfigBase
 from emperor.halting import HaltingConfig
 from emperor.layers import (
     HierarchicalReasoningModelRecurrentConfig,
+    InnerThinkingRecurrentConfig,
     RecurrentCompositionConfig,
     RecurrentLayer,
     RecurrentLayerConfig,
@@ -198,12 +199,27 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
         call_lines = {
             ast.unparse(call.func): call.lineno for call in base_initializer_calls
         }
+        config_assignments = [
+            node
+            for node in ast.walk(base_initializer_tree)
+            if isinstance(node, (ast.Assign, ast.AnnAssign))
+            and node.value is not None
+            and any(
+                isinstance(value, ast.Attribute)
+                and isinstance(value.value, ast.Attribute)
+                and isinstance(value.value.value, ast.Name)
+                and value.value.value.id == "self"
+                and value.value.attr == "cfg"
+                for value in ast.walk(node.value)
+            )
+        ]
+        self.assertTrue(config_assignments)
         self.assertLess(
             call_lines["self.VALIDATOR.validate"],
-            call_lines["self.__initialize_from_config"],
+            min(assignment.lineno for assignment in config_assignments),
         )
         self.assertLess(
-            call_lines["self.__initialize_from_config"],
+            max(assignment.end_lineno for assignment in config_assignments),
             call_lines["self.__initialize_delegates"],
         )
         delegate_initializer = vars(RecurrentCompositionAbstract)[
@@ -370,6 +386,7 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
     def test_all_recurrent_configs_own_the_shared_iteration_schedule(self) -> None:
         for config_type in (
             RecurrentLayerConfig,
+            InnerThinkingRecurrentConfig,
             TinyRecursiveModelRecurrentConfig,
             HierarchicalReasoningModelRecurrentConfig,
         ):
@@ -416,6 +433,7 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
             {
                 RecurrentCompositionConfig,
                 RecurrentLayerConfig,
+                InnerThinkingRecurrentConfig,
                 TinyRecursiveModelRecurrentConfig,
                 HierarchicalReasoningModelRecurrentConfig,
             },
@@ -547,7 +565,10 @@ class TestRecurrentCompositionConfig(unittest.TestCase):
             RecurrentLayerConfig: {"_registry_owner"},
             TinyRecursiveModelRecurrentConfig: {"_registry_owner"},
             HierarchicalReasoningModelRecurrentConfig: {"_registry_owner"},
-            RecurrentLayerValidator: {"_validate_integer_field"},
+            RecurrentLayerValidator: {
+                "_validate_integer_field",
+                "_validate_residual_execution",
+            },
             TinyRecursiveModelRecurrentValidator: set(),
             HierarchicalReasoningModelRecurrentValidator: set(),
             RecurrentIterationScheduleValidator: set(),
