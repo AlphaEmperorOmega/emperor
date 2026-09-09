@@ -1,12 +1,22 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from emperor.config import ConfigBase, optional_field
 from emperor.embedding.absolute import AbsolutePositionalEmbeddingConfig
-from emperor.layers import LayerStackConfig, RecurrentCompositionConfig
+from emperor.layers import (
+    LayerStackConfig,
+    NormalizationOptions,
+    RecurrentCompositionConfig,
+)
 
 
 @dataclass
 class ExperimentConfig(ConfigBase):
+    encoder_output_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
+    decoder_output_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     source_positional_embedding_config: AbsolutePositionalEmbeddingConfig | None = (
         optional_field("Source positional embedding configuration.")
     )

@@ -30,6 +30,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.memory import (
@@ -43,6 +44,9 @@ from emperor.memory import (
 class TransformerStackOptions:
     num_layers: int = 3
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     stack_gate_flag: bool = False
     stack_halting_flag: bool = False
     halting_option: type[HaltingConfig] = StickBreakingConfig
@@ -74,6 +78,9 @@ class SubmoduleStackOptions:
     apply_output_postprocessing_flag: bool = False
     activation: ActivationOptions = ActivationOptions.DISABLED
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     residual_connection_option: type[ResidualConfig] | None = None
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float = 0.0
@@ -89,6 +96,7 @@ class ControllerStackOptions:
     apply_output_postprocessing_flag: bool | None = None
     activation: ActivationOptions | None = None
     layer_norm_position: LayerNormPositionOptions | None = None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None = None
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float | None = None
@@ -125,6 +133,11 @@ def resolve_controller_stack_options(
             defaults.layer_norm_position
             if source.layer_norm_position is None
             else source.layer_norm_position
+        ),
+        normalization=(
+            defaults.normalization
+            if source.normalization is None
+            else source.normalization
         ),
         residual_connection_option=(
             defaults.residual_connection_option
@@ -174,6 +187,9 @@ class RecurrentControllerOptions:
     recurrent_max_steps: int = 2
     recurrent_layer_norm_position: LayerNormPositionOptions = (
         LayerNormPositionOptions.DISABLED
+    )
+    recurrent_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
     )
     recurrent_stack_gate_flag: bool = False
     recurrent_gate_option: LayerGateOptions | None = LayerGateOptions.MULTIPLIER
@@ -292,6 +308,12 @@ class AdaptiveParameterOptions:
 
 @dataclass(frozen=True)
 class RuntimeOptions:
+    encoder_output_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
+    decoder_output_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     batch_size: int = 64
     learning_rate: float = 1.0
     vocab_size: int = 8192
@@ -302,6 +324,9 @@ class RuntimeOptions:
     residual_stack_independent_flag: bool = False
     residual_stack_hidden_dim: int | None = None
     residual_stack_layer_norm_position: LayerNormPositionOptions | None = None
+    residual_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     residual_stack_num_layers: int | None = None
     residual_stack_activation: ActivationOptions | None = None
     residual_stack_residual_connection_option: type[ResidualConfig] | None = None

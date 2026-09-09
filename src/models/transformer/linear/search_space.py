@@ -1,4 +1,4 @@
-from emperor.layers import LayerNormPositionOptions
+from emperor.layers import LayerNormPositionOptions, NormalizationOptions
 
 SEARCH_SPACE_LEARNING_RATE = [0.5, 1.0, 2.0]
 SEARCH_SPACE_MODEL_DIM = [64, 128, 256]
@@ -10,4 +10,10 @@ SEARCH_SPACE_ENCODER_LAYER_NORM_POSITION = [
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
 ]
+SEARCH_SPACE_ENCODER_NORMALIZATION = list(NormalizationOptions)
 SEARCH_SPACE_DECODER_LAYER_NORM_POSITION = SEARCH_SPACE_ENCODER_LAYER_NORM_POSITION
+SEARCH_SPACE_DECODER_NORMALIZATION = list(NormalizationOptions)
+
+# Embedding and output normalization
+SEARCH_SPACE_ENCODER_OUTPUT_NORMALIZATION: list = list(NormalizationOptions)
+SEARCH_SPACE_DECODER_OUTPUT_NORMALIZATION: list = list(NormalizationOptions)

@@ -39,6 +39,7 @@ def _controller_stack(
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             residual_config=build_residual_config(
                 options.residual_connection_option,
                 options.residual_model_flag,
@@ -196,6 +197,7 @@ def configure_transformer_submodule(
         iteration_increment=1,
         forward_calls_before_iteration_increment=1,
         recurrent_layer_norm_position=recurrent.recurrent_layer_norm_position,
+        recurrent_normalization=recurrent.recurrent_normalization,
         block_config=model_config,
         gate_config=_gate_config(
             path_options,
