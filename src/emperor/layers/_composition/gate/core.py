@@ -37,11 +37,6 @@ class LayerGate(Module):
             output_dim=self.gate_dim,
         )
 
-    def effective_values(self, gate_output: Tensor) -> Tensor:
-        if self.activation is None or self.activation == ActivationOptions.DISABLED:
-            return gate_output
-        return self.activation(gate_output)
-
     def forward(
         self,
         current: Tensor,
@@ -50,13 +45,6 @@ class LayerGate(Module):
         self.VALIDATOR.validate_gate_output(gate_output, current, self.option)
         gate = self.effective_values(gate_output)
         return self.__compose_gate_with_current(current, gate)
-
-    def __compose_gate_with_current(self, current: Tensor, gate: Tensor) -> Tensor:
-        if self.option == LayerGateOptions.MULTIPLIER:
-            return gate * current
-        if self.option == LayerGateOptions.ADDITION:
-            return current + gate
-        raise ValueError(f"Unsupported gate option {self.option} for LayerGate.")
 
     def __run_gate_model(
         self,
@@ -74,3 +62,15 @@ class LayerGate(Module):
         from emperor.layers._state import LayerState
 
         return LayerState(hidden=current)
+
+    def effective_values(self, gate_output: Tensor) -> Tensor:
+        if self.activation is None or self.activation == ActivationOptions.DISABLED:
+            return gate_output
+        return self.activation(gate_output)
+
+    def __compose_gate_with_current(self, current: Tensor, gate: Tensor) -> Tensor:
+        if self.option == LayerGateOptions.MULTIPLIER:
+            return gate * current
+        if self.option == LayerGateOptions.ADDITION:
+            return current + gate
+        raise ValueError(f"Unsupported gate option {self.option} for LayerGate.")
