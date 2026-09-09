@@ -129,6 +129,7 @@ class TestLayer(unittest.TestCase):
             "LayerStackConfig",
             "MirroredLayerStackConfig",
             "HierarchicalReasoningModelRecurrentConfig",
+            "InnerThinkingRecurrentConfig",
             "RecurrentCompositionConfig",
             "RecurrentLayerConfig",
             "TinyRecursiveModelRecurrentConfig",

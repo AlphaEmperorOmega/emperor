@@ -41,7 +41,10 @@ reviewed_modules = [
   "src/emperor/layers/_composition/residual/validation/weighted.py",
   "src/emperor/layers/_composition/residual/variants/__init__.py",
   "src/emperor/layers/_composition/residual/variants/additive.py",
-  "src/emperor/layers/_composition/residual/variants/attention.py",
+  "src/emperor/layers/_composition/residual/variants/attention/__init__.py",
+  "src/emperor/layers/_composition/residual/variants/attention/core.py",
+  "src/emperor/layers/_composition/residual/variants/attention/lifecycle.py",
+  "src/emperor/layers/_composition/residual/variants/attention/state.py",
   "src/emperor/layers/_composition/residual/variants/weighted.py",
   "src/emperor/layers/_composition/residual/variants/weighted_blend.py",
   "src/emperor/layers/_config.py",
@@ -76,6 +79,7 @@ reviewed_modules = [
 focused_tests = [
   "tests/unit/test_layer.py",
   "tests/unit/test_layer_attention_residual.py",
+  "tests/unit/test_layer_attention_residual_query_model.py",
   "tests/unit/test_layer_attention_residual_validator_adapter.py",
   "tests/unit/test_layer_behavioral_contracts.py",
   "tests/unit/test_layer_controller_monitor.py",
@@ -101,6 +105,7 @@ commands = [
   "MPLCONFIGDIR=/tmp/matplotlib PYTHONPATH=src:tests python -m unittest tests.architecture.test_emperor_test_manifest tests.architecture.test_emperor_interfaces tests.contract.test_emperor_public_interfaces",
 ]
 review_questions = [
+  "Would tests fail if AttentionResidualConfig.model_config changed query-model initialization; current-output query conditioning; feature-last shapes; dtype handling; independent depth ownership; gradients; strict checkpoints; or validation before history mutation?",
   "Would tests fail if the Layer pipeline changed the order of model execution, memory, normalization, activation, gate, dropout, residual, halting, state mutation, or output handling?",
   "Would tests fail if any activation or residual mode changed its exact equation, initialization, disabled identity, dtype, device, gradient, or optimizer-update behavior?",
   "Would tests fail if LayerGate changed multiplier versus addition semantics, optional activation behavior, plain-state adaptation, output validation, shape ownership, or nested-controller restrictions?",
