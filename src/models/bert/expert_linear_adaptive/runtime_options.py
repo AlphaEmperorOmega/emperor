@@ -56,6 +56,8 @@ class ExpertsStackOptions:
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     residual_stack_options: ResidualStackOptions | None = field(
         default=None, kw_only=True
     )
@@ -77,6 +79,8 @@ class ExpertsSubmoduleStackOptions:
     )
     residual_connection_option: type[ResidualConfig]
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     residual_stack_options: ResidualStackOptions | None = field(
         default=None, kw_only=True
     )
@@ -96,6 +100,8 @@ class ExpertsSubmoduleStackSource:
     normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float | None
     bias_flag: bool | None
 
@@ -112,6 +118,8 @@ def resolve_experts_submodule_stack_options(
     normalization: NormalizationOptions | None = None,
     residual_connection_option: type[ResidualConfig] | None = None,
     residual_model_flag: bool | None = None,
+    residual_block_size: int | None = None,
+    residual_rms_norm_epsilon: float | None = None,
     dropout_probability: float | None = None,
     bias_flag: bool | None = None,
 ) -> ExpertsSubmoduleStackOptions:
@@ -142,6 +150,12 @@ def resolve_experts_submodule_stack_options(
             if residual_connection_option is None
             else residual_connection_option
         ),
+        residual_block_size=defaults.residual_block_size
+        if residual_block_size is None
+        else residual_block_size,
+        residual_rms_norm_epsilon=defaults.residual_rms_norm_epsilon
+        if residual_rms_norm_epsilon is None
+        else residual_rms_norm_epsilon,
         residual_model_flag=(
             defaults.residual_model_flag
             if residual_model_flag is None
@@ -173,6 +187,8 @@ def resolve_experts_controller_stack_options(
         layer_norm_position=source.layer_norm_position,
         normalization=source.normalization,
         residual_connection_option=source.residual_connection_option,
+        residual_block_size=source.residual_block_size,
+        residual_rms_norm_epsilon=source.residual_rms_norm_epsilon,
         residual_model_flag=source.residual_model_flag,
         dropout_probability=source.dropout_probability,
         bias_flag=source.bias_flag,
@@ -262,6 +278,10 @@ class ExpertsRecurrentControllerOptions:
         kw_only=True,
     )
     recurrent_residual_model_flag: bool = field(default=False, kw_only=True)
+    recurrent_residual_block_size: int | None = field(default=None, kw_only=True)
+    recurrent_residual_rms_norm_epsilon: float | None = field(
+        default=None, kw_only=True
+    )
     residual_stack_options: ResidualStackOptions | None = field(
         default=None,
         kw_only=True,
@@ -291,6 +311,8 @@ class ExpertsAdaptiveGeneratorStackOptions:
     )
     residual_connection_option: type[ResidualConfig]
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     residual_stack_options: ResidualStackOptions | None = field(
         default=None, kw_only=True
     )
@@ -307,6 +329,8 @@ class AdaptiveGeneratorStackSource:
     activation: ActivationOptions | None
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float | None
     last_layer_bias_option: LastLayerBiasOptions | None
     apply_output_postprocessing_flag: bool | None
@@ -324,6 +348,8 @@ class AdaptiveGeneratorStackOptions:
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     residual_stack_options: ResidualStackOptions | None = field(
         default=None, kw_only=True
     )
@@ -395,6 +421,8 @@ class SubmoduleStackSource:
     normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float | None
     bias_flag: bool | None
 
@@ -412,6 +440,8 @@ class SubmoduleStackOptions:
     )
     residual_connection_option: type[ResidualConfig]
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     residual_stack_options: ResidualStackOptions | None = field(
         default=None, kw_only=True
     )
@@ -430,6 +460,8 @@ class MainLayerStackOptions:
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     residual_stack_options: ResidualStackOptions | None = field(
         default=None, kw_only=True
     )
