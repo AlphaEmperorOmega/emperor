@@ -131,18 +131,18 @@ _ORDERING_DIGEST_BY_PACKAGE = {
         40,
     ),
     "parametric/parametric_generator": (
-        "59b7820c17594cf276831e1b49ac0c0421f253addd4d4667a07e1676d9996cfa",
-        71,
+        "4b9e4fd713db817400c090d1fa07ced411cb574cf1582b288cb564e3c9ee7214",
+        72,
         7,
     ),
     "parametric/parametric_matrix": (
-        "4b9ee33f6a15c925ac2f9989ce5dcc4e5bc504eb00a9f3550d00fb89b33bbd0a",
-        65,
+        "fd56b87316fae8fa511c3cb3fbe4aedea7577382d81724472588ec37977ec7c8",
+        66,
         7,
     ),
     "parametric/parametric_vector": (
-        "cb2a5fe26e7f62fc9660c49368502c44557342beff8e4cd0767c1363e3c50731",
-        66,
+        "4efd1de70bed3b66f5d45ab559b65adcaf3ddeb078c7ed84304a94b906c3fa97",
+        67,
         6,
     ),
     "transformer/linear": (

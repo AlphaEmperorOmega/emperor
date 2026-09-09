@@ -4,6 +4,7 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
@@ -49,10 +50,12 @@ def build_linear_stack_config(
         output_dim=output_dim,
         activation=activation,
         residual_config=build_residual_config(
-            residual_connection_option, residual_model_flag
+            residual_connection_option,
+            residual_model_flag,
         ),
         dropout_probability=dropout_probability,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
+        normalization=NormalizationOptions.RMS_NORM,
         gate_config=None,
         halting_config=None,
         memory_config=None,
