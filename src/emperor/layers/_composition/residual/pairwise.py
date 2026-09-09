@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
@@ -35,47 +35,24 @@ class WeightedPairwiseResidualAbstract(ResidualConnectionAbstract):
         )
         self.raw_weight: nn.Parameter | None = None
         self.model: LayerStack | LinearAbstract | None = None
-        self.__initialize_coefficient()
+        self.__initialize_scalar_weight_or_coefficient_model()
 
-    def __initialize_coefficient(self) -> None:
+    def __initialize_scalar_weight_or_coefficient_model(self) -> None:
         if self.model_config is None:
             initial_raw_coefficient = self._initial_raw_mix_coefficient()
             self.raw_weight = nn.Parameter(initial_raw_coefficient)
             return
 
-        coefficient_dim = cast(int, self.residual_dim)
-        self.model = cast(
-            "LayerStack | LinearAbstract",
-            self._build_from_config(
-                self.model_config,
-                input_dim=coefficient_dim * 2,
-                output_dim=coefficient_dim,
-            ),
+        self.model = self._build_from_config(
+            self.model_config,
+            input_dim=self.residual_dim * 2,
+            output_dim=self.residual_dim,
         )
 
     @staticmethod
     @abstractmethod
     def _initial_raw_mix_coefficient() -> Tensor:
         """Return the raw scalar coefficient used at initialization."""
-
-    def _resolve_raw_mix_coefficient(
-        self,
-        current: Tensor,
-        previous: Tensor,
-    ) -> Tensor:
-        coefficient_model = self.model
-        if coefficient_model is not None:
-            coefficient_model_input = torch.cat((current, previous), dim=-1)
-            from emperor.layers import LayerStack, LayerState
-
-            if isinstance(coefficient_model, LayerStack):
-                coefficient_state = LayerState(
-                    hidden=coefficient_model_input,
-                )
-                return coefficient_model(coefficient_state).hidden
-            return coefficient_model(coefficient_model_input)
-        self.VALIDATOR.validate_raw_mix_coefficient(self.raw_weight)
-        return cast(Tensor, self.raw_weight)
 
     @abstractmethod
     def forward(
@@ -86,3 +63,25 @@ class WeightedPairwiseResidualAbstract(ResidualConnectionAbstract):
         residual_state: ResidualState | None = None,
     ) -> Tensor:
         """Compose two sources using a learned coefficient."""
+
+    def _resolve_raw_mix_coefficient(
+        self,
+        current: Tensor,
+        previous: Tensor,
+    ) -> Tensor:
+        coefficient_model = self.model
+        if coefficient_model is None:
+            self.VALIDATOR.validate_raw_mix_coefficient(self.raw_weight)
+            return self.raw_weight
+
+        coefficient_model_input = torch.cat((current, previous), dim=-1)
+        from emperor.layers import LayerStack, LayerState
+
+        if isinstance(coefficient_model, LayerStack):
+            coefficient_input_state = LayerState(
+                hidden=coefficient_model_input,
+            )
+            coefficient_output_state = coefficient_model(coefficient_input_state)
+            raw_mix_coefficient = coefficient_output_state.hidden
+            return raw_mix_coefficient
+        return coefficient_model(coefficient_model_input)
