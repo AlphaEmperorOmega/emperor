@@ -74,7 +74,9 @@ class ParametricHandlerMutationContractTests(unittest.TestCase):
             output_dim=2,
             layer_model_config=_parametric_config(),
         )
-        handler_config.residual_config = AttentionResidualConfig()
+        handler_config.residual_config = AttentionResidualConfig(
+            block_size=1, rms_norm_epsilon=1e-6
+        )
         handler = ParametricLayerHandler(handler_config)
         identity = torch.eye(2)
         with torch.no_grad():

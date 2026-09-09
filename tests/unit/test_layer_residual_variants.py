@@ -66,7 +66,9 @@ class TestResidualConfigRegistry(unittest.TestCase):
             (WeightedResidualConfig(), WeightedResidual),
             (WeightedBlendResidualConfig(), WeightedBlendResidual),
             (
-                AttentionResidualConfig(residual_dim=2),
+                AttentionResidualConfig(
+                    block_size=1, rms_norm_epsilon=1e-6, residual_dim=2
+                ),
                 AttentionResidual,
             ),
         )
@@ -387,7 +389,9 @@ class TestPairwiseResidualVariants(unittest.TestCase):
                 ("model.weight_params", "model.bias_params"),
             ),
             (
-                AttentionResidualConfig(residual_dim=2),
+                AttentionResidualConfig(
+                    block_size=1, rms_norm_epsilon=1e-6, residual_dim=2
+                ),
                 ("query", "key_norm.weight"),
             ),
         )
@@ -410,7 +414,9 @@ class TestPairwiseResidualVariants(unittest.TestCase):
                 residual_dim=2,
                 model_config=LinearLayerConfig(bias_flag=True),
             ),
-            AttentionResidualConfig(residual_dim=2),
+            AttentionResidualConfig(
+                block_size=1, rms_norm_epsilon=1e-6, residual_dim=2
+            ),
         )
         current = torch.tensor([[2.0, 3.0]])
         previous = torch.tensor([[5.0, 7.0]])

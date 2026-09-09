@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 class AttentionResidualValidator(ResidualConnectionValidator):
-    OPTIONAL_FIELDS = {"model_config", "block_size", "rms_norm_epsilon"}
+    OPTIONAL_FIELDS = {"model_config"}
 
     @staticmethod
     def validate_state_lifecycle(connection: ResidualConnectionAbstract) -> None:
@@ -49,14 +49,14 @@ class AttentionResidualValidator(ResidualConnectionValidator):
 
     @classmethod
     def _validate_config(cls, config: object) -> None:
+        cls.validate_required_fields(config)
+        cls.validate_field_types(config)
         cls.validate_positive_integer(config.residual_dim, name="residual_dim")
-        if config.block_size is not None:
-            cls.validate_positive_integer(config.block_size, name="block_size")
-        if config.rms_norm_epsilon is not None:
-            cls.validate_finite_positive_number(
-                config.rms_norm_epsilon,
-                name="rms_norm_epsilon",
-            )
+        cls.validate_positive_integer(config.block_size, name="block_size")
+        cls.validate_finite_positive_number(
+            config.rms_norm_epsilon,
+            name="rms_norm_epsilon",
+        )
         cls.__validate_query_model_config(config)
 
     @classmethod

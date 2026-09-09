@@ -6,6 +6,7 @@ import torch
 from emperor.config import ConfigBase, optional_field
 from emperor.layers import (
     ActivationOptions,
+    AttentionResidualConfig,
     LastLayerBiasOptions,
     Layer,
     LayerConfig,
@@ -204,7 +205,15 @@ def recurrent_config(
         block_config=IdentityBlockConfig(input_dim=2, output_dim=2),
         gate_config=None,
         residual_config=(
-            None if residual_connection_option is None else residual_connection_option()
+            None
+            if residual_connection_option is None
+            else residual_connection_option(
+                **(
+                    {"block_size": 1, "rms_norm_epsilon": 1e-6}
+                    if residual_connection_option is AttentionResidualConfig
+                    else {}
+                )
+            )
         ),
         halting_config=halting_config,
         memory_config=memory_config,
