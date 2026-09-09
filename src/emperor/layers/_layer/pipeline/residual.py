@@ -25,15 +25,12 @@ class LayerResidualDelegate(Module):
         super().__init__()
         self.cfg = cfg
         self.VALIDATOR.validate(self)
-        self.__initialize_from_config()
+        self.config = self.cfg.residual_config
+        self.output_dim: int = self.cfg.output_dim
 
         self.connection: ResidualConnectionAbstract | None = (
             self.__build_residual_connection()
         )
-
-    def __initialize_from_config(self) -> None:
-        self.config = self.cfg.residual_config
-        self.output_dim: int = self.cfg.output_dim
 
     def __build_residual_connection(self) -> ResidualConnectionAbstract | None:
         residual_connection = self._build_from_config(

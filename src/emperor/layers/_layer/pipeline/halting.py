@@ -25,13 +25,10 @@ class LayerHaltingDelegate(Module):
         super().__init__()
         self.cfg = cfg
         self.VALIDATOR.validate(self)
-        self.__initialize_from_config()
-        self.model: HaltingInterface[HaltingStateBase] | None = self.__build_model()
-        self.is_terminal = False
-
-    def __initialize_from_config(self) -> None:
         self.config = self.cfg.halting_config
         self.output_dim: int = self.cfg.output_dim
+        self.model: HaltingInterface[HaltingStateBase] | None = self.__build_model()
+        self.is_terminal = False
 
     def __build_model(self) -> HaltingInterface[HaltingStateBase] | None:
         model = self._build_from_config(

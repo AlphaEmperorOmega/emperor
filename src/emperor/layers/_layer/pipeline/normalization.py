@@ -30,10 +30,6 @@ class LayerNormalizationDelegate(Module):
         super().__init__()
         self.cfg = cfg
         self.VALIDATOR.validate(self)
-        self.__initialize_from_config()
-        self.module = self.__build_normalization()
-
-    def __initialize_from_config(self) -> None:
         self.position: LayerNormPositionOptions = self.cfg.layer_norm_position
         self.normalization: NormalizationOptions = (
             self.cfg.normalization or NormalizationOptions.RMS_NORM
@@ -41,6 +37,7 @@ class LayerNormalizationDelegate(Module):
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.dimension = self.__resolve_dimension(self.input_dim, self.output_dim)
+        self.module = self.__build_normalization()
 
     def __build_normalization(self) -> nn.Module | None:
         if self.dimension is None:

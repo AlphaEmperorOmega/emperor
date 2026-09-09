@@ -24,14 +24,11 @@ class LayerGate(Module):
         self.cfg: GateConfig = self._override_config(cfg, overrides)
 
         self.VALIDATOR.validate(self)
-        self.__initialize_from_config()
-        self.model = self.__build_model()
-
-    def __initialize_from_config(self) -> None:
         self.option: LayerGateOptions = self.cfg.option
         self.activation: ActivationOptions | None = self.cfg.activation
         self.gate_dim: int | None = self.cfg.gate_dim
         self.model_config = self.cfg.model_config
+        self.model = self.__build_model()
 
     def __build_model(self) -> "EmperorModule":
         return self._build_from_config(

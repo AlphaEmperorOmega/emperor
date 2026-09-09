@@ -35,14 +35,11 @@ class Layer(LayerModuleBase):
         super().__init__()
         self.cfg: LayerConfig = self._override_config(cfg, overrides)
         self.VALIDATOR.validate(self)
-        self.__initialize_from_config()
-        self.__initialize_delegates()
-        self.model = self.__build_model()
-
-    def __initialize_from_config(self) -> None:
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.layer_model_config = self.cfg.layer_model_config
+        self.__initialize_delegates()
+        self.model = self.__build_model()
 
     def __initialize_delegates(self) -> None:
         self.postprocessing = LayerPostprocessingDelegate(self.cfg)

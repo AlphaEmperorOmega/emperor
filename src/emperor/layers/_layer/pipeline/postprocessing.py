@@ -26,15 +26,12 @@ class LayerPostprocessingDelegate(Module):
         super().__init__()
         self.cfg = cfg
         self.VALIDATOR.validate(self)
-        self.__initialize_from_config()
-        self.gate = self.__build_gate()
-        self.dropout = self.__build_dropout()
-
-    def __initialize_from_config(self) -> None:
         self.activation_function: ActivationOptions = self.cfg.activation
         self.output_dim: int = self.cfg.output_dim
         self.gate_config = self.cfg.gate_config
         self.dropout_probability: float = self.cfg.dropout_probability
+        self.gate = self.__build_gate()
+        self.dropout = self.__build_dropout()
 
     def __build_gate(self) -> LayerGate | None:
         gate = self._build_from_config(

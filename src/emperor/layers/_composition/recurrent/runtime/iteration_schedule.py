@@ -113,16 +113,6 @@ class RecurrentIterationSchedule(nn.Module):
         super().__init__()
         self.cfg = config
         self.VALIDATOR.validate_config(self.cfg)
-        self.__initialize_from_config()
-
-        self.register_buffer(
-            "forward_call_progress",
-            torch.zeros((), dtype=torch.long),
-            persistent=True,
-        )
-        self.register_load_state_dict_pre_hook(self.__prepare_checkpoint)
-
-    def __initialize_from_config(self) -> None:
         if isinstance(self.cfg, RecurrentLayerConfig):
             profile = _RecurrentIterationProfile(
                 iteration_unit="transition",
@@ -181,6 +171,13 @@ class RecurrentIterationSchedule(nn.Module):
             profile.default_gradient_transition_count
         )
         self.__saturation_progress = self.__compute_saturation_progress()
+
+        self.register_buffer(
+            "forward_call_progress",
+            torch.zeros((), dtype=torch.long),
+            persistent=True,
+        )
+        self.register_load_state_dict_pre_hook(self.__prepare_checkpoint)
 
     def __compute_saturation_progress(self) -> int:
         remaining_iterations = self.maximum_iterations - self.initial_iterations
