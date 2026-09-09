@@ -30,6 +30,8 @@ def adaptive_generator_stack_options(
         residual_connection_option=(
             config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        residual_block_size=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
@@ -50,6 +52,8 @@ class _AdaptiveGeneratorStackDefaults:
     activation: ActivationOptions | None
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float | None
     last_layer_bias_option: LastLayerBiasOptions | None
     apply_output_postprocessing_flag: bool | None
@@ -67,6 +71,8 @@ def _adaptive_generator_stack_source(
         num_layers=defaults.num_layers,
         activation=defaults.activation,
         residual_connection_option=defaults.residual_connection_option,
+        residual_block_size=defaults.residual_block_size,
+        residual_rms_norm_epsilon=defaults.residual_rms_norm_epsilon,
         residual_model_flag=defaults.residual_model_flag,
         dropout_probability=defaults.dropout_probability,
         last_layer_bias_option=defaults.last_layer_bias_option,
@@ -87,6 +93,8 @@ def weight_generator_stack_source(config: ModuleType) -> AdaptiveGeneratorStackS
             residual_connection_option=(
                 config.WEIGHT_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config.WEIGHT_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config.WEIGHT_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=config.WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=(
@@ -112,6 +120,8 @@ def bias_generator_stack_source(config: ModuleType) -> AdaptiveGeneratorStackSou
             residual_connection_option=(
                 config.BIAS_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config.BIAS_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config.BIAS_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=config.BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=(config.BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION),
@@ -137,6 +147,8 @@ def diagonal_generator_stack_source(
             residual_connection_option=(
                 config.DIAGONAL_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config.DIAGONAL_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config.DIAGONAL_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=config.DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=(
@@ -162,6 +174,8 @@ def mask_generator_stack_source(config: ModuleType) -> AdaptiveGeneratorStackSou
             residual_connection_option=(
                 config.MASK_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config.MASK_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config.MASK_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=config.MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.MASK_GENERATOR_STACK_DROPOUT_PROBABILITY,
             last_layer_bias_option=(config.MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION),
@@ -189,6 +203,8 @@ def router_weight_generator_stack_source(
             residual_connection_option=(
                 config.ROUTER_WEIGHT_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config.ROUTER_WEIGHT_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config.ROUTER_WEIGHT_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=(
                 config.ROUTER_WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
             ),
@@ -222,6 +238,8 @@ def router_bias_generator_stack_source(
             residual_connection_option=(
                 config.ROUTER_BIAS_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config.ROUTER_BIAS_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config.ROUTER_BIAS_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=(
                 config.ROUTER_BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
             ),
@@ -255,6 +273,8 @@ def router_diagonal_generator_stack_source(
             residual_connection_option=(
                 config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=(
                 config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
             ),
@@ -288,6 +308,8 @@ def router_mask_generator_stack_source(
             residual_connection_option=(
                 config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=(
                 config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
             ),
