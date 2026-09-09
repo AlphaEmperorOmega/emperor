@@ -19,6 +19,7 @@ from emperor.layers import (
     ActivationOptions,
     LayerConfig,
     LayerNormPositionOptions,
+    NormalizationOptions,
 )
 from models.experts.linear_adaptive._adaptive_generator_stack_config_factory import (
     AdaptiveGeneratorStackConfigFactory,
@@ -118,6 +119,7 @@ class BoundaryModelConfigFactory:
         return LayerConfig(
             activation=activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_config=None,
             dropout_probability=0.0,
             gate_config=None,

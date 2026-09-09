@@ -54,6 +54,7 @@ def build_controller_stack(
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             residual_config=build_residual_config(
                 options.residual_connection_option,
                 options.residual_model_flag,
@@ -268,6 +269,9 @@ class ExpertsRecurrentConfigFactory:
             ),
             recurrent_layer_norm_position=(
                 self.recurrent_controller_options.recurrent_layer_norm_position
+            ),
+            recurrent_normalization=(
+                self.recurrent_controller_options.recurrent_normalization
             ),
             block_config=block_config,
             gate_config=self.gate_config_factory.build_recurrent_gate_config(),
