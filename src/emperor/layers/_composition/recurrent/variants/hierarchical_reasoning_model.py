@@ -66,6 +66,7 @@ class HierarchicalReasoningModelRecurrent(RecurrentCompositionAbstract):
         self.initialization_standard_deviation: float = (
             self.cfg.initialization_standard_deviation
         )
+
         self.__register_initial_buffer("high_initial")
         self.__register_initial_buffer("low_initial")
         self.high_model: Module = self._build_transition_model(self.high_block_config)

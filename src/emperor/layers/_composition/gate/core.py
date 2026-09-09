@@ -28,6 +28,7 @@ class LayerGate(Module):
         self.activation: ActivationOptions | None = self.cfg.activation
         self.gate_dim: int | None = self.cfg.gate_dim
         self.model_config = self.cfg.model_config
+
         self.model = self.__build_model()
 
     def __build_model(self) -> "EmperorModule":

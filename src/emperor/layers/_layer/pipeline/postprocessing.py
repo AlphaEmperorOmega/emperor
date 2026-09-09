@@ -30,6 +30,7 @@ class LayerPostprocessingDelegate(Module):
         self.output_dim: int = self.cfg.output_dim
         self.gate_config = self.cfg.gate_config
         self.dropout_probability: float = self.cfg.dropout_probability
+
         self.gate = self.__build_gate()
         self.dropout = self.__build_dropout()
 

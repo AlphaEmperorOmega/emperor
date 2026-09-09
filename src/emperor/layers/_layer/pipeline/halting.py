@@ -27,6 +27,7 @@ class LayerHaltingDelegate(Module):
         self.VALIDATOR.validate(self)
         self.config = self.cfg.halting_config
         self.output_dim: int = self.cfg.output_dim
+
         self.model: HaltingInterface[HaltingStateBase] | None = self.__build_model()
         self.is_terminal = False
 
