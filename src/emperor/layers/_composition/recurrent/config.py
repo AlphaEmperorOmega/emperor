@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, ClassVar
 
 from emperor.config import ConfigBase, optional_field
-from emperor.layers._options import LayerNormPositionOptions
+from emperor.layers._options import LayerNormPositionOptions, NormalizationOptions
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -72,6 +72,15 @@ class RecurrentCompositionConfig(ConfigBase):
     memory_config: DynamicMemoryConfig | None = optional_field(
         "Optional dynamic memory module applied around recurrent transition blocks. "
         "Set to None to disable memory."
+    )
+    recurrent_normalization: NormalizationOptions | None = field(
+        default=None,
+        kw_only=True,
+        metadata={
+            "help": "Feature normalization used between recurrent transitions. "
+            "Defaults to LAYER_NORM for compatibility. Disabled through "
+            "recurrent_layer_norm_position."
+        },
     )
 
     def _registry_owner(self) -> type:

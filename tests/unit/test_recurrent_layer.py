@@ -47,6 +47,7 @@ from emperor.layers import (
     LayerStack,
     LayerStackConfig,
     LayerState,
+    NormalizationOptions,
     RecurrentLayer,
     RecurrentLayerConfig,
     ResidualConfig,
@@ -1243,6 +1244,44 @@ class TestRecurrentLayer(unittest.TestCase):
         )
         self.assertIsNone(model.recurrent_layer_norm_module)
         torch.testing.assert_close(result.hidden, hidden + 2.0)
+
+    def test_recurrent_normalization_selection_preserves_gradients_and_disabling(self):
+        expected_types = {
+            NormalizationOptions.RMS_NORM: "RMSNorm",
+            NormalizationOptions.LAYER_NORM: "LayerNorm",
+            NormalizationOptions.DYNAMIC_TANH: "DynamicTanh",
+            NormalizationOptions.DERF: "DynamicErf",
+            NormalizationOptions.DYISRU: "DynamicISRU",
+        }
+        for option, expected_type in expected_types.items():
+            for position in LayerNormPositionOptions:
+                with self.subTest(option=option, position=position):
+                    config = self.recurrent_config(
+                        dim=3,
+                        max_steps=1,
+                        block_config=StateSpyBlockConfig(
+                            input_dim=3, output_dim=3, increment=0.0
+                        ),
+                        recurrent_layer_norm_position=position,
+                    )
+                    config.recurrent_normalization = option
+                    model = RecurrentLayer(config)
+                    hidden = torch.tensor(
+                        [[-1.0, 2.0, 3.0], [4.0, -2.0, 1.0]], requires_grad=True
+                    )
+                    result = model(LayerState(hidden=hidden)).hidden
+                    if position == LayerNormPositionOptions.DISABLED:
+                        self.assertIsNone(model.recurrent_layer_norm_module)
+                        torch.testing.assert_close(result, hidden)
+                        continue
+                    normalization = model.recurrent_layer_norm_module
+                    self.assertEqual(type(normalization).__name__, expected_type)
+                    self.assertTrue(torch.isfinite(result).all())
+                    result.square().sum().backward()
+                    self.assertTrue(torch.isfinite(hidden.grad).all())
+                    self.assertTrue(torch.isfinite(normalization.weight.grad).all())
+                    self.assertGreater(normalization.weight.grad.abs().sum(), 0)
+
 
     def test_recurrent_layer_norm_before_normalizes_block_input(self):
         dim = 3
