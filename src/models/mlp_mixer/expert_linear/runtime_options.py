@@ -13,6 +13,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -20,6 +21,9 @@ from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
 
 @dataclass(frozen=True, slots=True)
 class RuntimeOptions:
+    encoder_output_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     batch_size: int
     learning_rate: float
     input_dim: int
@@ -33,6 +37,9 @@ class RuntimeOptions:
     patch_bias_flag: bool
     stack_num_layers: int
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     stack_activation: ActivationOptions
     stack_dropout_probability: float
     mixer_residual_connection_option: type[ResidualConfig]
@@ -44,6 +51,9 @@ class RuntimeOptions:
     stack_bias_flag: bool
     submodule_stack_hidden_dim: int
     submodule_stack_layer_norm_position: LayerNormPositionOptions
+    submodule_stack_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     submodule_stack_num_layers: int
     submodule_stack_activation: ActivationOptions
     submodule_stack_residual_connection_option: type[ResidualConfig] | None
@@ -55,6 +65,9 @@ class RuntimeOptions:
     residual_stack_independent_flag: bool
     residual_stack_hidden_dim: int | None
     residual_stack_layer_norm_position: LayerNormPositionOptions | None
+    residual_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     residual_stack_num_layers: int | None
     residual_stack_activation: ActivationOptions | None
     residual_stack_residual_connection_option: type[ResidualConfig] | None
@@ -65,6 +78,9 @@ class RuntimeOptions:
     residual_stack_bias_flag: bool | None
     controller_stack_hidden_dim: int
     controller_stack_layer_norm_position: LayerNormPositionOptions
+    controller_stack_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     controller_stack_num_layers: int
     controller_stack_activation: ActivationOptions
     controller_stack_residual_connection_option: type[ResidualConfig] | None
@@ -78,6 +94,9 @@ class RuntimeOptions:
     token_mixer_stack_activation: ActivationOptions
     token_mixer_stack_dropout_probability: float
     token_mixer_stack_layer_norm_position: LayerNormPositionOptions
+    token_mixer_stack_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     token_mixer_stack_residual_connection_option: type[ResidualConfig] | None
     token_mixer_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     token_mixer_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -87,6 +106,9 @@ class RuntimeOptions:
     channel_mixer_stack_activation: ActivationOptions
     channel_mixer_stack_dropout_probability: float
     channel_mixer_stack_layer_norm_position: LayerNormPositionOptions
+    channel_mixer_stack_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     channel_mixer_stack_residual_connection_option: type[ResidualConfig] | None
     channel_mixer_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     channel_mixer_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -121,6 +143,9 @@ class RuntimeOptions:
         kw_only=True,
     )
     recurrent_layer_norm_position: LayerNormPositionOptions
+    recurrent_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     recurrent_residual_connection_option: type[ResidualConfig] | None
     recurrent_residual_model_flag: bool = field(default=False, kw_only=True)
     recurrent_stack_gate_flag: bool
@@ -135,6 +160,9 @@ class RuntimeOptions:
     gate_stack_independent_flag: bool
     gate_stack_hidden_dim: int | None
     gate_stack_layer_norm_position: LayerNormPositionOptions | None
+    gate_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     gate_stack_num_layers: int | None
     gate_stack_activation: ActivationOptions | None
     gate_stack_residual_connection_option: type[ResidualConfig] | None
@@ -146,6 +174,9 @@ class RuntimeOptions:
     halting_stack_independent_flag: bool
     halting_stack_hidden_dim: int | None
     halting_stack_layer_norm_position: LayerNormPositionOptions | None
+    halting_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     halting_stack_num_layers: int | None
     halting_stack_activation: ActivationOptions | None
     halting_stack_residual_connection_option: type[ResidualConfig] | None
@@ -157,6 +188,9 @@ class RuntimeOptions:
     memory_stack_independent_flag: bool
     memory_stack_hidden_dim: int | None
     memory_stack_layer_norm_position: LayerNormPositionOptions | None
+    memory_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     memory_stack_num_layers: int | None
     memory_stack_activation: ActivationOptions | None
     memory_stack_residual_connection_option: type[ResidualConfig] | None
@@ -168,6 +202,9 @@ class RuntimeOptions:
     recurrent_gate_stack_independent_flag: bool
     recurrent_gate_stack_hidden_dim: int | None
     recurrent_gate_stack_layer_norm_position: LayerNormPositionOptions | None
+    recurrent_gate_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     recurrent_gate_stack_num_layers: int | None
     recurrent_gate_stack_activation: ActivationOptions | None
     recurrent_gate_stack_residual_connection_option: type[ResidualConfig] | None
@@ -179,6 +216,9 @@ class RuntimeOptions:
     recurrent_halting_stack_independent_flag: bool
     recurrent_halting_stack_hidden_dim: int | None
     recurrent_halting_stack_layer_norm_position: LayerNormPositionOptions | None
+    recurrent_halting_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     recurrent_halting_stack_num_layers: int | None
     recurrent_halting_stack_activation: ActivationOptions | None
     recurrent_halting_stack_residual_connection_option: type[ResidualConfig] | None
@@ -195,6 +235,9 @@ class RuntimeOptions:
     token_mixer_gate_stack_independent_flag: bool
     token_mixer_gate_stack_hidden_dim: int | None
     token_mixer_gate_stack_layer_norm_position: LayerNormPositionOptions | None
+    token_mixer_gate_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     token_mixer_gate_stack_num_layers: int | None
     token_mixer_gate_stack_activation: ActivationOptions | None
     token_mixer_gate_stack_residual_connection_option: type[ResidualConfig] | None
@@ -213,6 +256,9 @@ class RuntimeOptions:
     token_mixer_halting_stack_independent_flag: bool
     token_mixer_halting_stack_hidden_dim: int | None
     token_mixer_halting_stack_layer_norm_position: LayerNormPositionOptions | None
+    token_mixer_halting_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     token_mixer_halting_stack_num_layers: int | None
     token_mixer_halting_stack_activation: ActivationOptions | None
     token_mixer_halting_stack_residual_connection_option: type[ResidualConfig] | None
@@ -231,6 +277,9 @@ class RuntimeOptions:
     token_mixer_memory_stack_independent_flag: bool
     token_mixer_memory_stack_hidden_dim: int | None
     token_mixer_memory_stack_layer_norm_position: LayerNormPositionOptions | None
+    token_mixer_memory_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     token_mixer_memory_stack_num_layers: int | None
     token_mixer_memory_stack_activation: ActivationOptions | None
     token_mixer_memory_stack_residual_connection_option: type[ResidualConfig] | None
@@ -244,6 +293,9 @@ class RuntimeOptions:
     token_mixer_recurrent_flag: bool
     token_mixer_recurrent_max_steps: int
     token_mixer_recurrent_layer_norm_position: LayerNormPositionOptions
+    token_mixer_recurrent_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     token_mixer_recurrent_residual_connection_option: type[ResidualConfig] | None
     token_mixer_recurrent_residual_model_flag: bool = field(default=False, kw_only=True)
     token_mixer_recurrent_stack_gate_flag: bool
@@ -253,6 +305,9 @@ class RuntimeOptions:
     token_mixer_recurrent_gate_stack_hidden_dim: int | None
     token_mixer_recurrent_gate_stack_layer_norm_position: (
         LayerNormPositionOptions | None
+    )
+    token_mixer_recurrent_gate_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
     )
     token_mixer_recurrent_gate_stack_num_layers: int | None
     token_mixer_recurrent_gate_stack_activation: ActivationOptions | None
@@ -276,6 +331,9 @@ class RuntimeOptions:
     token_mixer_recurrent_halting_stack_layer_norm_position: (
         LayerNormPositionOptions | None
     )
+    token_mixer_recurrent_halting_stack_normalization: NormalizationOptions | None = (
+        field(default=None, kw_only=True)
+    )
     token_mixer_recurrent_halting_stack_num_layers: int | None
     token_mixer_recurrent_halting_stack_activation: ActivationOptions | None
     token_mixer_recurrent_halting_stack_residual_connection_option: (
@@ -296,6 +354,9 @@ class RuntimeOptions:
     channel_mixer_gate_stack_independent_flag: bool
     channel_mixer_gate_stack_hidden_dim: int | None
     channel_mixer_gate_stack_layer_norm_position: LayerNormPositionOptions | None
+    channel_mixer_gate_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     channel_mixer_gate_stack_num_layers: int | None
     channel_mixer_gate_stack_activation: ActivationOptions | None
     channel_mixer_gate_stack_residual_connection_option: type[ResidualConfig] | None
@@ -314,6 +375,9 @@ class RuntimeOptions:
     channel_mixer_halting_stack_independent_flag: bool
     channel_mixer_halting_stack_hidden_dim: int | None
     channel_mixer_halting_stack_layer_norm_position: LayerNormPositionOptions | None
+    channel_mixer_halting_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     channel_mixer_halting_stack_num_layers: int | None
     channel_mixer_halting_stack_activation: ActivationOptions | None
     channel_mixer_halting_stack_residual_connection_option: type[ResidualConfig] | None
@@ -332,6 +396,9 @@ class RuntimeOptions:
     channel_mixer_memory_stack_independent_flag: bool
     channel_mixer_memory_stack_hidden_dim: int | None
     channel_mixer_memory_stack_layer_norm_position: LayerNormPositionOptions | None
+    channel_mixer_memory_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     channel_mixer_memory_stack_num_layers: int | None
     channel_mixer_memory_stack_activation: ActivationOptions | None
     channel_mixer_memory_stack_residual_connection_option: type[ResidualConfig] | None
@@ -345,6 +412,9 @@ class RuntimeOptions:
     channel_mixer_recurrent_flag: bool
     channel_mixer_recurrent_max_steps: int
     channel_mixer_recurrent_layer_norm_position: LayerNormPositionOptions
+    channel_mixer_recurrent_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     channel_mixer_recurrent_residual_connection_option: type[ResidualConfig] | None
     channel_mixer_recurrent_residual_model_flag: bool = field(
         default=False, kw_only=True
@@ -356,6 +426,9 @@ class RuntimeOptions:
     channel_mixer_recurrent_gate_stack_hidden_dim: int | None
     channel_mixer_recurrent_gate_stack_layer_norm_position: (
         LayerNormPositionOptions | None
+    )
+    channel_mixer_recurrent_gate_stack_normalization: NormalizationOptions | None = (
+        field(default=None, kw_only=True)
     )
     channel_mixer_recurrent_gate_stack_num_layers: int | None
     channel_mixer_recurrent_gate_stack_activation: ActivationOptions | None
@@ -380,6 +453,9 @@ class RuntimeOptions:
     channel_mixer_recurrent_halting_stack_hidden_dim: int | None
     channel_mixer_recurrent_halting_stack_layer_norm_position: (
         LayerNormPositionOptions | None
+    )
+    channel_mixer_recurrent_halting_stack_normalization: NormalizationOptions | None = (
+        field(default=None, kw_only=True)
     )
     channel_mixer_recurrent_halting_stack_num_layers: int | None
     channel_mixer_recurrent_halting_stack_activation: ActivationOptions | None
@@ -420,6 +496,9 @@ class RuntimeOptions:
     router_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     router_stack_dropout_probability: float
     router_stack_layer_norm_position: LayerNormPositionOptions
+    router_stack_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     router_stack_last_layer_bias_option: LastLayerBiasOptions
     router_stack_apply_output_postprocessing_flag: bool
     router_bias_flag: bool
@@ -428,6 +507,9 @@ class RuntimeOptions:
     expert_stack_activation: ActivationOptions
     expert_stack_dropout_probability: float
     expert_stack_layer_norm_position: LayerNormPositionOptions
+    expert_stack_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     expert_stack_residual_connection_option: type[ResidualConfig] | None
     expert_stack_residual_model_flag: bool = field(default=False, kw_only=True)
     expert_stack_last_layer_bias_option: LastLayerBiasOptions
@@ -439,6 +521,9 @@ class RuntimeOptions:
     expert_gate_stack_independent_flag: bool
     expert_gate_stack_hidden_dim: int | None
     expert_gate_stack_layer_norm_position: LayerNormPositionOptions | None
+    expert_gate_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     expert_gate_stack_num_layers: int | None
     expert_gate_stack_activation: ActivationOptions | None
     expert_gate_stack_residual_connection_option: type[ResidualConfig] | None
@@ -455,6 +540,9 @@ class RuntimeOptions:
     expert_halting_stack_independent_flag: bool
     expert_halting_stack_hidden_dim: int | None
     expert_halting_stack_layer_norm_position: LayerNormPositionOptions | None
+    expert_halting_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     expert_halting_stack_num_layers: int | None
     expert_halting_stack_activation: ActivationOptions | None
     expert_halting_stack_residual_connection_option: type[ResidualConfig] | None
@@ -471,6 +559,9 @@ class RuntimeOptions:
     expert_memory_stack_independent_flag: bool
     expert_memory_stack_hidden_dim: int | None
     expert_memory_stack_layer_norm_position: LayerNormPositionOptions | None
+    expert_memory_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     expert_memory_stack_num_layers: int | None
     expert_memory_stack_activation: ActivationOptions | None
     expert_memory_stack_residual_connection_option: type[ResidualConfig] | None
@@ -482,6 +573,9 @@ class RuntimeOptions:
     expert_recurrent_flag: bool
     expert_recurrent_max_steps: int
     expert_recurrent_layer_norm_position: LayerNormPositionOptions
+    expert_recurrent_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     expert_recurrent_residual_connection_option: type[ResidualConfig] | None
     expert_recurrent_residual_model_flag: bool = field(default=False, kw_only=True)
     expert_recurrent_stack_gate_flag: bool
@@ -490,6 +584,9 @@ class RuntimeOptions:
     expert_recurrent_gate_stack_independent_flag: bool
     expert_recurrent_gate_stack_hidden_dim: int | None
     expert_recurrent_gate_stack_layer_norm_position: LayerNormPositionOptions | None
+    expert_recurrent_gate_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     expert_recurrent_gate_stack_num_layers: int | None
     expert_recurrent_gate_stack_activation: ActivationOptions | None
     expert_recurrent_gate_stack_residual_connection_option: type[ResidualConfig] | None
@@ -508,6 +605,9 @@ class RuntimeOptions:
     expert_recurrent_halting_stack_independent_flag: bool
     expert_recurrent_halting_stack_hidden_dim: int | None
     expert_recurrent_halting_stack_layer_norm_position: LayerNormPositionOptions | None
+    expert_recurrent_halting_stack_normalization: NormalizationOptions | None = field(
+        default=None, kw_only=True
+    )
     expert_recurrent_halting_stack_num_layers: int | None
     expert_recurrent_halting_stack_activation: ActivationOptions | None
     expert_recurrent_halting_stack_residual_connection_option: (
