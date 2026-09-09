@@ -71,7 +71,6 @@ from emperor.layers._composition.recurrent.validation import (
 )
 from emperor.layers._composition.residual.base import (
     ResidualConnectionAbstract,
-    ResidualRuntimeRequirement,
     ResidualState,
 )
 from emperor.linears import LinearLayerConfig
@@ -121,10 +120,6 @@ class DepthwiseTestResidualConfig(ResidualConfig):
 
 
 class DepthwiseTestResidual(ResidualConnectionAbstract):
-    RUNTIME_REQUIREMENTS = frozenset(
-        {ResidualRuntimeRequirement.DEPTH_SPECIFIC_CONNECTIONS}
-    )
-
     def __init__(
         self,
         cfg: DepthwiseTestResidualConfig,
@@ -4670,8 +4665,15 @@ class TestRecurrentLayer(unittest.TestCase):
         )
 
     def test_recurrent_uses_custom_depthwise_residual_schedule(self):
+        class DepthwiseRecurrentLayer(RecurrentLayer):
+            def _build_recurrent_residual_schedule(self, transition_count):
+                return DepthwiseRecurrentResidualSchedule.from_connection(
+                    self.residual_connection,
+                    transition_count,
+                )
+
         max_steps = 3
-        model = RecurrentLayer(
+        model = DepthwiseRecurrentLayer(
             self.recurrent_config(
                 dim=2,
                 max_steps=max_steps,

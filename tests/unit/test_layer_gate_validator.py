@@ -12,6 +12,7 @@ from emperor.layers import (
 from emperor.layers._composition.gate import LayerGate
 from emperor.layers._composition.gate.validation import LayerGateValidator
 from emperor.layers._composition.residual.validation import (
+    AttentionResidualValidator,
     ResidualConnectionValidator,
 )
 from emperor.layers._composition.residual.variants.additive import AdditiveResidual
@@ -90,19 +91,21 @@ class TestResidualConnectionValidatorAdapter(unittest.TestCase):
             "emperor.layers._composition.residual.validation.common",
         )
 
-    def test_each_runtime_exposes_the_shared_validator_adapter(self):
-        for runtime_type in (
-            AdditiveResidual,
-            WeightedResidual,
-            WeightedBlendResidual,
-            AttentionResidual,
+    def test_each_runtime_exposes_its_validator_adapter(self):
+        for runtime_type, validator_type in (
+            (AdditiveResidual, ResidualConnectionValidator),
+            (WeightedResidual, ResidualConnectionValidator),
+            (WeightedBlendResidual, ResidualConnectionValidator),
+            (AttentionResidual, AttentionResidualValidator),
         ):
             with self.subTest(runtime_type=runtime_type.__name__):
-                self.assertIs(runtime_type.VALIDATOR, ResidualConnectionValidator)
+                self.assertIs(runtime_type.VALIDATOR, validator_type)
 
-    def test_successful_runtime_validations_preserve_checked_state_identity(self):
+    def test_successful_runtime_validations_return_none(self):
         weighted_connection = WeightedResidualConfig().build()
-        attention_connection = AttentionResidualConfig(residual_dim=2).build()
+        attention_connection = AttentionResidualConfig(
+            block_size=1, rms_norm_epsilon=1e-6, residual_dim=2
+        ).build()
         state = attention_connection.new_state(torch.ones(1, 2))
         validator = attention_connection.VALIDATOR
 
@@ -111,9 +114,8 @@ class TestResidualConnectionValidatorAdapter(unittest.TestCase):
                 weighted_connection.raw_weight,
             )
         )
-        self.assertIs(
-            validator.validate_attention_state(state, block_size=1),
-            state,
+        self.assertIsNone(
+            validator.validate_attention_state(attention_connection, state),
         )
 
     def test_runtime_rejects_non_residual_config(self):

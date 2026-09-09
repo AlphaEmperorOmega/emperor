@@ -13,9 +13,9 @@ from emperor.layers._composition.recurrent.validation import (
 )
 from emperor.layers._composition.residual.base import (
     ResidualConnectionAbstract,
-    ResidualRuntimeRequirement,
     ResidualState,
 )
+from emperor.layers._composition.residual.variants.attention import AttentionResidual
 
 
 class RecurrentResidualSchedule(nn.Module, ABC):
@@ -160,10 +160,7 @@ def build_recurrent_residual_schedule(
 ) -> RecurrentResidualSchedule | None:
     if primary_connection is None:
         return None
-    if (
-        ResidualRuntimeRequirement.DEPTH_SPECIFIC_CONNECTIONS
-        in primary_connection.RUNTIME_REQUIREMENTS
-    ):
+    if isinstance(primary_connection, AttentionResidual):
         return DepthwiseRecurrentResidualSchedule.from_connection(
             primary_connection,
             transition_count,

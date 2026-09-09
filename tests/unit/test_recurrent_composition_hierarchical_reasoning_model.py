@@ -448,6 +448,24 @@ class TestHierarchicalReasoningModelRecurrentValidation(unittest.TestCase):
                 SimpleNamespace(cfg=self._config())
             )
 
+    def test_attention_rejection_precedes_halting_validation_and_preserves_rng(
+        self,
+    ) -> None:
+        config = self._config()
+        config.residual_config = AttentionResidualConfig(
+            block_size=1, rms_norm_epsilon=1e-6
+        )
+        config.halting_config = object()
+        rng_state = torch.random.get_rng_state().clone()
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "AttentionResidualConfig is not supported.*forward-local residual state",
+        ):
+            config.build()
+
+        torch.testing.assert_close(torch.random.get_rng_state(), rng_state)
+
     def test_invalid_shared_recurrent_controller_config_is_rejected(self) -> None:
         cases = (
             (
@@ -461,7 +479,7 @@ class TestHierarchicalReasoningModelRecurrentValidation(unittest.TestCase):
             ("residual_config", object(), TypeError, "instance of ResidualConfig"),
             (
                 "residual_config",
-                AttentionResidualConfig(),
+                AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6),
                 ValueError,
                 "AttentionResidualConfig is not supported",
             ),

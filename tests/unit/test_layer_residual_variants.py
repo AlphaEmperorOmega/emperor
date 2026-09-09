@@ -20,10 +20,8 @@ from emperor.layers import (
 )
 from emperor.layers._composition.residual.base import (
     ResidualConnectionAbstract,
-    ResidualRuntimeRequirement,
 )
 from emperor.layers._composition.residual.pairwise import (
-    PairwiseResidualAbstract,
     WeightedPairwiseResidualAbstract,
 )
 from emperor.layers._composition.residual.variants.additive import AdditiveResidual
@@ -103,20 +101,18 @@ class TestResidualConfigRegistry(unittest.TestCase):
 
 
 class TestResidualRuntimeHierarchy(unittest.TestCase):
-    def test_runtime_hierarchy_exposes_pairwise_monitoring_as_a_capability(self):
+    def test_runtime_hierarchy_shares_the_residual_and_weighted_interfaces(self):
         additive = AdditiveResidualConfig().build()
         weighted = WeightedResidualConfig().build()
         blend = WeightedBlendResidualConfig().build()
-        attention = AttentionResidualConfig(residual_dim=2).build()
+        attention = AttentionResidualConfig(
+            block_size=1, rms_norm_epsilon=1e-6, residual_dim=2
+        ).build()
 
         for residual in (additive, weighted, blend, attention):
             self.assertIsInstance(residual, ResidualConnectionAbstract)
-        for residual in (additive, weighted, blend):
-            self.assertIsInstance(residual, PairwiseResidualAbstract)
-            self.assertTrue(residual.supports_pairwise_diagnostics)
         for residual in (weighted, blend):
             self.assertIsInstance(residual, WeightedPairwiseResidualAbstract)
-        self.assertFalse(attention.supports_pairwise_diagnostics)
 
     def test_pairwise_variants_use_the_default_stateless_lifecycle(self):
         initial_source = torch.ones(1, 2)
@@ -132,34 +128,27 @@ class TestResidualRuntimeHierarchy(unittest.TestCase):
                 self.assertIsNone(residual.residual_state_lifecycle)
                 self.assertIsNone(residual.new_state(initial_source))
 
-    def test_forward_local_state_requirement_requires_a_lifecycle(self):
-        class MissingLifecycleResidual(ResidualConnectionAbstract):
-            RUNTIME_REQUIREMENTS = frozenset(
-                {ResidualRuntimeRequirement.FORWARD_LOCAL_STATE}
-            )
-
-            def forward(
-                self,
-                current,
-                previous,
-                *,
-                residual_state=None,
-            ):
-                return current
+    def test_attention_requires_a_state_lifecycle(self):
+        class MissingLifecycleResidual(AttentionResidual):
+            def __init__(self, cfg, overrides=None):
+                super().__init__(cfg, overrides)
+                self.residual_state_lifecycle = None
 
         @dataclass
-        class MissingLifecycleResidualConfig(ResidualConfig):
+        class MissingLifecycleResidualConfig(AttentionResidualConfig):
             def _registry_owner(self) -> type:
                 return MissingLifecycleResidual
 
         with self.assertRaisesRegex(
             RuntimeError,
-            "MissingLifecycleResidual declares forward-local residual state",
+            "MissingLifecycleResidual requires forward-local residual state",
         ):
             LayerResidualDelegate(
                 LayerConfig(
                     output_dim=2,
-                    residual_config=MissingLifecycleResidualConfig(),
+                    residual_config=MissingLifecycleResidualConfig(
+                        block_size=1, rms_norm_epsilon=1e-6
+                    ),
                 )
             )
 

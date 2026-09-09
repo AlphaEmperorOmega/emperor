@@ -229,23 +229,10 @@ class LayerResidualDelegateValidator(ValidatorBase):
         return connection
 
     @staticmethod
-    def validate_forward_local_state_lifecycle_requirement(
+    def validate_state_lifecycle(
         connection: ResidualConnectionAbstract,
     ) -> None:
-        from emperor.layers._composition.residual.base import (
-            ResidualRuntimeRequirement,
-        )
-
-        lifecycle = connection.residual_state_lifecycle
-        requires_forward_local_state = (
-            ResidualRuntimeRequirement.FORWARD_LOCAL_STATE
-            in connection.RUNTIME_REQUIREMENTS
-        )
-        if requires_forward_local_state and lifecycle is None:
-            raise RuntimeError(
-                f"{type(connection).__name__} declares forward-local residual "
-                "state but does not provide a ResidualStateLifecycle."
-            )
+        connection.VALIDATOR.validate_state_lifecycle(connection)
 
 
 class LayerValidator(ValidatorBase):

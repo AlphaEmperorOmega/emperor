@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import fields
+from typing import TYPE_CHECKING
 
 from torch import Tensor
 
@@ -10,7 +11,6 @@ from emperor.layers._composition.recurrent.validation.common import (
     _RECURRENT_SHARED_OPTIONAL_FIELDS,
     _RecurrentCompositionValidator,
     _validate_initialization_standard_deviation,
-    _validate_recurrent_controller_config,
     _validate_recurrent_iteration_controls,
     _validate_smooth_iteration_growth_controls,
     _validate_variant_hidden,
@@ -21,6 +21,11 @@ from emperor.layers._validation.common import (
     _validate_halting_required_update_count,
 )
 
+if TYPE_CHECKING:
+    from emperor.layers._composition.recurrent.config import (
+        HierarchicalReasoningModelRecurrentConfig,
+    )
+
 
 class HierarchicalReasoningModelRecurrentValidator(_RecurrentCompositionValidator):
     OPTIONAL_FIELDS = {
@@ -30,12 +35,26 @@ class HierarchicalReasoningModelRecurrentValidator(_RecurrentCompositionValidato
 
     @classmethod
     def validate(cls, model: object) -> None:
+        config = model.cfg
+        cls.__validate_config_fields(config)
+        transitions_per_iteration = config.low_cycles + 1
+        cls.__validate_iteration_controls(config, transitions_per_iteration)
+        cls.__validate_stable_dimensions(config)
+        cls.__validate_controllers(config, transitions_per_iteration)
+        cls.__validate_block_configs(config)
+        _validate_initialization_standard_deviation(
+            config.initialization_standard_deviation
+        )
+        cls.__validate_runtime_owner(model, config)
+
+    @classmethod
+    def __validate_config_fields(
+        cls, config: HierarchicalReasoningModelRecurrentConfig
+    ) -> None:
         from emperor.layers._composition.recurrent.config import (
             HierarchicalReasoningModelRecurrentConfig,
-            RecurrentCompositionConfig,
         )
 
-        config = model.cfg
         if not isinstance(config, HierarchicalReasoningModelRecurrentConfig):
             raise TypeError(
                 "HierarchicalReasoningModelRecurrent cfg must be a "
@@ -56,7 +75,12 @@ class HierarchicalReasoningModelRecurrentValidator(_RecurrentCompositionValidato
             high_cycles=config.high_cycles,
             low_cycles=config.low_cycles,
         )
-        transitions_per_iteration = config.low_cycles + 1
+
+    @staticmethod
+    def __validate_iteration_controls(
+        config: HierarchicalReasoningModelRecurrentConfig,
+        transitions_per_iteration: int,
+    ) -> None:
         _validate_recurrent_iteration_controls(
             config,
             maximum_iterations=config.high_cycles,
@@ -66,13 +90,25 @@ class HierarchicalReasoningModelRecurrentValidator(_RecurrentCompositionValidato
             config,
             transitions_per_iteration=transitions_per_iteration,
         )
+
+    @staticmethod
+    def __validate_stable_dimensions(
+        config: HierarchicalReasoningModelRecurrentConfig,
+    ) -> None:
         if config.input_dim != config.output_dim:
             raise ValueError(
                 "input_dim and output_dim must be equal for HierarchicalReasoningModelRecurrentConfig, "
                 f"got input_dim={config.input_dim} and "
                 f"output_dim={config.output_dim}."
             )
-        _validate_recurrent_controller_config(config)
+
+    @classmethod
+    def __validate_controllers(
+        cls,
+        config: HierarchicalReasoningModelRecurrentConfig,
+        transitions_per_iteration: int,
+    ) -> None:
+        cls._validate_recurrent_controller_config(config)
         if (
             config.gradient_transition_count is not None
             and config.halting_config is not None
@@ -85,6 +121,15 @@ class HierarchicalReasoningModelRecurrentValidator(_RecurrentCompositionValidato
                 required_update_count=required_update_count,
                 owner_name=type(config).__name__,
             )
+
+    @staticmethod
+    def __validate_block_configs(
+        config: HierarchicalReasoningModelRecurrentConfig,
+    ) -> None:
+        from emperor.layers._composition.recurrent.config import (
+            RecurrentCompositionConfig,
+        )
+
         for field_name in ("high_block_config", "low_block_config"):
             block_config = getattr(config, field_name)
             if not isinstance(block_config, ConfigBase):
@@ -102,9 +147,11 @@ class HierarchicalReasoningModelRecurrentValidator(_RecurrentCompositionValidato
                     f"{field_name} must declare dataclass fields input_dim and "
                     "output_dim for HierarchicalReasoningModelRecurrentConfig."
                 )
-        _validate_initialization_standard_deviation(
-            config.initialization_standard_deviation
-        )
+
+    @staticmethod
+    def __validate_runtime_owner(
+        model: object, config: HierarchicalReasoningModelRecurrentConfig
+    ) -> None:
         expected_owner = config.registry_owner()
         if not isinstance(model, expected_owner):
             raise TypeError(

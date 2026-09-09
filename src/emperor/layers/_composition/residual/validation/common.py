@@ -3,9 +3,6 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from emperor._validation import ValidatorBase
-from emperor.layers._composition.residual.validation.attention import (
-    _AttentionResidualValidationMixin,
-)
 from emperor.layers._composition.residual.validation.weighted import (
     _WeightedResidualValidationMixin,
 )
@@ -15,20 +12,17 @@ if TYPE_CHECKING:
         ResidualConnectionAbstract,
     )
     from emperor.layers._composition.residual.config import ResidualConfig
+    from emperor.layers._config import LayerStackConfig
 
 
 class ResidualConnectionValidator(
-    _AttentionResidualValidationMixin,
     _WeightedResidualValidationMixin,
     ValidatorBase,
 ):
     @classmethod
     def validate(cls, model: ResidualConnectionAbstract) -> None:
         from emperor.layers._composition.residual.config import (
-            AttentionResidualConfig,
             ResidualConfig,
-            WeightedBlendResidualConfig,
-            WeightedResidualConfig,
         )
 
         config = model.cfg
@@ -44,15 +38,37 @@ class ResidualConnectionValidator(
                 f"{type(config).__name__} builds {expected_owner.__name__}, not "
                 f"{type(model).__name__}."
             )
-        if isinstance(config, AttentionResidualConfig):
-            cls._validate_attention_config(config)
-        else:
-            cls._validate_optional_residual_dim(config.residual_dim)
+        cls._validate_config(config)
+
+    @classmethod
+    def _validate_config(cls, config: ResidualConfig) -> None:
+        from emperor.layers._composition.residual.config import (
+            WeightedBlendResidualConfig,
+            WeightedResidualConfig,
+        )
+
+        cls._validate_optional_residual_dim(config.residual_dim)
         if isinstance(
             config,
             (WeightedResidualConfig, WeightedBlendResidualConfig),
         ):
             cls._validate_weighted_config(config)
+
+    @staticmethod
+    def validate_stack_config(config: LayerStackConfig) -> None:
+        """Pairwise residuals impose no additional stack configuration checks."""
+
+    @staticmethod
+    def validate_state_lifecycle(connection: ResidualConnectionAbstract) -> None:
+        """Pairwise residuals do not require a forward-local state lifecycle."""
+
+    @staticmethod
+    def validate_stateless_execution(
+        config: ResidualConfig,
+        *,
+        owner_name: str,
+    ) -> None:
+        """Pairwise residuals support execution without residual history."""
 
     @classmethod
     def validate_residual_config(

@@ -9,7 +9,6 @@ from torch import Tensor
 
 from emperor._validation import ValidatorBase, _validate_grouped_row_preservation
 from emperor.layers._composition.gate.validation import LayerGateValidator
-from emperor.layers._composition.residual.base import ResidualRuntimeRequirement
 from emperor.layers._composition.residual.validation import (
     ResidualConnectionValidator,
 )
@@ -195,6 +194,16 @@ def _validate_recurrent_iteration_controls(
     minimum_transition_count = initial_iterations * transitions_per_iteration
     no_gradient_count = config.no_gradient_transition_count
     gradient_count = config.gradient_transition_count
+    _validate_gradient_window_counts(
+        no_gradient_count, gradient_count, minimum_transition_count
+    )
+
+
+def _validate_gradient_window_counts(
+    no_gradient_count: object,
+    gradient_count: object,
+    minimum_transition_count: int,
+) -> None:
     if no_gradient_count is not None:
         if isinstance(no_gradient_count, bool) or not isinstance(
             no_gradient_count, int
@@ -242,6 +251,13 @@ def _validate_smooth_iteration_growth_controls(
     if value is not True:
         return
 
+    _validate_smooth_gradient_window(config, transitions_per_iteration)
+    _validate_smooth_growth_cadence(config)
+
+
+def _validate_smooth_gradient_window(
+    config: RecurrentCompositionConfig, transitions_per_iteration: int
+) -> None:
     gradient_count = config.gradient_transition_count
     no_gradient_count = config.no_gradient_transition_count
     if gradient_count is None and no_gradient_count is None:
@@ -270,6 +286,8 @@ def _validate_smooth_iteration_growth_controls(
             "mutually exclusive."
         )
 
+
+def _validate_smooth_growth_cadence(config: RecurrentCompositionConfig) -> None:
     iteration_increment = config.iteration_increment
     if (
         isinstance(iteration_increment, bool)
@@ -303,15 +321,7 @@ def _validate_positive_integer(field_name: str, value: object) -> None:
         raise ValueError(f"{field_name} must be greater than or equal to 1.")
 
 
-def _validate_recurrent_controller_config(
-    config: object,
-    *,
-    supported_residual_requirements: frozenset[
-        ResidualRuntimeRequirement
-    ] = frozenset(),
-) -> None:
-    owner_name = type(config).__name__
-    _validate_grouped_row_preservation(config, root=owner_name)
+def _validate_recurrent_normalization_position(config: object, owner_name: str) -> None:
     recurrent_layer_norm_position = config.recurrent_layer_norm_position
     if recurrent_layer_norm_position is not None and not isinstance(
         recurrent_layer_norm_position,
@@ -323,38 +333,8 @@ def _validate_recurrent_controller_config(
             f"{owner_name}, got {type(recurrent_layer_norm_position).__name__}."
         )
 
-    LayerGateValidator.validate_recurrent_gate_config(
-        config.gate_config,
-        owner_name=f"{owner_name}.gate_config",
-    )
-    ResidualConnectionValidator.validate_residual_config(
-        config.residual_config,
-        owner_name=owner_name,
-    )
-    residual_config = config.residual_config
-    if residual_config is not None:
-        residual_owner = residual_config.registry_owner()
-        residual_requirements = getattr(
-            residual_owner,
-            "RUNTIME_REQUIREMENTS",
-            frozenset(),
-        )
-        unsupported_requirements = residual_requirements.difference(
-            supported_residual_requirements
-        )
-    else:
-        unsupported_requirements = frozenset()
-    if unsupported_requirements:
-        requirement_names = ", ".join(
-            sorted(requirement.value for requirement in unsupported_requirements)
-        )
-        raise ValueError(
-            f"{type(residual_config).__name__} is not supported for {owner_name}; "
-            "the recurrent owner does not satisfy residual runtime requirements: "
-            f"{requirement_names}."
-        )
 
-    halting_config = config.halting_config
+def _validate_recurrent_halting_config(halting_config: object, owner_name: str) -> None:
     if halting_config is not None:
         if not _matches_config_contract(halting_config, _HALTING_CONFIG_FIELDS):
             raise TypeError(
@@ -367,7 +347,8 @@ def _validate_recurrent_controller_config(
             owner_name=owner_name,
         )
 
-    memory_config = config.memory_config
+
+def _validate_recurrent_memory_config(memory_config: object, owner_name: str) -> None:
     if memory_config is not None and not _matches_config_contract(
         memory_config,
         _MEMORY_CONFIG_FIELDS,
@@ -377,17 +358,51 @@ def _validate_recurrent_controller_config(
             f"{owner_name}, got {type(memory_config).__name__}"
         )
 
-    _validate_no_grouping_with_context_controllers(
-        config,
-        owner_name=owner_name,
-        controllers=(
-            ("halting_config", halting_config),
-            ("memory_config", memory_config),
-        ),
-    )
-
 
 class _RecurrentCompositionValidator(ValidatorBase):
+    GATE_VALIDATOR = LayerGateValidator
+    RESIDUAL_VALIDATOR = ResidualConnectionValidator
+
+    @classmethod
+    def _validate_recurrent_controller_config(
+        cls, config: RecurrentCompositionConfig
+    ) -> None:
+        owner_name = type(config).__name__
+        _validate_grouped_row_preservation(config, root=owner_name)
+        _validate_recurrent_normalization_position(config, owner_name)
+        cls.GATE_VALIDATOR.validate_recurrent_gate_config(
+            config.gate_config,
+            owner_name=f"{owner_name}.gate_config",
+        )
+        cls.RESIDUAL_VALIDATOR.validate_residual_config(
+            config.residual_config,
+            owner_name=owner_name,
+        )
+        cls._validate_residual_execution(config)
+        halting_config = config.halting_config
+        _validate_recurrent_halting_config(halting_config, owner_name)
+        memory_config = config.memory_config
+        _validate_recurrent_memory_config(memory_config, owner_name)
+
+        _validate_no_grouping_with_context_controllers(
+            config,
+            owner_name=owner_name,
+            controllers=(
+                ("halting_config", halting_config),
+                ("memory_config", memory_config),
+            ),
+        )
+
+    @staticmethod
+    def _validate_residual_execution(config: RecurrentCompositionConfig) -> None:
+        if config.residual_config is None:
+            return
+        residual_owner = config.residual_config.registry_owner()
+        residual_owner.VALIDATOR.validate_stateless_execution(
+            config.residual_config,
+            owner_name=type(config).__name__,
+        )
+
     @staticmethod
     def validate_forward_local_residual_runtime(
         residual_connection: ResidualConnectionAbstract | None,
