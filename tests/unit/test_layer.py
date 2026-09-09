@@ -239,15 +239,17 @@ class TestLayer(unittest.TestCase):
 
         self.assertEqual(
             tuple(config_field.name for config_field in fields(type(config))),
-            ("residual_dim", "block_size", "rms_norm_epsilon"),
+            ("residual_dim", "block_size", "rms_norm_epsilon", "model_config"),
         )
         self.assertEqual(config.residual_dim, 7)
         self.assertEqual(config.block_size, 3)
         self.assertEqual(config.rms_norm_epsilon, 1e-5)
+        self.assertIsNone(config.model_config)
         built_residual = config.build()
         self.assertEqual(built_residual.residual_dim, 7)
         self.assertEqual(built_residual.block_size, 3)
         self.assertEqual(built_residual.rms_norm_epsilon, 1e-5)
+        self.assertIsNone(built_residual.query_model)
 
     def test_concrete_residual_configs_share_the_abstract_interface(self):
         for config_type in (
