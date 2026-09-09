@@ -30,15 +30,19 @@ _MODEL_FLAG_SUFFIX = "_RESIDUAL_MODEL_FLAG"
 _SUPPORTED_MODEL_SELECTORS = (
     WeightedResidualConfig,
     WeightedBlendResidualConfig,
+    AttentionResidualConfig,
 )
 _STACK_OPTION_SUFFIXES = (
     "INDEPENDENT_FLAG",
     "HIDDEN_DIM",
     "LAYER_NORM_POSITION",
+    "NORMALIZATION",
     "NUM_LAYERS",
     "ACTIVATION",
     "RESIDUAL_CONNECTION_OPTION",
     "RESIDUAL_MODEL_FLAG",
+    "RESIDUAL_BLOCK_SIZE",
+    "RESIDUAL_RMS_NORM_EPSILON",
     "DROPOUT_PROBABILITY",
     "LAST_LAYER_BIAS_OPTION",
     "APPLY_OUTPUT_POSTPROCESSING_FLAG",
@@ -136,7 +140,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
             with self.subTest(package=package.catalog_key):
                 self.assertTupleEqual(
                     tuple(residual_stack_suffixes),
-                    _STACK_OPTION_SUFFIXES,
+                    tuple(suffix for suffix in _STACK_OPTION_SUFFIXES if package.identity.model_type in ('linears',) or suffix not in ("RESIDUAL_BLOCK_SIZE", "RESIDUAL_RMS_NORM_EPSILON")),
                 )
                 if gate_stack_suffixes:
                     self.assertListEqual(residual_stack_suffixes, gate_stack_suffixes)
@@ -221,7 +225,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                         field.default, None if inherits_shared_flag else False
                     )
                     self.assertIn(
-                        "Residual Stack Options as a data-dependent coefficient model",
+                        "Residual Stack Options as a data-dependent query or coefficient model",
                         field.description,
                     )
                     self.assertTupleEqual(field.applicable_when, ())
@@ -251,15 +255,26 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
             with self.subTest(package=package.catalog_key, selector="none"):
                 self.assertIsNone(build(None, False))
 
-            for selector in _SUPPORTED_MODEL_SELECTORS:
+            attention_enabled = package.identity.model_type in ('linears',)
+            settings = dict(residual_block_size=2, residual_rms_norm_epsilon=1e-6) if attention_enabled else {}
+            for selector in (_SUPPORTED_MODEL_SELECTORS if attention_enabled else _SUPPORTED_MODEL_SELECTORS[:-1]):
                 with self.subTest(
                     package=package.catalog_key,
                     selector=selector.__name__,
                 ):
-                    scalar = build(selector, False)
+                    scalar = build(
+                        selector,
+                        False,
+                        **settings,
+                    )
                     self.assertIsNone(scalar.model_config)
 
-                    modeled = build(selector, True, residual_stack)
+                    modeled = build(
+                        selector,
+                        True,
+                        residual_stack,
+                        **settings,
+                    )
                     self.assertIsInstance(modeled.model_config, LayerStackConfig)
                     self.assertEqual(modeled.model_config.hidden_dim, 8)
                     self.assertEqual(modeled.model_config.num_layers, 2)
@@ -272,7 +287,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                         True,
                     )
 
-            for selector in (None, AdditiveResidualConfig, AttentionResidualConfig):
+            for selector in ((None, AdditiveResidualConfig) if attention_enabled else (None, AdditiveResidualConfig, AttentionResidualConfig)):
                 with self.subTest(
                     package=package.catalog_key,
                     invalid=getattr(selector, "__name__", None),
@@ -543,7 +558,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
     def test_invalid_flat_and_direct_runtime_pairs_name_both_fields(self) -> None:
         package = model_package("linears/linear")
         assert package is not None
-        for selector in (None, AdditiveResidualConfig, AttentionResidualConfig):
+        for selector in (None, AdditiveResidualConfig):
             with self.subTest(source="flat", selector=selector):
                 with self.assertRaisesRegex(
                     ValueError,

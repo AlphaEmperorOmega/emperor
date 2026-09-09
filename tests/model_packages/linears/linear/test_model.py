@@ -440,7 +440,7 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
             and not any(key.startswith(prefix) for prefix in _NON_MODEL_PREFIXES)
         ]
 
-        self.assertEqual(len(model_keys), 127)
+        self.assertEqual(len(model_keys), 143)
         for key in model_keys:
             with self.subTest(key=key):
                 flat_key = config_key_to_model_param(key)

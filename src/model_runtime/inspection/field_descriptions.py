@@ -314,9 +314,23 @@ _DESCRIPTION_RULES = {
         "inheriting shared submodule settings."
     ),
     "residual_model": _DescriptionRule(
-        "Uses the Residual Stack Options as a data-dependent coefficient model "
-        "for the {context}. This is supported only when the paired residual "
-        "selector uses a weighted or weighted-blend residual."
+        "Uses the Residual Stack Options as a data-dependent query or coefficient "
+        "model for the {context}. Attention residuals generate queries from the "
+        "current output; weighted and weighted-blend residuals generate mixing "
+        "coefficients from concatenated current and previous outputs."
+    ),
+    "residual_block_size": _DescriptionRule(
+        "Used when the paired residual selector uses AttentionResidualConfig. "
+        "Number of consecutive raw outputs combined into one depth source. "
+        "Suggested starting value: 1 for full attention; larger integers enable "
+        "block attention. Supply explicitly to select the routing settings.",
+        adds_caveat=False,
+    ),
+    "residual_rms_norm_epsilon": _DescriptionRule(
+        "Used when the paired residual selector uses AttentionResidualConfig. "
+        "Finite positive float used to RMS-normalize routing keys. Suggested "
+        "starting value: 1e-6. Supply explicitly to select the routing settings.",
+        adds_caveat=False,
     ),
     "bias": _DescriptionRule(
         "Controls whether linear layers in the {context} include bias terms."
@@ -378,6 +392,8 @@ _DESCRIPTION_RULES = {
 }
 
 _SUFFIX_DESCRIPTION_RULES = (
+    ("_RESIDUAL_BLOCK_SIZE", "residual_block_size"),
+    ("_RESIDUAL_RMS_NORM_EPSILON", "residual_rms_norm_epsilon"),
     ("_INDEPENDENT_FLAG", "independent"),
     ("_RESIDUAL_MODEL_FLAG", "residual_model"),
     ("_BIAS_FLAG", "bias"),

@@ -309,6 +309,8 @@ def _stack(values: StackValues) -> StackOptions:
         layer_norm_position=values.layer_norm_position,
         normalization=values.normalization,
         residual_connection_option=values.residual_connection_option,
+        residual_block_size=values.residual_block_size,
+        residual_rms_norm_epsilon=values.residual_rms_norm_epsilon,
         residual_model_flag=values.residual_model_flag,
         dropout_probability=values.dropout_probability,
         bias_flag=values.bias_flag,
@@ -357,6 +359,8 @@ def _resolved_stack(
             if values.residual_connection_option is None
             else values.residual_connection_option
         ),
+        residual_block_size=values.residual_block_size,
+        residual_rms_norm_epsilon=values.residual_rms_norm_epsilon,
         residual_model_flag=values.residual_model_flag,
         dropout_probability=(
             defaults.dropout_probability
@@ -405,6 +409,8 @@ def _resolve_stacks(values: RuntimeDefaultValues) -> _ResolvedStacks:
             layer_norm_position=residual_values.layer_norm_position,
             normalization=residual_values.normalization,
             residual_connection_option=residual_values.residual_connection_option,
+            residual_block_size=residual_values.residual_block_size,
+            residual_rms_norm_epsilon=residual_values.residual_rms_norm_epsilon,
             residual_model_flag=residual_values.residual_model_flag,
             dropout_probability=residual_values.dropout_probability,
             last_layer_bias_option=residual_values.last_layer_bias_option,

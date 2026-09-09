@@ -120,6 +120,8 @@ class ControlConfigFactory:
                     options.residual_connection_option,
                     options.residual_model_flag,
                     self.runtime.residual_stack,
+                    residual_block_size=options.residual_block_size,
+                    residual_rms_norm_epsilon=options.residual_rms_norm_epsilon,
                 ),
                 dropout_probability=options.dropout_probability,
                 halting_config=None,
