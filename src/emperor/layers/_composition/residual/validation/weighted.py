@@ -10,18 +10,13 @@ class _WeightedResidualValidationMixin:
         if model_config is None:
             return
         from emperor.layers import (
-            LastLayerBiasOptions,
             LayerConfig,
             LayerStackConfig,
         )
         from emperor.linears import LinearLayerConfig
 
         if isinstance(model_config, LinearLayerConfig):
-            if model_config.bias_flag is not True:
-                raise ValueError(
-                    f"{type(config).__name__}.model_config.bias_flag must be True "
-                    "so the initial mixing coefficient can be represented."
-                )
+            pass
         elif isinstance(model_config, LayerStackConfig):
             layer_config = model_config.layer_config
             if type(layer_config) is not LayerConfig:
@@ -34,19 +29,6 @@ class _WeightedResidualValidationMixin:
                     f"{type(config).__name__}.model_config.layer_config."
                     "layer_model_config must be LinearLayerConfig, got "
                     f"{type(layer_config.layer_model_config).__name__}."
-                )
-            final_bias_enabled = (
-                model_config.last_layer_bias_option == LastLayerBiasOptions.ENABLED
-                or (
-                    model_config.last_layer_bias_option == LastLayerBiasOptions.DEFAULT
-                    and layer_config.layer_model_config.bias_flag is True
-                )
-            )
-            if not final_bias_enabled:
-                raise ValueError(
-                    f"{type(config).__name__}.model_config must enable bias on "
-                    "its final layer so the initial mixing coefficient can be "
-                    "represented."
                 )
             nested_configs = {
                 "layer_config.gate_config": layer_config.gate_config,
