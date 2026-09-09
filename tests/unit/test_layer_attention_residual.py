@@ -1,6 +1,7 @@
 import pickle
 import unittest
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, fields
+from unittest.mock import patch
 
 import torch
 import torch.nn.functional as F
@@ -11,13 +12,11 @@ from emperor.layers._composition.residual.base import (
     ResidualStateLifecycle,
 )
 from emperor.layers._composition.residual.config import AttentionResidualConfig
+from emperor.layers._composition.residual.variants import attention as attention_variant
 from emperor.layers._composition.residual.variants.attention import (
     AttentionResidual,
     AttentionResidualState,
 )
-
-
-from emperor.layers._composition.residual.variants import attention as attention_variant
 from emperor.layers._composition.residual.variants.attention.core import (
     AttentionResidual as CoreAttentionResidual,
 )
@@ -27,6 +26,7 @@ from emperor.layers._composition.residual.variants.attention.lifecycle import (
 from emperor.layers._composition.residual.variants.attention.state import (
     AttentionResidualState as OwnedAttentionResidualState,
 )
+from emperor.linears import LinearLayerConfig
 
 
 def _paper_attention_residual(
@@ -124,8 +124,75 @@ class TestAttentionResidualPackage(unittest.TestCase):
         torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
 
-
 class TestAttentionResidual(unittest.TestCase):
+    def test_missing_required_fields_fail_before_query_model_initialization(self):
+        explicit_settings = {
+            "residual_dim": 2,
+            "block_size": 1,
+            "rms_norm_epsilon": 1e-6,
+        }
+        for field_name in explicit_settings:
+            for explicitly_none in (False, True):
+                for model_config in (None, LinearLayerConfig(bias_flag=False)):
+                    with self.subTest(
+                        field=field_name,
+                        explicitly_none=explicitly_none,
+                        query_model=model_config is not None,
+                    ):
+                        settings = dict(explicit_settings, model_config=model_config)
+                        if explicitly_none:
+                            settings[field_name] = None
+                        else:
+                            del settings[field_name]
+                        config = AttentionResidualConfig(**settings)
+                        random_state = torch.random.get_rng_state().clone()
+                        with patch.object(
+                            AttentionResidual, "_build_from_config"
+                        ) as build:
+                            with self.assertRaisesRegex(
+                                ValueError,
+                                f"^{field_name} is required for AttentionResidualConfig, received None$",
+                            ):
+                                config.build()
+                        build.assert_not_called()
+                        self.assertIsNone(getattr(config, field_name))
+                        torch.testing.assert_close(
+                            torch.random.get_rng_state(), random_state, rtol=0, atol=0
+                        )
+
+    def test_config_help_suggests_values_without_assigning_defaults(self):
+        config = AttentionResidualConfig()
+        config_fields = {field.name: field for field in fields(config)}
+        for field_name, suggestion in (
+            ("block_size", "1"),
+            ("rms_norm_epsilon", "1e-6"),
+        ):
+            with self.subTest(field=field_name):
+                self.assertIsNone(getattr(config, field_name))
+                self.assertIsNone(config_fields[field_name].default)
+                help_text = config_fields[field_name].metadata["help"]
+                self.assertIn("Required", help_text)
+                self.assertIn(f"Suggested starting value: {suggestion}.", help_text)
+                self.assertIn("no default is applied", help_text)
+
+    def test_overrides_can_complete_required_attention_settings(self):
+        config = AttentionResidualConfig(residual_dim=2)
+        overrides = AttentionResidualConfig(block_size=3, rms_norm_epsilon=2e-5)
+        residual = config.build(overrides=overrides)
+
+        self.assertIsNone(config.block_size)
+        self.assertIsNone(config.rms_norm_epsilon)
+        self.assertIsNone(overrides.residual_dim)
+        self.assertEqual(residual.block_size, 3)
+        self.assertEqual(residual.rms_norm_epsilon, 2e-5)
+        self.assertEqual(residual.key_norm.eps, 2e-5)
+        self.assertEqual(residual.new_state(torch.zeros(1, 2)).block_size, 3)
+        self.assertIsNone(residual.query_model)
+        self.assertEqual(tuple(residual.state_dict()), ("query", "key_norm.weight"))
+
+        with self.assertRaisesRegex(ValueError, "rms_norm_epsilon is required"):
+            config.build(overrides=AttentionResidualConfig(block_size=1))
+
     def test_residual_state_requires_only_an_explicit_branch_fork_contract(self):
         class MissingForkResidualState(ResidualState):
             pass
@@ -262,6 +329,7 @@ class TestAttentionResidual(unittest.TestCase):
     def test_attention_owns_an_immutable_forward_state_lifecycle(self):
         residual = AttentionResidual(
             AttentionResidualConfig(
+                rms_norm_epsilon=1e-6,
                 residual_dim=2,
                 block_size=3,
             )
@@ -277,7 +345,7 @@ class TestAttentionResidual(unittest.TestCase):
 
     def test_compatibility_state_creation_delegates_to_the_lifecycle(self):
         residual = AttentionResidual(
-            AttentionResidualConfig(residual_dim=2, block_size=2)
+            AttentionResidualConfig(rms_norm_epsilon=1e-6, residual_dim=2, block_size=2)
         )
         initial_source = torch.ones(1, 2)
 
@@ -291,10 +359,9 @@ class TestAttentionResidual(unittest.TestCase):
         self.assertEqual(lifecycle_state.block_size, 2)
         self.assertEqual(compatibility_state.block_size, 2)
 
-
     def test_state_aware_application_lazily_initializes_attention_history(self):
         residual = AttentionResidual(
-            AttentionResidualConfig(residual_dim=2, block_size=1)
+            AttentionResidualConfig(rms_norm_epsilon=1e-6, residual_dim=2, block_size=1)
         )
         previous = torch.tensor([[2.0, 6.0]])
         current = torch.tensor([[4.0, 10.0]])
@@ -310,7 +377,7 @@ class TestAttentionResidual(unittest.TestCase):
 
     def test_state_aware_application_reuses_existing_attention_history(self):
         residual = AttentionResidual(
-            AttentionResidualConfig(residual_dim=2, block_size=1)
+            AttentionResidualConfig(rms_norm_epsilon=1e-6, residual_dim=2, block_size=1)
         )
         initial_source = torch.tensor([[1.0, 3.0]])
         existing_state = residual.new_state(initial_source)
@@ -325,7 +392,9 @@ class TestAttentionResidual(unittest.TestCase):
         self.assertEqual(len(existing_state.sources), 2)
 
     def test_state_aware_application_rejects_incompatible_residual_state(self):
-        residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
+        residual = AttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=2)
+        )
         layer_state = LayerState(
             hidden=torch.ones(1, 2),
             residual_state=object(),
@@ -338,7 +407,9 @@ class TestAttentionResidual(unittest.TestCase):
             residual.apply_to_layer_state(layer_state, torch.ones(1, 2))
 
     def test_state_aware_application_keeps_history_off_the_module(self):
-        residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
+        residual = AttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=2)
+        )
         layer_state = LayerState(hidden=torch.ones(1, 2))
 
         residual.apply_to_layer_state(layer_state, torch.ones(1, 2))
@@ -405,8 +476,44 @@ class TestAttentionResidual(unittest.TestCase):
         )
         torch.testing.assert_close(actual, expected)
 
+    def test_config_field_types_are_checked_before_query_model_initialization(self):
+        invalid_fields = (
+            ("residual_dim", "int", (True, 2.5, "2")),
+            ("block_size", "int", (True, 1.5, "1")),
+            ("rms_norm_epsilon", "float", (1, True, "1e-6", torch.tensor(1e-6))),
+        )
+        for field_name, expected_type, invalid_values in invalid_fields:
+            for value in invalid_values:
+                for model_config in (None, LinearLayerConfig(bias_flag=False)):
+                    with self.subTest(
+                        field=field_name,
+                        value=value,
+                        query_model=model_config is not None,
+                    ):
+                        settings = {
+                            "residual_dim": 2,
+                            "block_size": 1,
+                            "rms_norm_epsilon": 1e-6,
+                            "model_config": model_config,
+                            field_name: value,
+                        }
+                        config = AttentionResidualConfig(**settings)
+                        random_state = torch.random.get_rng_state().clone()
+                        with patch.object(
+                            AttentionResidual, "_build_from_config"
+                        ) as build:
+                            with self.assertRaisesRegex(
+                                TypeError,
+                                f"^{field_name} must be {expected_type} for AttentionResidualConfig, got ",
+                            ):
+                                config.build()
+                        build.assert_not_called()
+                        torch.testing.assert_close(
+                            torch.random.get_rng_state(), random_state, rtol=0, atol=0
+                        )
+
     def test_mixer_rejects_invalid_residual_dimensions(self):
-        for residual_dim in (None, 0, -1, True, 2.5):
+        for residual_dim in (0, -1):
             with self.subTest(residual_dim=residual_dim):
                 with self.assertRaisesRegex(
                     ValueError,
@@ -421,7 +528,7 @@ class TestAttentionResidual(unittest.TestCase):
                     )
 
     def test_mixer_rejects_invalid_configured_block_sizes(self):
-        for block_size in (0, -1, True, 1.5):
+        for block_size in (0, -1):
             with self.subTest(block_size=block_size):
                 with self.assertRaisesRegex(
                     ValueError,
@@ -442,8 +549,6 @@ class TestAttentionResidual(unittest.TestCase):
             float("inf"),
             float("-inf"),
             float("nan"),
-            True,
-            "1e-6",
         )
         for epsilon in invalid_epsilons:
             with self.subTest(epsilon=epsilon):
@@ -462,7 +567,11 @@ class TestAttentionResidual(unittest.TestCase):
     def test_mixer_rejects_non_floating_initial_sources(self):
         for initial_source in (torch.tensor([[1, 2]]), object()):
             with self.subTest(initial_source=initial_source):
-                residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
+                residual = AttentionResidual(
+                    AttentionResidualConfig(
+                        block_size=1, rms_norm_epsilon=1e-6, residual_dim=2
+                    )
+                )
                 with self.assertRaisesRegex(
                     TypeError,
                     "attention residual sources must be floating-point tensors",
@@ -472,7 +581,11 @@ class TestAttentionResidual(unittest.TestCase):
     def test_mixer_rejects_wrong_initial_feature_dimension(self):
         for initial_source in (torch.ones(2, 3), torch.tensor(1.0)):
             with self.subTest(initial_source=initial_source):
-                residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
+                residual = AttentionResidual(
+                    AttentionResidualConfig(
+                        block_size=1, rms_norm_epsilon=1e-6, residual_dim=2
+                    )
+                )
                 with self.assertRaisesRegex(
                     ValueError,
                     "source last dimension must equal residual_dim 2",
@@ -480,7 +593,9 @@ class TestAttentionResidual(unittest.TestCase):
                     residual.new_state(initial_source)
 
     def test_mixer_requires_its_forward_local_state_type(self):
-        residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
+        residual = AttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=2)
+        )
 
         with self.assertRaisesRegex(
             TypeError,
@@ -490,7 +605,7 @@ class TestAttentionResidual(unittest.TestCase):
 
     def test_mixer_rejects_state_from_a_different_block_variant(self):
         residual = AttentionResidual(
-            AttentionResidualConfig(residual_dim=2, block_size=2)
+            AttentionResidualConfig(rms_norm_epsilon=1e-6, residual_dim=2, block_size=2)
         )
         mismatched_state = AttentionResidualState(
             torch.ones(1, 2),
@@ -504,7 +619,9 @@ class TestAttentionResidual(unittest.TestCase):
             _apply_attention_residual(residual, torch.ones(1, 2), mismatched_state)
 
     def test_mixer_validates_current_before_mutating_history(self):
-        residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
+        residual = AttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=2)
+        )
         initial_source = torch.ones(1, 2)
         state = residual.new_state(initial_source)
 
@@ -522,7 +639,9 @@ class TestAttentionResidual(unittest.TestCase):
         self.assertIs(state.sources[0], initial_source)
 
     def test_mixer_requires_identical_source_shapes(self):
-        residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
+        residual = AttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=2)
+        )
         initial_source = torch.ones(2, 2)
         state = residual.new_state(initial_source)
 
@@ -536,7 +655,9 @@ class TestAttentionResidual(unittest.TestCase):
         self.assertIs(state.sources[0], initial_source)
 
     def test_mixer_promotes_mixed_floating_source_dtypes(self):
-        residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
+        residual = AttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=2)
+        )
         initial_source = torch.tensor([[1.0, 3.0]], dtype=torch.float32)
         current = torch.tensor([[5.0, 7.0]], dtype=torch.bfloat16)
         state = residual.new_state(initial_source)
@@ -550,7 +671,9 @@ class TestAttentionResidual(unittest.TestCase):
         self.assertIs(state.sources[0], initial_source)
 
     def test_mixer_requires_sources_on_one_device(self):
-        residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
+        residual = AttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=2)
+        )
         state = residual.new_state(torch.ones(1, 2))
 
         with self.assertRaisesRegex(
@@ -564,7 +687,9 @@ class TestAttentionResidual(unittest.TestCase):
             )
 
     def test_mixer_preserves_gradients_to_every_source_and_parameter(self):
-        residual = AttentionResidual(AttentionResidualConfig(residual_dim=3))
+        residual = AttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=3)
+        )
         with torch.no_grad():
             residual.query.copy_(torch.tensor([0.7, -0.2, 0.4]))
             residual.key_norm.weight.copy_(torch.tensor([1.0, 1.3, 0.8]))
@@ -604,6 +729,7 @@ class TestAttentionResidual(unittest.TestCase):
                 epsilon = 1e-6
                 residual = AttentionResidual(
                     AttentionResidualConfig(
+                        block_size=1,
                         residual_dim=3,
                         rms_norm_epsilon=epsilon,
                     )
@@ -638,6 +764,7 @@ class TestAttentionResidual(unittest.TestCase):
         epsilon = 1e-9
         residual = AttentionResidual(
             AttentionResidualConfig(
+                block_size=1,
                 residual_dim=2,
                 rms_norm_epsilon=epsilon,
             )
@@ -663,7 +790,9 @@ class TestAttentionResidual(unittest.TestCase):
         torch.testing.assert_close(actual, expected)
 
     def test_state_is_ephemeral_and_parameters_use_paper_initializers(self):
-        residual = AttentionResidual(AttentionResidualConfig(residual_dim=3))
+        residual = AttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=3)
+        )
         state = residual.new_state(torch.ones(2, 3))
 
         _apply_attention_residual(residual, torch.full((2, 3), 2.0), state)
@@ -715,7 +844,7 @@ class TestAttentionResidual(unittest.TestCase):
 
     def test_block_sum_preserves_each_raw_output_gradient(self):
         residual = AttentionResidual(
-            AttentionResidualConfig(residual_dim=2, block_size=2)
+            AttentionResidualConfig(rms_norm_epsilon=1e-6, residual_dim=2, block_size=2)
         )
         initial_source = torch.tensor([[1.0, 2.0]], requires_grad=True)
         first_raw_output = torch.tensor([[3.0, 4.0]], requires_grad=True)

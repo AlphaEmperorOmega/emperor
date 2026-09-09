@@ -238,7 +238,9 @@ class LayerTensorInvocationTests(unittest.TestCase):
         self.assertTrue(torch.isfinite(inputs.grad).all())
 
     def test_attention_residual_retains_forward_local_history(self):
-        layer = plain_layer(residual_config=AttentionResidualConfig())
+        layer = plain_layer(
+            residual_config=AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6)
+        )
         inputs = torch.zeros(4, 2)
         residual_state = layer.residual.connection.new_state(inputs)
         layer(LayerState(hidden=inputs, residual_state=residual_state))

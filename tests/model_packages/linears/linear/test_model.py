@@ -1174,6 +1174,32 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
                 self.assertIs(actual_residual, residual)
                 self.assertIs(layer.layer_norm_position, norm)
 
+    def test_attention_residual_preset_requires_explicit_numeric_settings(self):
+        cfg = model_package("linears/linear").presets.get_config(
+            ExperimentPreset.ATTENTION_RESIDUAL,
+            config_overrides={
+                "input_dim": 8,
+                "hidden_dim": 8,
+                "output_dim": 4,
+                "stack_num_layers": 2,
+            },
+        )[0]
+        residual_config = (
+            cfg.experiment_config.model_config.layer_config.residual_config
+        )
+        self.assertIsNone(residual_config.block_size)
+        self.assertIsNone(residual_config.rms_norm_epsilon)
+        with self.assertRaisesRegex(ValueError, "block_size is required"):
+            Model(cfg)
+        residual_config.block_size = 1
+        with self.assertRaisesRegex(ValueError, "rms_norm_epsilon is required"):
+            Model(cfg)
+        residual_config.rms_norm_epsilon = 1e-6
+        model = Model(cfg)
+        self.assertTrue(
+            any(name.endswith("query") for name, _ in model.named_parameters())
+        )
+
     def test_attention_residual_preset_preserves_halting_incompatibility(self):
         cfg = model_package("linears/linear").presets.get_config(
             ExperimentPreset.ATTENTION_RESIDUAL,
@@ -1439,7 +1465,14 @@ class TestLinearModelBehavior(unittest.TestCase):
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
-                cfg = presets.get_config(preset, dataset)[0]
+                cfg = presets.get_config(
+                    preset,
+                    dataset,
+                    config_overrides={
+                        "stack_residual_block_size": 1,
+                        "stack_residual_rms_norm_epsilon": 1e-6,
+                    },
+                )[0]
                 output = Model(cfg)(self._fake_batch(dataset, batch_size))
                 logits = output[0] if isinstance(output, tuple) else output
                 self.assertEqual(logits.shape, (batch_size, dataset.num_classes))
@@ -1512,6 +1545,8 @@ class TestLinearModelBehavior(unittest.TestCase):
                 cfg = presets.get_config(
                     preset,
                     config_overrides={
+                        "stack_residual_block_size": 1,
+                        "stack_residual_rms_norm_epsilon": 1e-6,
                         "input_dim": 8,
                         "hidden_dim": 8,
                         "output_dim": 4,
@@ -1716,6 +1751,8 @@ class TestLinearModelBehavior(unittest.TestCase):
                 cfg = presets.get_config(
                     ExperimentPreset[name],
                     config_overrides={
+                        "stack_residual_block_size": 1,
+                        "stack_residual_rms_norm_epsilon": 1e-6,
                         "input_dim": 8,
                         "hidden_dim": 8,
                         "output_dim": 4,
@@ -1765,7 +1802,14 @@ class TestLinearModelBehavior(unittest.TestCase):
 
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
-                cfg = presets.get_config(preset, dataset)[0]
+                cfg = presets.get_config(
+                    preset,
+                    dataset,
+                    config_overrides={
+                        "stack_residual_block_size": 1,
+                        "stack_residual_rms_norm_epsilon": 1e-6,
+                    },
+                )[0]
                 tiny_cpu_trainer().fit(
                     Model(cfg),
                     datamodule=RandomImageClassificationDataModule(dataset),

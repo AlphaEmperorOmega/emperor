@@ -69,15 +69,16 @@ class WeightedBlendResidualConfig(ResidualConfig):
 @dataclass
 class AttentionResidualConfig(ResidualConfig):
     block_size: int | None = optional_field(
-        "Number of consecutive raw transformation outputs combined into one depth "
+        "Required number of consecutive raw transformation outputs combined into one depth "
         "source. Use 1 for Full Attention Residuals and values greater than 1 for "
-        "Block Attention Residuals. Defaults to 1."
+        "Block Attention Residuals. Suggested starting value: 1. Must be supplied "
+        "explicitly; no default is applied."
     )
     rms_norm_epsilon: float | None = optional_field(
-        "Numerical stability epsilon used to RMS-normalize routing keys. Defaults "
-        "to 1e-6."
+        "Required finite positive floating-point epsilon used to RMS-normalize "
+        "routing keys. Suggested starting value: 1e-6. Must be supplied explicitly; "
+        "no default is applied."
     )
-
     model_config: "LayerStackConfig | LinearLayerConfig | None" = optional_field(
         "Optional input-dependent query model. Receives the current raw "
         "transformation output and returns a query with the same shape; input "
@@ -85,7 +86,6 @@ class AttentionResidualConfig(ResidualConfig):
         "a zero-initialized learned query vector is used. The query model retains "
         "its own parameter initialization."
     )
-
 
     def _registry_owner(self) -> type:
         from emperor.layers._composition.residual.variants.attention import (

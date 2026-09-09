@@ -11,7 +11,6 @@ from emperor.layers._composition.residual.variants.attention import (
     AttentionResidual,
     AttentionResidualState,
 )
-
 from emperor.linears import LinearLayerConfig
 
 
@@ -84,7 +83,49 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
                 )
             )
 
+    def test_required_field_validation_dispatches_before_numeric_validation(self):
+        class RejectingValidator(AttentionResidualValidator):
+            @classmethod
+            def validate_required_fields(cls, config):
+                raise RuntimeError("substituted required-field validator was called")
 
+            @classmethod
+            def validate_field_types(cls, config):
+                raise AssertionError("type validation ran before required fields")
+
+            @staticmethod
+            def validate_positive_integer(value, *, name):
+                raise AssertionError("numeric validation ran before required fields")
+
+        class RejectingAttentionResidual(AttentionResidual):
+            VALIDATOR = RejectingValidator
+
+        with self.assertRaisesRegex(
+            RuntimeError, "substituted required-field validator was called"
+        ):
+            RejectingAttentionResidual(AttentionResidualConfig(residual_dim=2))
+
+    def test_field_type_validation_dispatches_before_numeric_validation(self):
+        class RejectingValidator(AttentionResidualValidator):
+            @classmethod
+            def validate_field_types(cls, config):
+                raise RuntimeError("substituted field-type validator was called")
+
+            @staticmethod
+            def validate_positive_integer(value, *, name):
+                raise AssertionError("numeric validation ran before field types")
+
+        class RejectingAttentionResidual(AttentionResidual):
+            VALIDATOR = RejectingValidator
+
+        with self.assertRaisesRegex(
+            RuntimeError, "substituted field-type validator was called"
+        ):
+            RejectingAttentionResidual(
+                AttentionResidualConfig(
+                    residual_dim=2, block_size=1, rms_norm_epsilon=1e-6
+                )
+            )
 
     def test_state_construction_dispatches_through_substituted_validator(self):
         class RejectingValidator(AttentionResidualValidator):
@@ -183,7 +224,6 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
         self.assertEqual(len(validated_connections), 1)
         self.assertIs(validated_connections[0], residual)
 
-
     def test_generated_query_validation_dispatches_before_history_mutation(self):
         class RejectingValidator(AttentionResidualValidator):
             @staticmethod
@@ -209,7 +249,6 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
             residual(torch.ones_like(initial), initial, residual_state=state)
         self.assertEqual(len(state.sources), 1)
         self.assertIs(state.sources[0], initial)
-
 
 
 if __name__ == "__main__":

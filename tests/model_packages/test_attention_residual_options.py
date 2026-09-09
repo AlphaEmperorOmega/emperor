@@ -305,6 +305,41 @@ def test_main_and_recurrent_attention_placements_forward_update_and_checkpoint(
     )
 
 
+@pytest.mark.parametrize("catalog_key", PACKAGES)
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("block_size", None),
+        ("block_size", True),
+        ("block_size", 1.5),
+        ("block_size", 0),
+        ("block_size", -1),
+        ("rms_norm_epsilon", None),
+        ("rms_norm_epsilon", True),
+        ("rms_norm_epsilon", 1),
+        ("rms_norm_epsilon", 0.0),
+        ("rms_norm_epsilon", -1e-6),
+        ("rms_norm_epsilon", float("nan")),
+        ("rms_norm_epsilon", float("inf")),
+    ],
+)
+def test_invalid_attention_settings_fail_before_model_execution(
+    catalog_key, field, value
+):
+    package = model_package(catalog_key)
+    prefix, overrides = small_overrides(package)
+    overrides.update(
+        {
+            f"{prefix}_residual_connection_option": AttentionResidualConfig,
+            f"{prefix}_residual_model_flag": True,
+            f"{prefix}_residual_block_size": 1,
+            f"{prefix}_residual_rms_norm_epsilon": 1e-6,
+            f"{prefix}_residual_{field}": value,
+        }
+    )
+    with pytest.raises((ValueError, TypeError), match=field):
+        configuration = package.build_configuration(config_overrides=overrides)
+        package.build_model(configuration)
 
 
 @pytest.mark.parametrize(

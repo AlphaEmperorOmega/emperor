@@ -292,10 +292,15 @@ class TestLayer(unittest.TestCase):
                 if residual_connection_option is None
                 else residual_connection_option(
                     **(
+                        {"block_size": 1, "rms_norm_epsilon": 1e-6}
+                        if residual_connection_option is AttentionResidualConfig
+                        else {}
+                    ),
+                    **(
                         {}
                         if residual_model_config is None
                         else {"model_config": residual_model_config}
-                    )
+                    ),
                 )
             ),
             dropout_probability=dropout_probability,
@@ -438,10 +443,15 @@ class TestLayer(unittest.TestCase):
                 if residual_connection_option is None
                 else residual_connection_option(
                     **(
+                        {"block_size": 1, "rms_norm_epsilon": 1e-6}
+                        if residual_connection_option is AttentionResidualConfig
+                        else {}
+                    ),
+                    **(
                         {}
                         if residual_model_config is None
                         else {"model_config": residual_model_config}
-                    )
+                    ),
                 )
             ),
             dropout_probability=dropout_probability,
@@ -1410,17 +1420,21 @@ class TestLayer(unittest.TestCase):
     def test_attention_residual_requires_a_positive_integer_dimension(self):
         invalid_dimensions = (
             (None, ValueError),
-            (True, ValueError),
+            (True, TypeError),
             (0, ValueError),
         )
 
         for residual_dim, error_type in invalid_dimensions:
             with self.subTest(residual_dim=residual_dim):
                 with self.assertRaisesRegex(error_type, "residual_dim"):
-                    AttentionResidualConfig(residual_dim=residual_dim).build()
+                    AttentionResidualConfig(
+                        block_size=1, rms_norm_epsilon=1e-6, residual_dim=residual_dim
+                    ).build()
 
-    def test_attention_residual_defaults_to_full_depth_mixing(self):
-        connection = AttentionResidualConfig(residual_dim=2).build()
+    def test_attention_residual_explicit_full_depth_settings_preserve_averaging(self):
+        connection = AttentionResidualConfig(
+            block_size=1, rms_norm_epsilon=1e-6, residual_dim=2
+        ).build()
         initial = torch.tensor([[2.0, 6.0]])
         current = torch.tensor([[4.0, 10.0]])
         residual_state = connection.new_state(initial)
@@ -1431,7 +1445,7 @@ class TestLayer(unittest.TestCase):
         self.assertEqual(connection.block_size, 1)
         self.assertEqual(connection.rms_norm_epsilon, 1e-6)
         self.assertFalse(hasattr(connection, "raw_weight"))
-        self.assertFalse(hasattr(connection, "model"))
+        self.assertIsNone(connection.query_model)
         self.assertEqual(
             tuple(connection.state_dict()),
             (
@@ -1455,8 +1469,20 @@ class TestLayer(unittest.TestCase):
         self.assertEqual(connection.block_size, 3)
         self.assertEqual(connection.rms_norm_epsilon, 1e-5)
 
+    def test_layer_rejects_missing_required_attention_settings(self):
+        for field_name in ("block_size", "rms_norm_epsilon"):
+            with self.subTest(field=field_name):
+                config = self.bare_config(
+                    residual_connection_option=AttentionResidualConfig
+                )
+                setattr(config.residual_config, field_name, None)
+                with self.assertRaisesRegex(ValueError, f"{field_name} is required"):
+                    Layer(config)
+
     def test_attention_residual_requires_explicit_forward_local_state(self):
-        connection = AttentionResidualConfig(residual_dim=2).build()
+        connection = AttentionResidualConfig(
+            block_size=1, rms_norm_epsilon=1e-6, residual_dim=2
+        ).build()
         hidden = torch.ones(1, 2)
 
         with self.assertRaisesRegex(
