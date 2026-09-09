@@ -1,4 +1,4 @@
-from emperor.layers import LayerNormPositionOptions
+from emperor.layers import LayerNormPositionOptions, NormalizationOptions
 
 from .config import *  # noqa: F401,F403
 
@@ -9,4 +9,10 @@ SEARCH_SPACE_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
 ]
+SEARCH_SPACE_NORMALIZATION: list = list(NormalizationOptions)
 SEARCH_SPACE_ATTN_NUM_HEADS: list = [1, 2, 4]
+
+# Embedding and output normalization
+SEARCH_SPACE_ENCODER_OUTPUT_NORMALIZATION: list = list(NormalizationOptions)
+SEARCH_SPACE_EMBEDDING_NORMALIZATION: list = list(NormalizationOptions)
+SEARCH_SPACE_MLM_NORMALIZATION: list = list(NormalizationOptions)

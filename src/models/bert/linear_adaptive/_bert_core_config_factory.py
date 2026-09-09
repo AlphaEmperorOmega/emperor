@@ -11,6 +11,7 @@ from emperor.layers import (
     AdditiveResidualConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    NormalizationOptions,
 )
 from emperor.transformer import (
     FeedForwardConfig,
@@ -130,6 +131,7 @@ class BertCoreConfigFactory:
         layer_config = TransformerEncoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_config=build_residual_config(
                 self.encoder_stack_options.residual_connection_option,
                 self.encoder_stack_options.residual_model_flag,
@@ -180,6 +182,7 @@ class BertCoreConfigFactory:
         return TransformerEncoderLayerConfig(
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             residual_config=AdditiveResidualConfig(),
             attention_config=self._build_attention_config(),
@@ -230,6 +233,7 @@ class BertCoreConfigFactory:
             residual_model_flag=options.residual_model_flag,
             residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
             apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
@@ -286,6 +290,7 @@ class BertCoreConfigFactory:
             residual_model_flag=options.residual_model_flag,
             residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
             apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,

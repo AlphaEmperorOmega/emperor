@@ -100,6 +100,11 @@ class _BertExpertLinearConfigBuilderImplementation:
                 positional_embedding_config=self.__positional_embedding_config(),
                 boundary_config=self.__boundary_config(),
                 encoder_config=self.__encoder_config(),
+                encoder_output_normalization=(
+                    self.encoder_options.output_normalization
+                    if self.encoder_options is not None
+                    else config.ENCODER_OUTPUT_NORMALIZATION
+                ),
             ),
         )
 
