@@ -140,7 +140,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
             with self.subTest(package=package.catalog_key):
                 self.assertTupleEqual(
                     tuple(residual_stack_suffixes),
-                    tuple(suffix for suffix in _STACK_OPTION_SUFFIXES if package.identity.model_type in ('linears', 'transformer', 'bert', 'gpt', 'vit', 'experts', 'neuron', 'mlp_mixer') or suffix not in ("RESIDUAL_BLOCK_SIZE", "RESIDUAL_RMS_NORM_EPSILON")),
+                    _STACK_OPTION_SUFFIXES,
                 )
                 if gate_stack_suffixes:
                     self.assertListEqual(residual_stack_suffixes, gate_stack_suffixes)
@@ -255,9 +255,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
             with self.subTest(package=package.catalog_key, selector="none"):
                 self.assertIsNone(build(None, False))
 
-            attention_enabled = package.identity.model_type in ('linears', 'transformer', 'bert', 'gpt', 'vit', 'experts', 'neuron', 'mlp_mixer')
-            settings = dict(residual_block_size=2, residual_rms_norm_epsilon=1e-6) if attention_enabled else {}
-            for selector in (_SUPPORTED_MODEL_SELECTORS if attention_enabled else _SUPPORTED_MODEL_SELECTORS[:-1]):
+            for selector in _SUPPORTED_MODEL_SELECTORS:
                 with self.subTest(
                     package=package.catalog_key,
                     selector=selector.__name__,
@@ -265,7 +263,8 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                     scalar = build(
                         selector,
                         False,
-                        **settings,
+                        residual_block_size=2,
+                        residual_rms_norm_epsilon=1e-6,
                     )
                     self.assertIsNone(scalar.model_config)
 
@@ -273,7 +272,8 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                         selector,
                         True,
                         residual_stack,
-                        **settings,
+                        residual_block_size=2,
+                        residual_rms_norm_epsilon=1e-6,
                     )
                     self.assertIsInstance(modeled.model_config, LayerStackConfig)
                     self.assertEqual(modeled.model_config.hidden_dim, 8)
@@ -287,7 +287,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
                         True,
                     )
 
-            for selector in ((None, AdditiveResidualConfig) if attention_enabled else (None, AdditiveResidualConfig, AttentionResidualConfig)):
+            for selector in (None, AdditiveResidualConfig):
                 with self.subTest(
                     package=package.catalog_key,
                     invalid=getattr(selector, "__name__", None),

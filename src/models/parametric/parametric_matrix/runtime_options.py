@@ -17,6 +17,8 @@ class ParametricStackOptions:
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED
     normalization: NormalizationOptions = field(

@@ -94,6 +94,8 @@ def build_parametric_stack_config(
             stack_options.residual_connection_option,
             stack_options.residual_model_flag,
             residual_stack_options,
+            residual_block_size=stack_options.residual_block_size,
+            residual_rms_norm_epsilon=stack_options.residual_rms_norm_epsilon,
             selector_field="STACK_RESIDUAL_CONNECTION_OPTION",
             model_flag_field="STACK_RESIDUAL_MODEL_FLAG",
         ),

@@ -290,18 +290,18 @@ _ORDERING_WITH_ATTENTION_SETTINGS_BY_PACKAGE = {
         40,
     ),
     "parametric/parametric_generator": (
-        "4b9e4fd713db817400c090d1fa07ced411cb574cf1582b288cb564e3c9ee7214",
-        72,
+        "1b4c23232c677788252414093fe289736c5e63c3ebd7a6f81d9a76bf9aae387b",
+        76,
         7,
     ),
     "parametric/parametric_matrix": (
-        "fd56b87316fae8fa511c3cb3fbe4aedea7577382d81724472588ec37977ec7c8",
-        66,
+        "707167f1705db3bc0c7992a2676f479be3410502debbc7acb7076ff9e83f0c5e",
+        70,
         7,
     ),
     "parametric/parametric_vector": (
-        "4efd1de70bed3b66f5d45ab559b65adcaf3ddeb078c7ed84304a94b906c3fa97",
-        67,
+        "5eee857784ed8b5aae861e3d8b397f8cf21339182637c03316f0bbba23a7fe32",
+        71,
         6,
     ),
     "transformer/linear": (

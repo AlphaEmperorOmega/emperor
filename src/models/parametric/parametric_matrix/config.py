@@ -67,10 +67,14 @@ STACK_DROPOUT_PROBABILITY: float = 0.0
 
 #########################################################################
 # Residual Options
-# - False uses the residual variant's learned coefficient parameters.
-# - True uses the residual stack for data-dependent coefficients.
+# - False uses the residual variant's learned query or coefficient parameters.
+# - True uses the residual stack for input-dependent queries or coefficients.
+# - For every attention residual selector, supply its RESIDUAL_BLOCK_SIZE and
+#   RESIDUAL_RMS_NORM_EPSILON explicitly (suggested: 1 for full attention, 1e-6).
 STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 STACK_RESIDUAL_MODEL_FLAG: bool = False
+STACK_RESIDUAL_BLOCK_SIZE: int | None = None
+STACK_RESIDUAL_RMS_NORM_EPSILON: float | None = None
 ## Residual Stack Options
 # - If False, residual stack options inherit layer stack options.
 RESIDUAL_STACK_INDEPENDENT_FLAG: bool = False
@@ -81,6 +85,8 @@ RESIDUAL_STACK_NUM_LAYERS: int | None = None
 RESIDUAL_STACK_ACTIVATION: ActivationOptions | None = None
 RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 RESIDUAL_STACK_RESIDUAL_MODEL_FLAG: bool = False
+RESIDUAL_STACK_RESIDUAL_BLOCK_SIZE: int | None = None
+RESIDUAL_STACK_RESIDUAL_RMS_NORM_EPSILON: float | None = None
 RESIDUAL_STACK_DROPOUT_PROBABILITY: float | None = None
 RESIDUAL_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions | None = None
 RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG: bool | None = None
