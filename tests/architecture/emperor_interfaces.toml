@@ -125,7 +125,7 @@ legacy_cross_owner_private_imports = [
   { consumer = "emperor.experts._validation.layer", imported = "emperor.layers._layer.validation.LayerValidator" },
 ]
 
-legacy_dependency_cycles = ["emperor.layers,emperor.memory"]
+legacy_dependency_cycles = ["emperor.layers,emperor.memory,emperor.sampler"]
 
 retired_root_exports = [
   { module = "emperor.neuron", names = ["TerminalZAxisOffsetOptions"] },
@@ -209,8 +209,8 @@ owners = ["emperor.halting._config", "emperor.halting._config", "emperor.halting
 [[interfaces]]
 module = "emperor.layers"
 kind = "runtime"
-exports = ["ActivationOptions", "AdditiveResidualConfig", "AttentionResidualConfig", "GateConfig", "LastLayerBiasOptions", "LayerConfig", "LayerGateOptions", "LayerNormPositionOptions", "NormalizationOptions", "LayerStackConfig", "MirroredLayerStackConfig", "HierarchicalReasoningModelRecurrentConfig", "RecurrentCompositionConfig", "RecurrentLayerConfig", "TinyRecursiveModelRecurrentConfig", "ResidualConfig", "WeightedBlendResidualConfig", "WeightedResidualConfig", "LayerState", "Layer", "LayerStack", "MirroredLayerStack", "RecurrentLayer", "LayerControllerMonitorCallback", "RecurrentLayerMonitorCallback"]
-owners = ["emperor.layers._options", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._config", "emperor.layers._options", "emperor.layers._config", "emperor.layers._options", "emperor.layers._options", "emperor.layers._options", "emperor.layers._config", "emperor.layers._config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._state", "emperor.layers._layer.core", "emperor.layers._stack.core", "emperor.layers._stack.mirrored", "emperor.layers._composition.recurrent.variants.standard", "emperor.layers._monitoring.callbacks", "emperor.layers._monitoring.callbacks"]
+exports = ["ActivationOptions", "AdditiveResidualConfig", "AttentionResidualConfig", "GateConfig", "LastLayerBiasOptions", "LayerConfig", "LayerGateOptions", "LayerNormPositionOptions", "NormalizationOptions", "LayerStackConfig", "MirroredLayerStackConfig", "HierarchicalReasoningModelRecurrentConfig", "InnerThinkingRecurrentConfig", "RecurrentCompositionConfig", "RecurrentLayerConfig", "TinyRecursiveModelRecurrentConfig", "ResidualConfig", "WeightedBlendResidualConfig", "WeightedResidualConfig", "LayerState", "Layer", "LayerStack", "MirroredLayerStack", "RecurrentLayer", "LayerControllerMonitorCallback", "RecurrentLayerMonitorCallback"]
+owners = ["emperor.layers._options", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._config", "emperor.layers._options", "emperor.layers._config", "emperor.layers._options", "emperor.layers._options", "emperor.layers._options", "emperor.layers._config", "emperor.layers._config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.recurrent.config", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._composition.residual.config", "emperor.layers._state", "emperor.layers._layer.core", "emperor.layers._stack.core", "emperor.layers._stack.mirrored", "emperor.layers._composition.recurrent.variants.standard", "emperor.layers._monitoring.callbacks", "emperor.layers._monitoring.callbacks"]
 
 [[interfaces]]
 module = "emperor.linears"
@@ -257,8 +257,8 @@ owners = ["emperor.patch._config", "emperor.patch._config", "emperor.patch._conf
 [[interfaces]]
 module = "emperor.sampler"
 kind = "runtime"
-exports = ["RouterConfig", "SamplerConfig", "RouterModel", "SamplerModel", "SamplerMonitorCallback"]
-owners = ["emperor.sampler._config", "emperor.sampler._config", "emperor.sampler._router", "emperor.sampler._sampler", "emperor.sampler._monitoring"]
+exports = ["RouterConfig", "SamplerConfig", "RouterModel", "SamplerModel", "TokenSamplerConfig", "TokenSamplerModel", "TokenSamplingResult", "SamplerMonitorCallback"]
+owners = ["emperor.sampler._config", "emperor.sampler._config", "emperor.sampler._router", "emperor.sampler._sampler", "emperor.sampler._token_config", "emperor.sampler._token_sampler", "emperor.sampler._token_sampler", "emperor.sampler._monitoring"]
 
 [[interfaces]]
 module = "emperor.transformer"
