@@ -15,7 +15,7 @@ from models.catalog import discover_model_packages, model_package
 
 _PACKAGES = tuple(
     package.catalog_key for package in discover_model_packages()
-    if package.identity.model_type in ('linears', 'transformer', 'bert', 'gpt', 'vit', 'experts', 'neuron')
+    if package.identity.model_type in ('linears', 'transformer', 'bert', 'gpt', 'vit', 'experts', 'neuron', 'mlp_mixer')
 )
 _NORMALIZATION_TYPES = {
     NormalizationOptions.RMS_NORM: "RMSNorm",

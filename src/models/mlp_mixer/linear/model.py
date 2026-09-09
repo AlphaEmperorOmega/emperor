@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-import torch.nn as nn
 from torch import Tensor
 
 from emperor.experiments.classifier import ClassifierExperiment
-from emperor.layers import Layer
+from emperor.layers import (
+    Layer,
+    LayerConfig,
+    LayerNormPositionOptions,
+)
 
 from .experiment_config import ExperimentConfig
 
@@ -20,7 +23,12 @@ class Model(ClassifierExperiment):
         self.experiment_config: ExperimentConfig = config.experiment_config
         self.patch = self.experiment_config.patch_config.build()
         self.transformer = self.experiment_config.encoder_config.build()
-        self.encoder_layer_norm = nn.LayerNorm(self.cfg.hidden_dim)
+        self.encoder_layer_norm = LayerConfig(
+            input_dim=self.cfg.hidden_dim,
+            output_dim=self.cfg.hidden_dim,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            normalization=self.experiment_config.encoder_output_normalization,
+        ).build_normalization()
         self.output = self.experiment_config.output_config.build()
 
     @property

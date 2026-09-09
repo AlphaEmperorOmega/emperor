@@ -1,4 +1,4 @@
-from emperor.layers import LayerNormPositionOptions
+from emperor.layers import LayerNormPositionOptions, NormalizationOptions
 
 from .config import *  # noqa: F401,F403
 
@@ -17,6 +17,7 @@ SEARCH_SPACE_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
 ]
+SEARCH_SPACE_NORMALIZATION: list = list(NormalizationOptions)
 
 # Token mixer
 SEARCH_SPACE_TOKEN_MIXER_STACK_HIDDEN_DIM: list = [32, 64, 128]
@@ -27,3 +28,6 @@ SEARCH_SPACE_CHANNEL_MIXER_STACK_HIDDEN_DIM: list = [64, 128, 256]
 # Expert routing
 SEARCH_SPACE_TOP_K: list = [1, 2]
 SEARCH_SPACE_NUM_EXPERTS: list = [2, 4, 8]
+
+# Embedding and output normalization
+SEARCH_SPACE_ENCODER_OUTPUT_NORMALIZATION: list = list(NormalizationOptions)

@@ -33,6 +33,7 @@ class MlpMixerExpertLinearConfigBuilder:
                 patch_config=patch_config(runtime),
                 encoder_config=encoder_config(runtime, self.sequence_length),
                 output_config=output_config(runtime),
+                encoder_output_normalization=runtime.encoder_output_normalization,
             ),
         )
 
