@@ -133,6 +133,8 @@ class _BertExpertConfigFactoryBase:
             residual_connection_option=(
                 feed_forward_stack_options.residual_connection_option
             ),
+            residual_block_size=feed_forward_stack_options.residual_block_size,
+            residual_rms_norm_epsilon=feed_forward_stack_options.residual_rms_norm_epsilon,
             residual_model_flag=feed_forward_stack_options.residual_model_flag,
             residual_stack_options=feed_forward_stack_options.residual_stack_options,
             dropout_probability=feed_forward_stack_options.dropout_probability,
@@ -152,6 +154,8 @@ class _BertExpertConfigFactoryBase:
             num_layers=dependencies.feed_forward_options.num_layers,
             activation=dependencies.encoder_options.activation,
             residual_connection_option=None,
+            residual_block_size=None,
+            residual_rms_norm_epsilon=None,
             residual_model_flag=False,
             residual_stack_options=(
                 dependencies.expert_stack_options.residual_stack_options

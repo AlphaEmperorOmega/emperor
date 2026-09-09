@@ -190,23 +190,23 @@ _ORDERING_DIGEST_BY_PACKAGE = {
 
 _ORDERING_WITH_ATTENTION_SETTINGS_BY_PACKAGE = {
     "bert/linear": (
-        "89c8f59c481e0d53b728dc8166ec28181968576ac0c6950d072c22f50ebac32f",
-        373,
+        "d4b448038c53b9fc119bc6bbbe234cfcbb262f59ae5fa81e439b8e6adeee546d",
+        413,
         9,
     ),
     "bert/linear_adaptive": (
-        "da3c671e971812e57cb20fd55f9b451d7760a2bd04fe966e0529033a5fd903e6",
-        834,
+        "098c54e9fed196ad82a25245e332f28fa10c09289718819434942c899998d299",
+        930,
         124,
     ),
     "bert/expert_linear": (
-        "dba8ac6613a87ad2cd9c4294d657968c59d9966089eab4261d34fc9ad956efbf",
-        500,
+        "2b7937a119344f29e6d8f4f0cbbca3c8de3f3922dfbd26d0d0fa35e718173b4e",
+        554,
         10,
     ),
     "bert/expert_linear_adaptive": (
-        "9015739bebf335008ad7d31360221e7376f63396700359f110efef1942310440",
-        915,
+        "93144c5c7a53ec0a4b9367a295e816ae55d913f95da79cee8c6bd7dcb80578f2",
+        1017,
         40,
     ),
     "experts/linear": (
