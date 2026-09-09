@@ -12,6 +12,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -201,6 +202,9 @@ class OptionalStackMeasures:
 class MainStackValues:
     bias_flag: bool
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     num_layers: int
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig] | None
@@ -218,6 +222,9 @@ class SubmoduleStackValues:
     apply_output_postprocessing_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     dropout_probability: float
@@ -233,6 +240,7 @@ class OptionalStackValues:
     apply_output_postprocessing_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     dropout_probability: float | None
@@ -248,6 +256,7 @@ class OptionalStackFields:
     apply_output_postprocessing_flag: str
     activation: str
     layer_norm_position: str
+    normalization: str = field(kw_only=True)
     residual_connection_option: str
     residual_model_flag: str
     dropout_probability: str
@@ -301,6 +310,9 @@ class RecurrenceValues:
     forward_calls_before_iteration_increment: int
     smooth_iteration_growth_flag: bool
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     gate_activation: ActivationOptions | None
     halting_enabled: bool
     halting_hidden_state_mode: HaltingHiddenStateModeOptions
@@ -336,6 +348,9 @@ class ControlDefaultValues:
     recurrent_forward_calls_before_iteration_increment: int
     recurrent_smooth_iteration_growth_flag: bool
     recurrent_layer_norm_position: LayerNormPositionOptions
+    recurrent_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
     recurrent_gate_activation: ActivationOptions | None
@@ -368,6 +383,7 @@ _RESIDUAL_STACK_FIELDS = OptionalStackFields(
     apply_output_postprocessing_flag="residual_stack_apply_output_postprocessing_flag",
     activation="residual_stack_activation",
     layer_norm_position="residual_stack_layer_norm_position",
+    normalization="residual_stack_normalization",
     residual_connection_option="residual_stack_residual_connection_option",
     residual_model_flag="residual_stack_residual_model_flag",
     dropout_probability="residual_stack_dropout_probability",
@@ -381,6 +397,7 @@ _GATE_STACK_FIELDS = OptionalStackFields(
     apply_output_postprocessing_flag="gate_stack_apply_output_postprocessing_flag",
     activation="gate_stack_activation",
     layer_norm_position="gate_stack_layer_norm_position",
+    normalization="gate_stack_normalization",
     residual_connection_option="gate_stack_residual_connection_option",
     residual_model_flag="gate_stack_residual_model_flag",
     dropout_probability="gate_stack_dropout_probability",
@@ -394,6 +411,7 @@ _HALTING_STACK_FIELDS = OptionalStackFields(
     apply_output_postprocessing_flag="halting_stack_apply_output_postprocessing_flag",
     activation="halting_stack_activation",
     layer_norm_position="halting_stack_layer_norm_position",
+    normalization="halting_stack_normalization",
     residual_connection_option="halting_stack_residual_connection_option",
     residual_model_flag="halting_stack_residual_model_flag",
     dropout_probability="halting_stack_dropout_probability",
@@ -407,6 +425,7 @@ _MEMORY_STACK_FIELDS = OptionalStackFields(
     apply_output_postprocessing_flag="memory_stack_apply_output_postprocessing_flag",
     activation="memory_stack_activation",
     layer_norm_position="memory_stack_layer_norm_position",
+    normalization="memory_stack_normalization",
     residual_connection_option="memory_stack_residual_connection_option",
     residual_model_flag="memory_stack_residual_model_flag",
     dropout_probability="memory_stack_dropout_probability",
@@ -420,6 +439,7 @@ _RECURRENT_GATE_STACK_FIELDS = OptionalStackFields(
     apply_output_postprocessing_flag="recurrent_gate_stack_apply_output_postprocessing_flag",
     activation="recurrent_gate_stack_activation",
     layer_norm_position="recurrent_gate_stack_layer_norm_position",
+    normalization="recurrent_gate_stack_normalization",
     residual_connection_option="recurrent_gate_stack_residual_connection_option",
     residual_model_flag="recurrent_gate_stack_residual_model_flag",
     dropout_probability="recurrent_gate_stack_dropout_probability",
@@ -433,6 +453,7 @@ _RECURRENT_HALTING_STACK_FIELDS = OptionalStackFields(
     apply_output_postprocessing_flag="recurrent_halting_stack_apply_output_postprocessing_flag",
     activation="recurrent_halting_stack_activation",
     layer_norm_position="recurrent_halting_stack_layer_norm_position",
+    normalization="recurrent_halting_stack_normalization",
     residual_connection_option="recurrent_halting_stack_residual_connection_option",
     residual_model_flag="recurrent_halting_stack_residual_model_flag",
     dropout_probability="recurrent_halting_stack_dropout_probability",
@@ -450,6 +471,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
     main_stack=MainStackValues(
         bias_flag=config.STACK_BIAS_FLAG,
         layer_norm_position=config.LAYER_NORM_POSITION,
+        normalization=config.NORMALIZATION,
         num_layers=config.STACK_NUM_LAYERS,
         activation=config.STACK_ACTIVATION,
         residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -465,6 +487,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         apply_output_postprocessing_flag=config.SUBMODULE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.SUBMODULE_STACK_ACTIVATION,
         layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
+        normalization=config.SUBMODULE_STACK_NORMALIZATION,
         residual_connection_option=config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
@@ -478,6 +501,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         apply_output_postprocessing_flag=config.RESIDUAL_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.RESIDUAL_STACK_ACTIVATION,
         layer_norm_position=config.RESIDUAL_STACK_LAYER_NORM_POSITION,
+        normalization=config.RESIDUAL_STACK_NORMALIZATION,
         residual_connection_option=config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.RESIDUAL_STACK_DROPOUT_PROBABILITY,
@@ -491,6 +515,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         apply_output_postprocessing_flag=config.GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.GATE_STACK_ACTIVATION,
         layer_norm_position=config.GATE_STACK_LAYER_NORM_POSITION,
+        normalization=config.GATE_STACK_NORMALIZATION,
         residual_connection_option=config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config.GATE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.GATE_STACK_DROPOUT_PROBABILITY,
@@ -504,6 +529,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         apply_output_postprocessing_flag=config.HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.HALTING_STACK_ACTIVATION,
         layer_norm_position=config.HALTING_STACK_LAYER_NORM_POSITION,
+        normalization=config.HALTING_STACK_NORMALIZATION,
         residual_connection_option=config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config.HALTING_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.HALTING_STACK_DROPOUT_PROBABILITY,
@@ -517,6 +543,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         apply_output_postprocessing_flag=config.MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.MEMORY_STACK_ACTIVATION,
         layer_norm_position=config.MEMORY_STACK_LAYER_NORM_POSITION,
+        normalization=config.MEMORY_STACK_NORMALIZATION,
         residual_connection_option=config.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config.MEMORY_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.MEMORY_STACK_DROPOUT_PROBABILITY,
@@ -532,6 +559,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         ),
         activation=config.RECURRENT_GATE_STACK_ACTIVATION,
         layer_norm_position=config.RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+        normalization=config.RECURRENT_GATE_STACK_NORMALIZATION,
         residual_connection_option=(
             config.RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -549,6 +577,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         ),
         activation=config.RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+        normalization=config.RECURRENT_HALTING_STACK_NORMALIZATION,
         residual_connection_option=(
             config.RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -591,6 +620,7 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
             config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
         ),
         recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
+        recurrent_normalization=config.RECURRENT_NORMALIZATION,
         recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config.RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config.RECURRENT_GATE_ACTIVATION,
@@ -641,6 +671,11 @@ def read_main_stack_values(
             "layer_norm_position",
             defaults.layer_norm_position,
             LayerNormPositionOptions,
+        ),
+        normalization=reader.enum(
+            "normalization",
+            defaults.normalization,
+            NormalizationOptions,
         ),
         num_layers=measures.num_layers,
         activation=reader.enum(
@@ -704,6 +739,11 @@ def read_submodule_stack_values(
             defaults.layer_norm_position,
             LayerNormPositionOptions,
         ),
+        normalization=reader.enum(
+            "submodule_stack_normalization",
+            defaults.normalization,
+            NormalizationOptions,
+        ),
         residual_connection_option=reader.optional_residual(
             "submodule_stack_residual_connection_option",
             defaults.residual_connection_option,
@@ -751,6 +791,11 @@ def read_residual_stack_values(
                 fields.layer_norm_position,
                 defaults.layer_norm_position,
                 LayerNormPositionOptions,
+            ),
+            normalization=reader.optional_enum(
+                fields.normalization,
+                defaults.normalization,
+                NormalizationOptions,
             ),
             residual_connection_option=reader.optional_residual(
                 fields.residual_connection_option,
@@ -803,6 +848,11 @@ def _read_optional_stack(
                 fields.layer_norm_position,
                 defaults.layer_norm_position,
                 LayerNormPositionOptions,
+            ),
+            normalization=reader.optional_enum(
+                fields.normalization,
+                defaults.normalization,
+                NormalizationOptions,
             ),
             residual_connection_option=reader.optional_residual(
                 fields.residual_connection_option,
@@ -989,6 +1039,11 @@ def read_recurrence_values(reader: RuntimeOverrideReader) -> RecurrenceValues:
             "recurrent_layer_norm_position",
             defaults.recurrent_layer_norm_position,
             LayerNormPositionOptions,
+        ),
+        normalization=reader.enum(
+            "recurrent_normalization",
+            defaults.recurrent_normalization,
+            NormalizationOptions,
         ),
         gate_activation=reader.optional_enum(
             "recurrent_gate_activation",

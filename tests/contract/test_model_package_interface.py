@@ -81,14 +81,14 @@ _ORDERING_DIGEST_BY_PACKAGE = {
         35,
     ),
     "linears/linear": (
-        "e8f5568084618e629ccc12a1903ce838917aa0a956c4a4bdc66369f636348ede",
-        151,
-        6,
+        "2093377908e48de0665bd7f4c63fb7b8ca03d3672d429fff85822baddea0d8fb",
+        160,
+        7,
     ),
     "linears/linear_adaptive": (
-        "d1cedae3cf45f066475e512269793a66e1514654c2b14380c0714b79a80d74b9",
-        488,
-        31,
+        "cf6bcbc299701d28e8d929876841fe48642fd07e9ddf11e62075dad530c09899",
+        517,
+        33,
     ),
     "mlp_mixer/linear": (
         "4b71d52b0c9f819d25ec63dcd57a1e06fa255a300b890202f181fedad706ea40",
