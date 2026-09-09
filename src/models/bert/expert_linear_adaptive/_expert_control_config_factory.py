@@ -21,6 +21,7 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    NormalizationOptions,
     RecurrentLayerConfig,
 )
 from emperor.sampler import RouterConfig, SamplerConfig
@@ -342,6 +343,7 @@ class ControlConfigFactory:
         return MixtureOfExpertsLayerConfig(
             activation=stack_options.activation,
             layer_norm_position=stack_options.layer_norm_position,
+            normalization=stack_options.normalization,
             residual_config=build_residual_config(
                 stack_options.residual_connection_option,
                 stack_options.residual_model_flag,
@@ -396,6 +398,7 @@ class ControlConfigFactory:
             layer_config=LayerConfig(
                 activation=expert_stack_options.activation,
                 layer_norm_position=expert_stack_options.layer_norm_position,
+                normalization=expert_stack_options.normalization,
                 residual_config=build_residual_config(
                     expert_stack_options.residual_connection_option,
                     expert_stack_options.residual_model_flag,
@@ -509,6 +512,7 @@ class ControlConfigFactory:
             layer_config=LayerConfig(
                 activation=router_stack_options.activation,
                 layer_norm_position=router_stack_options.layer_norm_position,
+                normalization=router_stack_options.normalization,
                 residual_config=build_residual_config(
                     router_stack_options.residual_connection_option,
                     router_stack_options.residual_model_flag,
@@ -529,6 +533,7 @@ class ControlConfigFactory:
         return LayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_config=None,
             dropout_probability=0.0,
             gate_config=None,

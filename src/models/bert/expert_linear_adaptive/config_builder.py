@@ -225,6 +225,7 @@ class _BertExpertLinearAdaptiveConfigBuilderImplementation(BertBackendConfigBuil
             hidden_dim=feed_forward_stack_options.hidden_dim,
             bias_flag=feed_forward_stack_options.bias_flag,
             layer_norm_position=feed_forward_stack_options.layer_norm_position,
+            normalization=feed_forward_stack_options.normalization,
             num_layers=feed_forward_stack_options.num_layers,
             activation=feed_forward_stack_options.activation,
             residual_connection_option=(
@@ -244,6 +245,7 @@ class _BertExpertLinearAdaptiveConfigBuilderImplementation(BertBackendConfigBuil
             hidden_dim=self.hidden_dim,
             bias_flag=self.feed_forward_options.bias_flag,
             layer_norm_position=self.encoder_options.layer_norm_position,
+            normalization=self.encoder_options.normalization,
             num_layers=self.feed_forward_options.num_layers,
             activation=self.encoder_options.activation,
             residual_connection_option=None,
