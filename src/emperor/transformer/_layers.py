@@ -125,6 +125,7 @@ def _sub_layer_config(
         residual_config=owner_config.residual_config,
         dropout_probability=owner_config.dropout_probability,
         layer_norm_position=owner_config.layer_norm_position,
+        normalization=owner_config.normalization,
         gate_config=None,
         halting_config=None,
         memory_config=None,

@@ -17,6 +17,7 @@ from emperor.layers import (
     LayerGateOptions,
     LayerNormPositionOptions,
     LayerStackConfig,
+    NormalizationOptions,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import GatedResidualDynamicMemoryConfig, MemoryPositionOptions
@@ -62,6 +63,7 @@ def _linear_stack(
             residual_config=None,
             dropout_probability=dropout_probability,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             gate_config=None,
             halting_config=None,
             memory_config=None,
@@ -90,6 +92,7 @@ def _controller_stack(model_dim: int, output_dim: int | None = None):
                 residual_config=None,
                 dropout_probability=0.0,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
+                normalization=NormalizationOptions.RMS_NORM,
                 gate_config=None,
                 halting_config=None,
                 memory_config=None,
@@ -148,6 +151,7 @@ def _residual_stack(runtime: RuntimeOptions):
             num_layers=runtime.residual_stack_num_layers,
             activation=runtime.residual_stack_activation,
             layer_norm_position=runtime.residual_stack_layer_norm_position,
+            normalization=runtime.residual_stack_normalization,
             residual_connection_option=(
                 runtime.residual_stack_residual_connection_option
             ),
@@ -181,6 +185,7 @@ def _projection_stack(runtime: RuntimeOptions, options: TransformerAttentionOpti
             ),
             dropout_probability=stack_options.dropout_probability,
             layer_norm_position=stack_options.layer_norm_position,
+            normalization=stack_options.normalization,
             gate_config=None,
             halting_config=None,
             memory_config=None,
@@ -271,6 +276,7 @@ def _feed_forward(
             ),
             dropout_probability=stack_options.dropout_probability,
             layer_norm_position=stack_options.layer_norm_position,
+            normalization=stack_options.normalization,
             gate_config=None,
             halting_config=None,
             memory_config=None,
@@ -326,6 +332,7 @@ def _controlled_stack(
         ),
         smooth_iteration_growth_flag=(options.recurrent_smooth_iteration_growth_flag),
         recurrent_layer_norm_position=LayerNormPositionOptions.DISABLED,
+        recurrent_normalization=NormalizationOptions.LAYER_NORM,
         gate_config=_gate(runtime.model_dim, options.recurrent_stack_gate_flag),
         residual_config=build_residual_config(
             options.recurrent_residual_connection_option,
@@ -358,6 +365,7 @@ def _encoder(runtime: RuntimeOptions):
     transformer_layer = TransformerEncoderLayerConfig(
         embedding_dim=runtime.model_dim,
         layer_norm_position=options.layer_norm_position,
+        normalization=options.normalization,
         dropout_probability=runtime.dropout_probability,
         residual_config=AdditiveResidualConfig(),
         attention_config=_self_attention(
@@ -381,6 +389,7 @@ def _encoder(runtime: RuntimeOptions):
         ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
+        normalization=NormalizationOptions.RMS_NORM,
         gate_config=_gate(runtime.model_dim, options.stack_gate_flag),
         halting_config=_halting(
             runtime.model_dim,
@@ -399,6 +408,7 @@ def _decoder(runtime: RuntimeOptions):
     transformer_layer = TransformerDecoderLayerConfig(
         embedding_dim=runtime.model_dim,
         layer_norm_position=options.layer_norm_position,
+        normalization=options.normalization,
         dropout_probability=runtime.dropout_probability,
         residual_config=AdditiveResidualConfig(),
         self_attention_config=_self_attention(
@@ -425,6 +435,7 @@ def _decoder(runtime: RuntimeOptions):
         ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
+        normalization=NormalizationOptions.RMS_NORM,
         gate_config=_gate(runtime.model_dim, options.stack_gate_flag),
         halting_config=_halting(
             runtime.model_dim,
@@ -473,4 +484,6 @@ def build_experiment_config(runtime: RuntimeOptions) -> ExperimentConfig:
         label_smoothing=0.1,
         warmup_steps=4_000,
         generation_metrics_flag=True,
+        encoder_output_normalization=runtime.encoder_output_normalization,
+        decoder_output_normalization=runtime.decoder_output_normalization,
     )

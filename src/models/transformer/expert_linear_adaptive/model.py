@@ -9,6 +9,7 @@ from torch import Tensor
 
 from emperor.attention import AttentionLayerState
 from emperor.experiments.translation import TranslationExperiment
+from emperor.layers import LayerConfig, LayerNormPositionOptions
 from emperor.transformer import TransformerDecoderLayerState
 
 if TYPE_CHECKING:
@@ -51,8 +52,18 @@ class Model(TranslationExperiment):
         self.embedding_dropout = nn.Dropout(experiment_config.dropout_probability)
         self.encoder = experiment_config.encoder_config.build()
         self.decoder = experiment_config.decoder_config.build()
-        self.encoder_layer_norm = nn.LayerNorm(experiment_config.model_dim)
-        self.decoder_layer_norm = nn.LayerNorm(experiment_config.model_dim)
+        self.encoder_layer_norm = LayerConfig(
+            input_dim=experiment_config.model_dim,
+            output_dim=experiment_config.model_dim,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            normalization=self.experiment_config.encoder_output_normalization,
+        ).build_normalization()
+        self.decoder_layer_norm = LayerConfig(
+            input_dim=experiment_config.model_dim,
+            output_dim=experiment_config.model_dim,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            normalization=self.experiment_config.decoder_output_normalization,
+        ).build_normalization()
         self.output_projection = nn.Linear(
             experiment_config.model_dim,
             experiment_config.vocab_size,

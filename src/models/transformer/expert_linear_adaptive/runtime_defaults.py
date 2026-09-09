@@ -56,6 +56,7 @@ def _controller_stack_from_config(
         ),
         activation=getattr(config_module, f"{prefix}_ACTIVATION"),
         layer_norm_position=getattr(config_module, f"{prefix}_LAYER_NORM_POSITION"),
+        normalization=getattr(config_module, f"{prefix}_NORMALIZATION"),
         residual_connection_option=getattr(
             config_module, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
         ),
@@ -121,6 +122,9 @@ def _recurrent_from_config(
         recurrent_layer_norm_position=getattr(
             config_module, f"{prefix}_RECURRENT_LAYER_NORM_POSITION"
         ),
+        recurrent_normalization=getattr(
+            config_module, f"{prefix}_RECURRENT_NORMALIZATION"
+        ),
         recurrent_stack_gate_flag=getattr(
             config_module, f"{prefix}_RECURRENT_STACK_GATE_FLAG"
         ),
@@ -181,6 +185,10 @@ def attention_options_from_config(
                 config_module,
                 f"{prefix}_STACK_LAYER_NORM_POSITION",
             ),
+            normalization=getattr(
+                config_module,
+                f"{prefix}_STACK_NORMALIZATION",
+            ),
             residual_connection_option=(
                 getattr(
                     config_module,
@@ -229,6 +237,10 @@ def feed_forward_options_from_config(
             layer_norm_position=getattr(
                 config_module,
                 f"{prefix}_STACK_LAYER_NORM_POSITION",
+            ),
+            normalization=getattr(
+                config_module,
+                f"{prefix}_STACK_NORMALIZATION",
             ),
             residual_connection_option=(
                 getattr(
@@ -488,6 +500,10 @@ def adaptive_options_from_config(
                 config_module,
                 f"{prefix}_GENERATOR_STACK_LAYER_NORM_POSITION",
             ),
+            normalization=getattr(
+                config_module,
+                f"{prefix}_GENERATOR_STACK_NORMALIZATION",
+            ),
             residual_connection_option=getattr(
                 config_module,
                 f"{prefix}_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION",
@@ -531,6 +547,7 @@ _STACK_OPTION_FIELDS = (
     "apply_output_postprocessing_flag",
     "activation",
     "layer_norm_position",
+    "normalization",
     "residual_connection_option",
     "residual_model_flag",
     "dropout_probability",
@@ -592,6 +609,10 @@ def _path_field_map(*, attention: bool) -> dict[str, tuple[str, str]]:
             "recurrent_layer_norm_position": (
                 "recurrent",
                 "recurrent_layer_norm_position",
+            ),
+            "recurrent_normalization": (
+                "recurrent",
+                "recurrent_normalization",
             ),
             "recurrent_stack_gate_flag": (
                 "recurrent",
@@ -942,6 +963,7 @@ def runtime_from_config() -> RuntimeOptions:
     stack = TransformerStackOptions(
         num_layers=config.ENCODER_NUM_LAYERS,
         layer_norm_position=config.ENCODER_LAYER_NORM_POSITION,
+        normalization=config.ENCODER_NORMALIZATION,
         stack_gate_flag=config.STACK_GATE_FLAG,
         stack_halting_flag=config.STACK_HALTING_FLAG,
         halting_threshold=config.HALTING_THRESHOLD,
@@ -1005,6 +1027,7 @@ def runtime_from_config() -> RuntimeOptions:
         residual_stack_independent_flag=(config.RESIDUAL_STACK_INDEPENDENT_FLAG),
         residual_stack_hidden_dim=config.RESIDUAL_STACK_HIDDEN_DIM,
         residual_stack_layer_norm_position=(config.RESIDUAL_STACK_LAYER_NORM_POSITION),
+        residual_stack_normalization=(config.RESIDUAL_STACK_NORMALIZATION),
         residual_stack_num_layers=config.RESIDUAL_STACK_NUM_LAYERS,
         residual_stack_activation=config.RESIDUAL_STACK_ACTIVATION,
         residual_stack_residual_connection_option=(
@@ -1025,6 +1048,7 @@ def runtime_from_config() -> RuntimeOptions:
             stack,
             num_layers=config.DECODER_NUM_LAYERS,
             layer_norm_position=config.DECODER_LAYER_NORM_POSITION,
+            normalization=config.DECODER_NORMALIZATION,
         ),
         encoder_attention_options=attention_options_from_config(config, "ENCODER_ATTN"),
         decoder_self_attention_options=attention_options_from_config(
@@ -1089,6 +1113,8 @@ def runtime_from_config() -> RuntimeOptions:
             config,
             "DECODER_FF_ADAPTIVE",
         ),
+        encoder_output_normalization=config.ENCODER_OUTPUT_NORMALIZATION,
+        decoder_output_normalization=config.DECODER_OUTPUT_NORMALIZATION,
     )
 
 

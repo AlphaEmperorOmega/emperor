@@ -27,6 +27,7 @@ class TransformerValidator(ValidatorBase):
         "override_config",
         "cross_attention_config",
         "residual_config",
+        "normalization",
     }
 
     # --- build-time structural validation ---
