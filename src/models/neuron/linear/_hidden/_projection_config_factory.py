@@ -2,6 +2,7 @@ from emperor.layers import (
     ActivationOptions,
     LayerConfig,
     LayerNormPositionOptions,
+    NormalizationOptions,
 )
 from emperor.linears import LinearLayerConfig
 from models.neuron.linear._hidden.runtime_options import RuntimeOptions
@@ -15,6 +16,7 @@ class ProjectionConfigFactory:
         return LayerConfig(
             activation=self.runtime.stack.activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_config=None,
             dropout_probability=0.0,
             gate_config=None,
@@ -28,6 +30,7 @@ class ProjectionConfigFactory:
         return LayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_config=None,
             dropout_probability=0.0,
             gate_config=None,

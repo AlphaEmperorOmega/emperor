@@ -45,6 +45,9 @@ _CLUSTER_HALTING_STACK_LAST_LAYER_BIAS_OPTION_DEFAULT = (
 _CLUSTER_HALTING_STACK_LAYER_NORM_POSITION_DEFAULT = (
     config.CLUSTER_HALTING_STACK_LAYER_NORM_POSITION
 )
+_CLUSTER_HALTING_STACK_NORMALIZATION_DEFAULT = (
+    config.CLUSTER_HALTING_STACK_NORMALIZATION
+)
 _CLUSTER_HALTING_STACK_NUM_LAYERS_DEFAULT = config.CLUSTER_HALTING_STACK_NUM_LAYERS
 _CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION_DEFAULT = (
     config.CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
@@ -82,6 +85,9 @@ _CLUSTER_TERMINAL_ROUTER_LAST_LAYER_BIAS_OPTION_DEFAULT = (
 )
 _CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION_DEFAULT = (
     config.CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION
+)
+_CLUSTER_TERMINAL_ROUTER_NORMALIZATION_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTER_NORMALIZATION
 )
 _CLUSTER_TERMINAL_ROUTER_NUM_LAYERS_DEFAULT = config.CLUSTER_TERMINAL_ROUTER_NUM_LAYERS
 _CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION_DEFAULT = (
@@ -375,6 +381,11 @@ def _terminal_router_options(
         "cluster_terminal_router_layer_norm_position",
         _CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION_DEFAULT,
     )
+    normalization = _pop(
+        values,
+        "cluster_terminal_router_normalization",
+        _CLUSTER_TERMINAL_ROUTER_NORMALIZATION_DEFAULT,
+    )
     residual_connection_option = _pop(
         values,
         "cluster_terminal_router_residual_connection_option",
@@ -404,6 +415,7 @@ def _terminal_router_options(
         apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         activation=activation,
         layer_norm_position=layer_norm_position,
+        normalization=normalization,
         residual_connection_option=residual_connection_option,
         residual_model_flag=residual_model_flag,
         dropout_probability=dropout_probability,
@@ -531,6 +543,11 @@ def _cluster_halting_options(
         "cluster_halting_stack_layer_norm_position",
         _CLUSTER_HALTING_STACK_LAYER_NORM_POSITION_DEFAULT,
     )
+    normalization = _pop(
+        values,
+        "cluster_halting_stack_normalization",
+        _CLUSTER_HALTING_STACK_NORMALIZATION_DEFAULT,
+    )
     residual_connection_option = _pop(
         values,
         "cluster_halting_stack_residual_connection_option",
@@ -566,6 +583,7 @@ def _cluster_halting_options(
             apply_output_postprocessing_flag=apply_output_postprocessing_flag,
             activation=activation,
             layer_norm_position=layer_norm_position,
+            normalization=normalization,
             residual_connection_option=residual_connection_option,
             residual_model_flag=residual_model_flag,
             dropout_probability=dropout_probability,

@@ -62,6 +62,7 @@ class ControlConfigFactory:
             forward_calls_before_iteration_increment=options.forward_calls_before_iteration_increment,
             smooth_iteration_growth_flag=options.smooth_iteration_growth_flag,
             recurrent_layer_norm_position=options.layer_norm_position,
+            recurrent_normalization=options.normalization,
             block_config=block_config,
             gate_config=self._gate_config(options.gate),
             residual_config=None,
@@ -114,6 +115,7 @@ class ControlConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
+                normalization=options.normalization,
                 residual_config=build_residual_config(
                     options.residual_connection_option,
                     options.residual_model_flag,

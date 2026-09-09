@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import cast
 
 import models.neuron.expert_linear_adaptive.config as config
@@ -9,6 +9,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -33,6 +34,9 @@ class ControlDefaultValues:
     residual_stack_hidden_dim: int | None = config.RESIDUAL_STACK_HIDDEN_DIM
     residual_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.RESIDUAL_STACK_LAYER_NORM_POSITION
+    )
+    residual_stack_normalization: NormalizationOptions | None = field(
+        default=(config.RESIDUAL_STACK_NORMALIZATION), kw_only=True
     )
     residual_stack_num_layers: int | None = config.RESIDUAL_STACK_NUM_LAYERS
     residual_stack_activation: ActivationOptions | None = (
@@ -59,6 +63,9 @@ class ControlDefaultValues:
     expert_gate_stack_hidden_dim: int | None = config.EXPERT_GATE_STACK_HIDDEN_DIM
     expert_gate_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.EXPERT_GATE_STACK_LAYER_NORM_POSITION
+    )
+    expert_gate_stack_normalization: NormalizationOptions | None = field(
+        default=(config.EXPERT_GATE_STACK_NORMALIZATION), kw_only=True
     )
     expert_gate_stack_num_layers: int | None = config.EXPERT_GATE_STACK_NUM_LAYERS
     expert_gate_stack_activation: ActivationOptions | None = (
@@ -93,6 +100,9 @@ class ControlDefaultValues:
     expert_halting_stack_hidden_dim: int | None = config.EXPERT_HALTING_STACK_HIDDEN_DIM
     expert_halting_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.EXPERT_HALTING_STACK_LAYER_NORM_POSITION
+    )
+    expert_halting_stack_normalization: NormalizationOptions | None = field(
+        default=(config.EXPERT_HALTING_STACK_NORMALIZATION), kw_only=True
     )
     expert_halting_stack_num_layers: int | None = config.EXPERT_HALTING_STACK_NUM_LAYERS
     expert_halting_stack_activation: ActivationOptions | None = (
@@ -132,6 +142,9 @@ class ControlDefaultValues:
     expert_memory_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.EXPERT_MEMORY_STACK_LAYER_NORM_POSITION
     )
+    expert_memory_stack_normalization: NormalizationOptions | None = field(
+        default=(config.EXPERT_MEMORY_STACK_NORMALIZATION), kw_only=True
+    )
     expert_memory_stack_num_layers: int | None = config.EXPERT_MEMORY_STACK_NUM_LAYERS
     expert_memory_stack_activation: ActivationOptions | None = (
         config.EXPERT_MEMORY_STACK_ACTIVATION
@@ -157,6 +170,9 @@ class ControlDefaultValues:
     expert_recurrent_layer_norm_position: LayerNormPositionOptions = (
         config.EXPERT_RECURRENT_LAYER_NORM_POSITION
     )
+    expert_recurrent_normalization: NormalizationOptions = field(
+        default=(config.EXPERT_RECURRENT_NORMALIZATION), kw_only=True
+    )
     expert_recurrent_stack_gate_flag: bool = config.EXPERT_RECURRENT_STACK_GATE_FLAG
     expert_recurrent_gate_option: LayerGateOptions | None = (
         config.EXPERT_RECURRENT_GATE_OPTION
@@ -172,6 +188,9 @@ class ControlDefaultValues:
     )
     expert_recurrent_gate_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.EXPERT_RECURRENT_GATE_STACK_LAYER_NORM_POSITION
+    )
+    expert_recurrent_gate_stack_normalization: NormalizationOptions | None = field(
+        default=(config.EXPERT_RECURRENT_GATE_STACK_NORMALIZATION), kw_only=True
     )
     expert_recurrent_gate_stack_num_layers: int | None = (
         config.EXPERT_RECURRENT_GATE_STACK_NUM_LAYERS
@@ -216,6 +235,9 @@ class ControlDefaultValues:
     expert_recurrent_halting_stack_layer_norm_position: (
         LayerNormPositionOptions | None
     ) = config.EXPERT_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION
+    expert_recurrent_halting_stack_normalization: NormalizationOptions | None = field(
+        default=config.EXPERT_RECURRENT_HALTING_STACK_NORMALIZATION, kw_only=True
+    )
     expert_recurrent_halting_stack_num_layers: int | None = (
         config.EXPERT_RECURRENT_HALTING_STACK_NUM_LAYERS
     )
@@ -252,6 +274,9 @@ class ControlDefaultValues:
     router_stack_layer_norm_position: LayerNormPositionOptions = (
         config.ROUTER_STACK_LAYER_NORM_POSITION
     )
+    router_stack_normalization: NormalizationOptions = field(
+        default=(config.ROUTER_STACK_NORMALIZATION), kw_only=True
+    )
     router_stack_last_layer_bias_option: LastLayerBiasOptions = (
         config.ROUTER_STACK_LAST_LAYER_BIAS_OPTION
     )
@@ -266,6 +291,9 @@ class ControlDefaultValues:
     router_gate_stack_hidden_dim: int | None = config.ROUTER_GATE_STACK_HIDDEN_DIM
     router_gate_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.ROUTER_GATE_STACK_LAYER_NORM_POSITION
+    )
+    router_gate_stack_normalization: NormalizationOptions | None = field(
+        default=(config.ROUTER_GATE_STACK_NORMALIZATION), kw_only=True
     )
     router_gate_stack_num_layers: int | None = config.ROUTER_GATE_STACK_NUM_LAYERS
     router_gate_stack_activation: ActivationOptions | None = (
@@ -300,6 +328,9 @@ class ControlDefaultValues:
     router_halting_stack_hidden_dim: int | None = config.ROUTER_HALTING_STACK_HIDDEN_DIM
     router_halting_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.ROUTER_HALTING_STACK_LAYER_NORM_POSITION
+    )
+    router_halting_stack_normalization: NormalizationOptions | None = field(
+        default=(config.ROUTER_HALTING_STACK_NORMALIZATION), kw_only=True
     )
     router_halting_stack_num_layers: int | None = config.ROUTER_HALTING_STACK_NUM_LAYERS
     router_halting_stack_activation: ActivationOptions | None = (
@@ -339,6 +370,9 @@ class ControlDefaultValues:
     router_memory_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.ROUTER_MEMORY_STACK_LAYER_NORM_POSITION
     )
+    router_memory_stack_normalization: NormalizationOptions | None = field(
+        default=(config.ROUTER_MEMORY_STACK_NORMALIZATION), kw_only=True
+    )
     router_memory_stack_num_layers: int | None = config.ROUTER_MEMORY_STACK_NUM_LAYERS
     router_memory_stack_activation: ActivationOptions | None = (
         config.ROUTER_MEMORY_STACK_ACTIVATION
@@ -364,6 +398,9 @@ class ControlDefaultValues:
     router_recurrent_layer_norm_position: LayerNormPositionOptions = (
         config.ROUTER_RECURRENT_LAYER_NORM_POSITION
     )
+    router_recurrent_normalization: NormalizationOptions = field(
+        default=(config.ROUTER_RECURRENT_NORMALIZATION), kw_only=True
+    )
     router_recurrent_stack_gate_flag: bool = config.ROUTER_RECURRENT_STACK_GATE_FLAG
     router_recurrent_gate_option: LayerGateOptions | None = (
         config.ROUTER_RECURRENT_GATE_OPTION
@@ -379,6 +416,9 @@ class ControlDefaultValues:
     )
     router_recurrent_gate_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.ROUTER_RECURRENT_GATE_STACK_LAYER_NORM_POSITION
+    )
+    router_recurrent_gate_stack_normalization: NormalizationOptions | None = field(
+        default=(config.ROUTER_RECURRENT_GATE_STACK_NORMALIZATION), kw_only=True
     )
     router_recurrent_gate_stack_num_layers: int | None = (
         config.ROUTER_RECURRENT_GATE_STACK_NUM_LAYERS
@@ -423,6 +463,9 @@ class ControlDefaultValues:
     router_recurrent_halting_stack_layer_norm_position: (
         LayerNormPositionOptions | None
     ) = config.ROUTER_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION
+    router_recurrent_halting_stack_normalization: NormalizationOptions | None = field(
+        default=config.ROUTER_RECURRENT_HALTING_STACK_NORMALIZATION, kw_only=True
+    )
     router_recurrent_halting_stack_num_layers: int | None = (
         config.ROUTER_RECURRENT_HALTING_STACK_NUM_LAYERS
     )
@@ -455,6 +498,9 @@ class ControlDefaultValues:
     gate_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.GATE_STACK_LAYER_NORM_POSITION
     )
+    gate_stack_normalization: NormalizationOptions | None = field(
+        default=(config.GATE_STACK_NORMALIZATION), kw_only=True
+    )
     gate_stack_num_layers: int | None = config.GATE_STACK_NUM_LAYERS
     gate_stack_activation: ActivationOptions | None = config.GATE_STACK_ACTIVATION
     gate_stack_residual_connection_option: type[ResidualConfig] | None = (
@@ -480,6 +526,9 @@ class ControlDefaultValues:
     halting_stack_hidden_dim: int | None = config.HALTING_STACK_HIDDEN_DIM
     halting_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.HALTING_STACK_LAYER_NORM_POSITION
+    )
+    halting_stack_normalization: NormalizationOptions | None = field(
+        default=(config.HALTING_STACK_NORMALIZATION), kw_only=True
     )
     halting_stack_num_layers: int | None = config.HALTING_STACK_NUM_LAYERS
     halting_stack_activation: ActivationOptions | None = config.HALTING_STACK_ACTIVATION
@@ -510,6 +559,9 @@ class ControlDefaultValues:
     memory_stack_hidden_dim: int | None = config.MEMORY_STACK_HIDDEN_DIM
     memory_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.MEMORY_STACK_LAYER_NORM_POSITION
+    )
+    memory_stack_normalization: NormalizationOptions | None = field(
+        default=(config.MEMORY_STACK_NORMALIZATION), kw_only=True
     )
     memory_stack_num_layers: int | None = config.MEMORY_STACK_NUM_LAYERS
     memory_stack_activation: ActivationOptions | None = config.MEMORY_STACK_ACTIVATION
@@ -546,6 +598,9 @@ class ControlDefaultValues:
     recurrent_layer_norm_position: LayerNormPositionOptions = (
         config.RECURRENT_LAYER_NORM_POSITION
     )
+    recurrent_normalization: NormalizationOptions = field(
+        default=(config.RECURRENT_NORMALIZATION), kw_only=True
+    )
     recurrent_stack_gate_flag: bool = config.RECURRENT_STACK_GATE_FLAG
     recurrent_gate_option: LayerGateOptions | None = config.RECURRENT_GATE_OPTION
     recurrent_gate_activation: ActivationOptions | None = (
@@ -557,6 +612,9 @@ class ControlDefaultValues:
     recurrent_gate_stack_hidden_dim: int | None = config.RECURRENT_GATE_STACK_HIDDEN_DIM
     recurrent_gate_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.RECURRENT_GATE_STACK_LAYER_NORM_POSITION
+    )
+    recurrent_gate_stack_normalization: NormalizationOptions | None = field(
+        default=(config.RECURRENT_GATE_STACK_NORMALIZATION), kw_only=True
     )
     recurrent_gate_stack_num_layers: int | None = config.RECURRENT_GATE_STACK_NUM_LAYERS
     recurrent_gate_stack_activation: ActivationOptions | None = (
@@ -592,6 +650,9 @@ class ControlDefaultValues:
     )
     recurrent_halting_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION
+    )
+    recurrent_halting_stack_normalization: NormalizationOptions | None = field(
+        default=(config.RECURRENT_HALTING_STACK_NORMALIZATION), kw_only=True
     )
     recurrent_halting_stack_num_layers: int | None = (
         config.RECURRENT_HALTING_STACK_NUM_LAYERS
@@ -694,6 +755,7 @@ class _StackSourceValues:
     apply_output_postprocessing_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     dropout_probability: float | None
@@ -730,6 +792,9 @@ class _RecurrentControllerValues:
     recurrent_flag: bool
     recurrent_max_steps: int
     recurrent_layer_norm_position: LayerNormPositionOptions
+    recurrent_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
     recurrent_gate_activation: ActivationOptions | None
@@ -751,6 +816,7 @@ def _stack_source(values: _StackSourceValues) -> ExpertsSubmoduleStackSource:
         apply_output_postprocessing_flag=values.apply_output_postprocessing_flag,
         activation=values.activation,
         layer_norm_position=values.layer_norm_position,
+        normalization=values.normalization,
         residual_connection_option=values.residual_connection_option,
         residual_model_flag=values.residual_model_flag,
         dropout_probability=values.dropout_probability,
@@ -798,6 +864,7 @@ def _recurrent_controller_options(
         recurrent_flag=values.recurrent_flag,
         recurrent_max_steps=values.recurrent_max_steps,
         recurrent_layer_norm_position=values.recurrent_layer_norm_position,
+        recurrent_normalization=values.recurrent_normalization,
         recurrent_stack_gate_flag=values.recurrent_stack_gate_flag,
         recurrent_gate_option=values.recurrent_gate_option,
         recurrent_gate_activation=values.recurrent_gate_activation,
@@ -844,6 +911,7 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         ),
                         activation=values.expert_gate_stack_activation,
                         layer_norm_position=values.expert_gate_stack_layer_norm_position,
+                        normalization=values.expert_gate_stack_normalization,
                         residual_connection_option=(
                             values.expert_gate_stack_residual_connection_option
                         ),
@@ -870,6 +938,7 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         ),
                         activation=values.expert_halting_stack_activation,
                         layer_norm_position=values.expert_halting_stack_layer_norm_position,
+                        normalization=values.expert_halting_stack_normalization,
                         residual_connection_option=(
                             values.expert_halting_stack_residual_connection_option
                         ),
@@ -908,6 +977,7 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         ),
                         activation=values.expert_memory_stack_activation,
                         layer_norm_position=values.expert_memory_stack_layer_norm_position,
+                        normalization=values.expert_memory_stack_normalization,
                         residual_connection_option=(
                             values.expert_memory_stack_residual_connection_option
                         ),
@@ -928,6 +998,7 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                 recurrent_layer_norm_position=(
                     values.expert_recurrent_layer_norm_position
                 ),
+                recurrent_normalization=(values.expert_recurrent_normalization),
                 recurrent_stack_gate_flag=values.expert_recurrent_stack_gate_flag,
                 recurrent_gate_option=values.expert_recurrent_gate_option,
                 recurrent_gate_activation=values.expert_recurrent_gate_activation,
@@ -947,6 +1018,9 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         activation=values.expert_recurrent_gate_stack_activation,
                         layer_norm_position=(
                             values.expert_recurrent_gate_stack_layer_norm_position
+                        ),
+                        normalization=(
+                            values.expert_recurrent_gate_stack_normalization
                         ),
                         residual_connection_option=(
                             values.expert_recurrent_gate_stack_residual_connection_option
@@ -981,6 +1055,9 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         activation=values.expert_recurrent_halting_stack_activation,
                         layer_norm_position=(
                             values.expert_recurrent_halting_stack_layer_norm_position
+                        ),
+                        normalization=(
+                            values.expert_recurrent_halting_stack_normalization
                         ),
                         residual_connection_option=(
                             values.expert_recurrent_halting_stack_residual_connection_option
@@ -1033,6 +1110,7 @@ def _router_stack_defaults(
         apply_output_postprocessing_flag=values.router_stack_apply_output_postprocessing_flag,
         activation=values.router_stack_activation,
         layer_norm_position=values.router_stack_layer_norm_position,
+        normalization=values.router_stack_normalization,
         residual_connection_option=values.router_stack_residual_connection_option,
         residual_model_flag=values.router_stack_residual_model_flag,
         dropout_probability=values.router_stack_dropout_probability,
@@ -1065,6 +1143,7 @@ def _router_layer_defaults(
                     ),
                     activation=values.router_gate_stack_activation,
                     layer_norm_position=values.router_gate_stack_layer_norm_position,
+                    normalization=values.router_gate_stack_normalization,
                     residual_connection_option=(
                         values.router_gate_stack_residual_connection_option
                     ),
@@ -1091,6 +1170,7 @@ def _router_layer_defaults(
                     ),
                     activation=values.router_halting_stack_activation,
                     layer_norm_position=values.router_halting_stack_layer_norm_position,
+                    normalization=values.router_halting_stack_normalization,
                     residual_connection_option=(
                         values.router_halting_stack_residual_connection_option
                     ),
@@ -1135,6 +1215,7 @@ def _router_memory_defaults(
                     ),
                     activation=values.router_memory_stack_activation,
                     layer_norm_position=values.router_memory_stack_layer_norm_position,
+                    normalization=values.router_memory_stack_normalization,
                     residual_connection_option=(
                         values.router_memory_stack_residual_connection_option
                     ),
@@ -1159,6 +1240,7 @@ def _router_recurrent_defaults(
             recurrent_flag=values.router_recurrent_flag,
             recurrent_max_steps=values.router_recurrent_max_steps,
             recurrent_layer_norm_position=values.router_recurrent_layer_norm_position,
+            recurrent_normalization=values.router_recurrent_normalization,
             recurrent_stack_gate_flag=values.router_recurrent_stack_gate_flag,
             recurrent_gate_option=values.router_recurrent_gate_option,
             recurrent_gate_activation=values.router_recurrent_gate_activation,
@@ -1179,6 +1261,7 @@ def _router_recurrent_defaults(
                     layer_norm_position=(
                         values.router_recurrent_gate_stack_layer_norm_position
                     ),
+                    normalization=(values.router_recurrent_gate_stack_normalization),
                     residual_connection_option=(
                         values.router_recurrent_gate_stack_residual_connection_option
                     ),
@@ -1215,6 +1298,7 @@ def _router_recurrent_defaults(
                     layer_norm_position=(
                         values.router_recurrent_halting_stack_layer_norm_position
                     ),
+                    normalization=(values.router_recurrent_halting_stack_normalization),
                     residual_connection_option=(
                         values.router_recurrent_halting_stack_residual_connection_option
                     ),
@@ -1252,6 +1336,7 @@ def _layer_control_defaults(values: ControlDefaultValues) -> _LayerControlDefaul
                 apply_output_postprocessing_flag=values.gate_stack_apply_output_postprocessing_flag,
                 activation=values.gate_stack_activation,
                 layer_norm_position=values.gate_stack_layer_norm_position,
+                normalization=values.gate_stack_normalization,
                 residual_connection_option=values.gate_stack_residual_connection_option,
                 residual_model_flag=values.gate_stack_residual_model_flag,
                 dropout_probability=values.gate_stack_dropout_probability,
@@ -1272,6 +1357,7 @@ def _layer_control_defaults(values: ControlDefaultValues) -> _LayerControlDefaul
                 ),
                 activation=values.halting_stack_activation,
                 layer_norm_position=values.halting_stack_layer_norm_position,
+                normalization=values.halting_stack_normalization,
                 residual_connection_option=(
                     values.halting_stack_residual_connection_option
                 ),
@@ -1303,6 +1389,7 @@ def _layer_control_defaults(values: ControlDefaultValues) -> _LayerControlDefaul
             ),
             activation=values.memory_stack_activation,
             layer_norm_position=values.memory_stack_layer_norm_position,
+            normalization=values.memory_stack_normalization,
             residual_connection_option=(values.memory_stack_residual_connection_option),
             residual_model_flag=values.memory_stack_residual_model_flag,
             dropout_probability=values.memory_stack_dropout_probability,
@@ -1339,6 +1426,7 @@ def _recurrent_defaults(
                 values.recurrent_smooth_iteration_growth_flag
             ),
             recurrent_layer_norm_position=values.recurrent_layer_norm_position,
+            recurrent_normalization=values.recurrent_normalization,
             recurrent_stack_gate_flag=values.recurrent_stack_gate_flag,
             recurrent_gate_option=values.recurrent_gate_option,
             recurrent_gate_activation=values.recurrent_gate_activation,
@@ -1354,6 +1442,7 @@ def _recurrent_defaults(
                 ),
                 activation=values.recurrent_gate_stack_activation,
                 layer_norm_position=values.recurrent_gate_stack_layer_norm_position,
+                normalization=values.recurrent_gate_stack_normalization,
                 residual_connection_option=(
                     values.recurrent_gate_stack_residual_connection_option
                 ),
@@ -1382,6 +1471,7 @@ def _recurrent_defaults(
                 layer_norm_position=(
                     values.recurrent_halting_stack_layer_norm_position
                 ),
+                normalization=(values.recurrent_halting_stack_normalization),
                 residual_connection_option=(
                     values.recurrent_halting_stack_residual_connection_option
                 ),
@@ -1400,6 +1490,7 @@ def _recurrent_defaults(
             num_layers=values.residual_stack_num_layers,
             activation=values.residual_stack_activation,
             layer_norm_position=values.residual_stack_layer_norm_position,
+            normalization=values.residual_stack_normalization,
             residual_connection_option=(
                 values.residual_stack_residual_connection_option
             ),

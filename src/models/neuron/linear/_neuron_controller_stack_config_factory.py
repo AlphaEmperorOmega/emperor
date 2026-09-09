@@ -37,6 +37,7 @@ class NeuronControllerStackConfigFactory:
             ),
             dropout_probability=options.dropout_probability,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             gate_config=None,
             halting_config=None,
             memory_config=None,
