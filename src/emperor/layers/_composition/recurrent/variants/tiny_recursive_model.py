@@ -67,6 +67,7 @@ class TinyRecursiveModelRecurrent(RecurrentCompositionAbstract):
         self.initialization_standard_deviation: float = (
             self.cfg.initialization_standard_deviation
         )
+
         self.__register_initial_buffer("answer_initial")
         self.__register_initial_buffer("latent_initial")
         self.block_model: Module = self._build_transition_model(self.block_config)

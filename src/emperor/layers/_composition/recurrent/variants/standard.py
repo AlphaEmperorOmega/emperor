@@ -53,6 +53,7 @@ class RecurrentLayer(RecurrentCompositionAbstract):
             self.cfg.reinject_original_hidden_flag is True
         )
         self.block_config: ConfigBase = self.cfg.block_config
+
         self.recurrent_residual_schedule = self._build_recurrent_residual_schedule(
             self.max_steps
         )

@@ -38,6 +38,7 @@ class Layer(LayerModuleBase):
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.layer_model_config = self.cfg.layer_model_config
+
         self.__initialize_delegates()
         self.model = self.__build_model()
 

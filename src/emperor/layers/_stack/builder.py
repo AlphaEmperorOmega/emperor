@@ -28,6 +28,7 @@ class LayerStackBuilder:
             self.cfg.apply_output_postprocessing_flag
         )
         self.last_layer_bias_option = self.cfg.last_layer_bias_option
+
         self.supports_rectangular_gate = supports_rectangular_gate
 
     def build_layer_stack(

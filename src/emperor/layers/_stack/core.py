@@ -42,6 +42,7 @@ class LayerStack(LayerModuleBase):
         self.last_layer_bias_option: LastLayerBiasOptions = (
             self.cfg.last_layer_bias_option
         )
+
         self.__initialize_delegates()
         self.layers = self.__build_layer_stack()
 
