@@ -185,6 +185,14 @@ def resolve_runtime_construction(
             "stack_residual_connection_option",
             config.STACK_RESIDUAL_CONNECTION_OPTION,
         ),
+        residual_block_size=_pop(
+            values, "stack_residual_block_size", config.STACK_RESIDUAL_BLOCK_SIZE
+        ),
+        residual_rms_norm_epsilon=_pop(
+            values,
+            "stack_residual_rms_norm_epsilon",
+            config.STACK_RESIDUAL_RMS_NORM_EPSILON,
+        ),
         residual_model_flag=_pop(
             values,
             "stack_residual_model_flag",
@@ -231,6 +239,16 @@ def resolve_runtime_construction(
             values,
             "residual_stack_residual_connection_option",
             config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION,
+        ),
+        residual_block_size=_pop(
+            values,
+            "residual_stack_residual_block_size",
+            config.RESIDUAL_STACK_RESIDUAL_BLOCK_SIZE,
+        ),
+        residual_rms_norm_epsilon=_pop(
+            values,
+            "residual_stack_residual_rms_norm_epsilon",
+            config.RESIDUAL_STACK_RESIDUAL_RMS_NORM_EPSILON,
         ),
         residual_model_flag=_pop(
             values,
