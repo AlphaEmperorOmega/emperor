@@ -210,13 +210,13 @@ _ORDERING_WITH_ATTENTION_SETTINGS_BY_PACKAGE = {
         40,
     ),
     "experts/linear": (
-        "7a63485a775991bde435a97fe7ace7ded5023c31a437edeba1e69ef71032ee65",
-        287,
+        "1e79a6f80396d052246c1ff607971a96348d12cb0b4cc410d7adcd5fa569d31d",
+        317,
         7,
     ),
     "experts/linear_adaptive": (
-        "e78713ab982fd82f450e8a0e833fc8f25af991d96db52019d11f1d766cbc3cf5",
-        880,
+        "b8d955263821015c472b27c3e4c676e20cf9a5d53ae03e59c690219878f58a27",
+        978,
         37,
     ),
     "gpt/linear": (

@@ -41,6 +41,12 @@ class AdaptiveGeneratorStackConfigFactory:
                 source.residual_connection_option,
                 defaults.residual_connection_option,
             ),
+            residual_block_size=self.__resolve(
+                source.residual_block_size, defaults.residual_block_size
+            ),
+            residual_rms_norm_epsilon=self.__resolve(
+                source.residual_rms_norm_epsilon, defaults.residual_rms_norm_epsilon
+            ),
             residual_model_flag=self.__resolve(
                 source.residual_model_flag, defaults.residual_model_flag
             ),
@@ -79,6 +85,8 @@ class AdaptiveGeneratorStackConfigFactory:
                     options.residual_connection_option,
                     options.residual_model_flag,
                     options.residual_stack_options,
+                    residual_block_size=options.residual_block_size,
+                    residual_rms_norm_epsilon=options.residual_rms_norm_epsilon,
                 ),
                 dropout_probability=options.dropout_probability,
                 gate_config=None,

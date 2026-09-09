@@ -140,7 +140,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
             with self.subTest(package=package.catalog_key):
                 self.assertTupleEqual(
                     tuple(residual_stack_suffixes),
-                    tuple(suffix for suffix in _STACK_OPTION_SUFFIXES if package.identity.model_type in ('linears', 'transformer', 'bert', 'gpt', 'vit') or suffix not in ("RESIDUAL_BLOCK_SIZE", "RESIDUAL_RMS_NORM_EPSILON")),
+                    tuple(suffix for suffix in _STACK_OPTION_SUFFIXES if package.identity.model_type in ('linears', 'transformer', 'bert', 'gpt', 'vit', 'experts') or suffix not in ("RESIDUAL_BLOCK_SIZE", "RESIDUAL_RMS_NORM_EPSILON")),
                 )
                 if gate_stack_suffixes:
                     self.assertListEqual(residual_stack_suffixes, gate_stack_suffixes)
@@ -255,7 +255,7 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
             with self.subTest(package=package.catalog_key, selector="none"):
                 self.assertIsNone(build(None, False))
 
-            attention_enabled = package.identity.model_type in ('linears', 'transformer', 'bert', 'gpt', 'vit')
+            attention_enabled = package.identity.model_type in ('linears', 'transformer', 'bert', 'gpt', 'vit', 'experts')
             settings = dict(residual_block_size=2, residual_rms_norm_epsilon=1e-6) if attention_enabled else {}
             for selector in (_SUPPORTED_MODEL_SELECTORS if attention_enabled else _SUPPORTED_MODEL_SELECTORS[:-1]):
                 with self.subTest(
