@@ -19,20 +19,21 @@ from emperor.layers._composition.recurrent.runtime.residual_schedule import (
     build_recurrent_residual_schedule,
 )
 from emperor.layers._composition.residual.base import ResidualConnectionAbstract
-from emperor.layers._options import LayerNormPositionOptions
+from emperor.layers._config import LayerConfig
+from emperor.layers._options import LayerNormPositionOptions, NormalizationOptions
 from emperor.layers._support import LayerModuleBase
 from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
-    from emperor.layers._composition.recurrent.runtime.execution.interface import (
-        PreparedRecurrentTransition,
-    )
     from collections.abc import Callable, Iterable, Iterator
 
     from emperor.config import ConfigBase
     from emperor.halting import HaltingStateBase
     from emperor.layers._composition.recurrent.config import (
         RecurrentCompositionConfig,
+    )
+    from emperor.layers._composition.recurrent.runtime.execution.interface import (
+        PreparedRecurrentTransition,
     )
     from emperor.layers._composition.residual.base import ResidualState
     from emperor.layers._state import LayerState
@@ -87,10 +88,16 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         self.recurrent_layer_norm_position: LayerNormPositionOptions = (
             self.cfg.recurrent_layer_norm_position or LayerNormPositionOptions.DISABLED
         )
+        self.recurrent_normalization = (
+            self.cfg.recurrent_normalization
+            if self.cfg.recurrent_normalization is not None
+            else NormalizationOptions.LAYER_NORM
+        )
         self.gate_config = self.cfg.gate_config
         self.residual_config = self.cfg.residual_config
         self.halting_config = self.cfg.halting_config
         self.memory_config = self.cfg.memory_config
+
         self.__initialize_delegates()
         self._recurrent_diagnostic_observer: Callable[[Tensor, Tensor], None] | None = (
             None
@@ -155,9 +162,12 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         )
 
     def __build_recurrent_layer_norm(self) -> nn.Module | None:
-        if self.recurrent_layer_norm_position == LayerNormPositionOptions.DISABLED:
-            return None
-        return nn.LayerNorm(self.output_dim)
+        return LayerConfig(
+            input_dim=self.output_dim,
+            output_dim=self.output_dim,
+            layer_norm_position=self.recurrent_layer_norm_position,
+            normalization=self.recurrent_normalization,
+        ).build_normalization()
 
     def _set_recurrent_diagnostic_observer(
         self,
