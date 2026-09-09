@@ -63,6 +63,7 @@ def build_controller_stack(
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             residual_config=build_residual_config(
                 options.residual_connection_option,
                 options.residual_model_flag,
@@ -271,6 +272,7 @@ class ExpertsRecurrentConfigFactory:
                 self.recurrent_controller_options.recurrent_smooth_iteration_growth_flag
             ),
             recurrent_layer_norm_position=self.recurrent_controller_options.recurrent_layer_norm_position,
+            recurrent_normalization=self.recurrent_controller_options.recurrent_normalization,
             block_config=block_config,
             gate_config=self.gate_config_factory.build_recurrent_gate_config(),
             residual_config=None,
@@ -405,6 +407,7 @@ class HiddenModelConfigFactory:
         return MixtureOfExpertsLayerConfig(
             activation=stack_options.activation,
             layer_norm_position=stack_options.layer_norm_position,
+            normalization=stack_options.normalization,
             residual_config=build_residual_config(
                 stack_options.residual_connection_option,
                 stack_options.residual_model_flag,
@@ -454,6 +457,7 @@ class HiddenModelConfigFactory:
             layer_config=LayerConfig(
                 activation=expert_stack_options.activation,
                 layer_norm_position=expert_stack_options.layer_norm_position,
+                normalization=expert_stack_options.normalization,
                 residual_config=build_residual_config(
                     expert_stack_options.residual_connection_option,
                     expert_stack_options.residual_model_flag,

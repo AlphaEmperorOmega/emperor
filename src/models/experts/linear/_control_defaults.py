@@ -7,6 +7,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -34,6 +35,7 @@ def router_stack_defaults(config: ModuleType) -> ExpertsSubmoduleStackOptions:
         apply_output_postprocessing_flag=config.ROUTER_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.ROUTER_STACK_ACTIVATION,
         layer_norm_position=config.ROUTER_STACK_LAYER_NORM_POSITION,
+        normalization=config.ROUTER_STACK_NORMALIZATION,
         residual_connection_option=config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.ROUTER_STACK_DROPOUT_PROBABILITY,
@@ -86,6 +88,7 @@ def main_control_defaults(config: ModuleType) -> ControlDefaults:
                 config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
             ),
             recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
+            recurrent_normalization=config.RECURRENT_NORMALIZATION,
             recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.RECURRENT_GATE_OPTION,
             recurrent_gate_activation=config.RECURRENT_GATE_ACTIVATION,
@@ -141,6 +144,7 @@ def expert_control_defaults(config: ModuleType) -> ControlDefaults:
             recurrent_forward_calls_before_iteration_increment=1,
             recurrent_smooth_iteration_growth_flag=False,
             recurrent_layer_norm_position=config.EXPERT_RECURRENT_LAYER_NORM_POSITION,
+            recurrent_normalization=config.EXPERT_RECURRENT_NORMALIZATION,
             recurrent_stack_gate_flag=config.EXPERT_RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.EXPERT_RECURRENT_GATE_OPTION,
             recurrent_gate_activation=config.EXPERT_RECURRENT_GATE_ACTIVATION,
@@ -172,6 +176,7 @@ def _main_gate_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSource:
         config.GATE_STACK_RESIDUAL_MODEL_FLAG,
         config.GATE_STACK_DROPOUT_PROBABILITY,
         config.GATE_STACK_BIAS_FLAG,
+        normalization=config.GATE_STACK_NORMALIZATION,
     )
 
 
@@ -188,6 +193,7 @@ def _main_halting_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSourc
         config.HALTING_STACK_RESIDUAL_MODEL_FLAG,
         config.HALTING_STACK_DROPOUT_PROBABILITY,
         config.HALTING_STACK_BIAS_FLAG,
+        normalization=config.HALTING_STACK_NORMALIZATION,
     )
 
 
@@ -204,6 +210,7 @@ def _main_memory_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSource
         config.MEMORY_STACK_RESIDUAL_MODEL_FLAG,
         config.MEMORY_STACK_DROPOUT_PROBABILITY,
         config.MEMORY_STACK_BIAS_FLAG,
+        normalization=config.MEMORY_STACK_NORMALIZATION,
     )
 
 
@@ -222,6 +229,7 @@ def _main_recurrent_gate_stack_source(
         config.RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
         config.RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
         config.RECURRENT_GATE_STACK_BIAS_FLAG,
+        normalization=config.RECURRENT_GATE_STACK_NORMALIZATION,
     )
 
 
@@ -240,6 +248,7 @@ def _main_recurrent_halting_stack_source(
         config.RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         config.RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
         config.RECURRENT_HALTING_STACK_BIAS_FLAG,
+        normalization=config.RECURRENT_HALTING_STACK_NORMALIZATION,
     )
 
 
@@ -256,6 +265,7 @@ def _expert_gate_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSource
         config.EXPERT_GATE_STACK_RESIDUAL_MODEL_FLAG,
         config.EXPERT_GATE_STACK_DROPOUT_PROBABILITY,
         config.EXPERT_GATE_STACK_BIAS_FLAG,
+        normalization=config.EXPERT_GATE_STACK_NORMALIZATION,
     )
 
 
@@ -272,6 +282,7 @@ def _expert_halting_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSou
         config.EXPERT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         config.EXPERT_HALTING_STACK_DROPOUT_PROBABILITY,
         config.EXPERT_HALTING_STACK_BIAS_FLAG,
+        normalization=config.EXPERT_HALTING_STACK_NORMALIZATION,
     )
 
 
@@ -288,6 +299,7 @@ def _expert_memory_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSour
         config.EXPERT_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
         config.EXPERT_MEMORY_STACK_DROPOUT_PROBABILITY,
         config.EXPERT_MEMORY_STACK_BIAS_FLAG,
+        normalization=config.EXPERT_MEMORY_STACK_NORMALIZATION,
     )
 
 
@@ -306,6 +318,7 @@ def _expert_recurrent_gate_stack_source(
         config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
         config.EXPERT_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
         config.EXPERT_RECURRENT_GATE_STACK_BIAS_FLAG,
+        normalization=config.EXPERT_RECURRENT_GATE_STACK_NORMALIZATION,
     )
 
 
@@ -324,6 +337,7 @@ def _expert_recurrent_halting_stack_source(
         config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         config.EXPERT_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
         config.EXPERT_RECURRENT_HALTING_STACK_BIAS_FLAG,
+        normalization=config.EXPERT_RECURRENT_HALTING_STACK_NORMALIZATION,
     )
 
 
@@ -339,6 +353,8 @@ def _stack_source(
     residual_model_flag: bool,
     dropout_probability: float | None,
     bias_flag: bool | None,
+    *,
+    normalization: NormalizationOptions | None = None,
 ) -> ExpertsSubmoduleStackSource:
     return ExpertsSubmoduleStackSource(
         independent_flag=independent_flag,
@@ -348,6 +364,7 @@ def _stack_source(
         apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         activation=activation,
         layer_norm_position=layer_norm_position,
+        normalization=normalization,
         residual_connection_option=residual_connection_option,
         residual_model_flag=residual_model_flag,
         dropout_probability=dropout_probability,
@@ -418,6 +435,7 @@ def _recurrent_options(
     recurrent_forward_calls_before_iteration_increment: int,
     recurrent_smooth_iteration_growth_flag: bool,
     recurrent_layer_norm_position: LayerNormPositionOptions,
+    recurrent_normalization: NormalizationOptions = NormalizationOptions.LAYER_NORM,
     recurrent_stack_gate_flag: bool,
     recurrent_gate_option: LayerGateOptions | None,
     recurrent_gate_activation: ActivationOptions | None,
@@ -441,6 +459,7 @@ def _recurrent_options(
         ),
         recurrent_smooth_iteration_growth_flag=(recurrent_smooth_iteration_growth_flag),
         recurrent_layer_norm_position=recurrent_layer_norm_position,
+        recurrent_normalization=recurrent_normalization,
         recurrent_stack_gate_flag=recurrent_stack_gate_flag,
         recurrent_gate_option=recurrent_gate_option,
         recurrent_gate_activation=recurrent_gate_activation,
