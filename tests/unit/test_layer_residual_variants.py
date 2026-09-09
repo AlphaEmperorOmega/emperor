@@ -11,7 +11,6 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerConfig,
     LayerNormPositionOptions,
-    LayerStack,
     LayerStackConfig,
     LayerState,
     ResidualConfig,
@@ -530,7 +529,6 @@ class TestWeightedResidualValidationContracts(unittest.TestCase):
                 residual = config_type(residual_dim=2, model_config=stack).build()
                 self.assertIsNotNone(residual.model[-1].model.bias_params)
                 self.assertFalse(stack.layer_config.layer_model_config.bias_flag)
-
 
 
 if __name__ == "__main__":
