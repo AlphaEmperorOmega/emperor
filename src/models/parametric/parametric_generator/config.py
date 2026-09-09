@@ -4,6 +4,7 @@ from emperor.layers import (
     AttentionResidualConfig,  # noqa: F401
     LastLayerBiasOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
     WeightedBlendResidualConfig,  # noqa: F401
     WeightedResidualConfig,  # noqa: F401
@@ -75,6 +76,7 @@ STACK_RESIDUAL_MODEL_FLAG: bool = False
 RESIDUAL_STACK_INDEPENDENT_FLAG: bool = False
 RESIDUAL_STACK_HIDDEN_DIM: int | None = None
 RESIDUAL_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+RESIDUAL_STACK_NORMALIZATION: NormalizationOptions | None = None
 RESIDUAL_STACK_NUM_LAYERS: int | None = None
 RESIDUAL_STACK_ACTIVATION: ActivationOptions | None = None
 RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None

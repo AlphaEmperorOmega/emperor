@@ -7,6 +7,7 @@ from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.parametric import ClipParameterOptions
@@ -41,6 +42,9 @@ class ParametricStackOptions:
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
     layer_norm_position: LayerNormPositionOptions = LayerNormPositionOptions.DISABLED
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     last_layer_bias_option: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
     apply_output_postprocessing_flag: bool = True
     bias_flag: bool = True

@@ -4,6 +4,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerConfig,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
@@ -113,6 +114,10 @@ class _ParametricGeneratorConfigBuilderImplementation:
         router_options: ParametricRouterOptions | None = None,
         generator_stack_options: ParametricGeneratorStackOptions | None = None,
         residual_stack_options: ResidualStackOptions | None = None,
+        *,
+        residual_stack_normalization: NormalizationOptions | None = (
+            config.RESIDUAL_STACK_NORMALIZATION
+        ),
     ) -> None:
         stack_options = stack_options or ParametricStackOptions(
             hidden_dim=hidden_dim,
@@ -131,6 +136,7 @@ class _ParametricGeneratorConfigBuilderImplementation:
                     num_layers=residual_stack_num_layers,
                     activation=residual_stack_activation,
                     layer_norm_position=residual_stack_layer_norm_position,
+                    normalization=residual_stack_normalization,
                     residual_connection_option=(
                         residual_stack_residual_connection_option
                     ),
@@ -270,6 +276,7 @@ def build_linear_layer_config(
         residual_config=None,
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
+        normalization=NormalizationOptions.RMS_NORM,
         gate_config=None,
         halting_config=None,
         memory_config=None,

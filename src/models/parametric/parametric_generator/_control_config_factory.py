@@ -11,6 +11,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
     LayerStackConfig,
+    NormalizationOptions,
 )
 from emperor.parametric import (
     AdaptiveRouterOptions,
@@ -119,6 +120,7 @@ def build_parametric_stack_config(
         ),
         dropout_probability=stack_options.dropout_probability,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
+        normalization=NormalizationOptions.RMS_NORM,
         gate_config=None,
         halting_config=None,
         memory_config=None,

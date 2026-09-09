@@ -3,6 +3,7 @@ from emperor.layers import (
     ActivationOptions,
     LayerConfig,
     LayerNormPositionOptions,
+    NormalizationOptions,
 )
 from emperor.linears import LinearLayerConfig
 from models.parametric.parametric_vector._control_config_factory import (
@@ -74,6 +75,7 @@ def build_linear_layer_config(
         residual_config=None,
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
+        normalization=NormalizationOptions.RMS_NORM,
         gate_config=None,
         halting_config=None,
         memory_config=None,

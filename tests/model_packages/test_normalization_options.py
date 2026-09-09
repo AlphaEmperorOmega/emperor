@@ -13,10 +13,7 @@ from emperor.layers import (
 from model_runtime.inspection import configuration_schema
 from models.catalog import discover_model_packages, model_package
 
-_PACKAGES = tuple(
-    package.catalog_key for package in discover_model_packages()
-    if package.identity.model_type in ('linears', 'transformer', 'bert', 'gpt', 'vit', 'experts', 'neuron', 'mlp_mixer')
-)
+_PACKAGES = tuple(package.catalog_key for package in discover_model_packages())
 _NORMALIZATION_TYPES = {
     NormalizationOptions.RMS_NORM: "RMSNorm",
     NormalizationOptions.LAYER_NORM: "LayerNorm",
