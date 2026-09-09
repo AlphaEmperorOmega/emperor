@@ -57,8 +57,14 @@ class TransformerStackOptions:
     recurrent_smooth_iteration_growth_flag: bool = False
     stack_residual_connection_option: type[ResidualConfig] | None = None
     stack_residual_model_flag: bool = field(default=False, kw_only=True)
+    stack_residual_block_size: int | None = field(default=None, kw_only=True)
+    stack_residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     recurrent_residual_connection_option: type[ResidualConfig] | None = None
     recurrent_residual_model_flag: bool = field(default=False, kw_only=True)
+    recurrent_residual_block_size: int | None = field(default=None, kw_only=True)
+    recurrent_residual_rms_norm_epsilon: float | None = field(
+        default=None, kw_only=True
+    )
 
 
 @dataclass(frozen=True)
@@ -74,6 +80,8 @@ class SubmoduleStackOptions:
     )
     residual_connection_option: type[ResidualConfig] | None = None
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float = 0.0
     bias_flag: bool = True
 
@@ -90,6 +98,8 @@ class ControllerStackOptions:
     normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None = None
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float | None = None
     bias_flag: bool | None = None
 
@@ -135,6 +145,8 @@ def resolve_controller_stack_options(
             if source.residual_connection_option is None
             else source.residual_connection_option
         ),
+        residual_block_size=source.residual_block_size,
+        residual_rms_norm_epsilon=source.residual_rms_norm_epsilon,
         residual_model_flag=source.residual_model_flag,
         dropout_probability=(
             defaults.dropout_probability
@@ -290,6 +302,10 @@ class RuntimeOptions:
     residual_stack_activation: ActivationOptions | None = None
     residual_stack_residual_connection_option: type[ResidualConfig] | None = None
     residual_stack_residual_model_flag: bool = False
+    residual_stack_residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_stack_residual_rms_norm_epsilon: float | None = field(
+        default=None, kw_only=True
+    )
     residual_stack_dropout_probability: float | None = None
     residual_stack_last_layer_bias_option: LastLayerBiasOptions | None = None
     residual_stack_apply_output_postprocessing_flag: bool | None = None
