@@ -1,5 +1,6 @@
-# ruff: noqa: E402
+from emperor.layers import NormalizationOptions
 
+# ruff: noqa: E402
 from model_runtime.packages.runtime_values import positive_runtime_fields
 
 # Trainer
@@ -75,6 +76,7 @@ NUM_EPOCHS: int = 30
 # Layer Stack Options
 # - hidden_dim comes from the global HIDDEN_DIM field above.
 LAYER_NORM_POSITION: LayerNormPositionOptions = LayerNormPositionOptions.BEFORE
+NORMALIZATION: NormalizationOptions = NormalizationOptions.RMS_NORM
 STACK_NUM_LAYERS: int = 5
 STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 STACK_DROPOUT_PROBABILITY: float = 0.0
@@ -86,6 +88,7 @@ STACK_BIAS_FLAG: bool = True
 # Layer Stack Submodule Options
 SUBMODULE_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 SUBMODULE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = LAYER_NORM_POSITION
+SUBMODULE_STACK_NORMALIZATION: NormalizationOptions = NORMALIZATION
 SUBMODULE_STACK_NUM_LAYERS: int = 2
 SUBMODULE_STACK_ACTIVATION: ActivationOptions = ActivationOptions.GELU
 SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -108,6 +111,7 @@ STACK_RESIDUAL_MODEL_FLAG: bool = False
 RESIDUAL_STACK_INDEPENDENT_FLAG: bool = False
 RESIDUAL_STACK_HIDDEN_DIM: int | None = None
 RESIDUAL_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+RESIDUAL_STACK_NORMALIZATION: NormalizationOptions | None = None
 RESIDUAL_STACK_NUM_LAYERS: int | None = None
 RESIDUAL_STACK_ACTIVATION: ActivationOptions | None = None
 RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -129,6 +133,7 @@ GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 GATE_STACK_INDEPENDENT_FLAG: bool = False
 GATE_STACK_HIDDEN_DIM: int | None = None
 GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+GATE_STACK_NORMALIZATION: NormalizationOptions | None = None
 GATE_STACK_NUM_LAYERS: int | None = None
 GATE_STACK_ACTIVATION: ActivationOptions | None = ActivationOptions.TANH
 GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -155,6 +160,7 @@ HALTING_STACK_HIDDEN_DIM: int | None = None
 HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
     LayerNormPositionOptions.DISABLED
 )
+HALTING_STACK_NORMALIZATION: NormalizationOptions | None = None
 HALTING_STACK_NUM_LAYERS: int | None = None
 HALTING_STACK_ACTIVATION: ActivationOptions | None = None
 HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -179,6 +185,7 @@ MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS: int | None = None
 MEMORY_STACK_INDEPENDENT_FLAG: bool = False
 MEMORY_STACK_HIDDEN_DIM: int | None = None
 MEMORY_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+MEMORY_STACK_NORMALIZATION: NormalizationOptions | None = None
 MEMORY_STACK_NUM_LAYERS: int | None = None
 MEMORY_STACK_ACTIVATION: ActivationOptions | None = None
 MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -202,6 +209,7 @@ RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG: bool = False
 RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
+RECURRENT_NORMALIZATION: NormalizationOptions = NormalizationOptions.LAYER_NORM
 #########################################################################
 ## Recurrent Gate Options
 RECURRENT_STACK_GATE_FLAG: bool = False
@@ -212,6 +220,7 @@ RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 RECURRENT_GATE_STACK_INDEPENDENT_FLAG: bool = False
 RECURRENT_GATE_STACK_HIDDEN_DIM: int | None = None
 RECURRENT_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+RECURRENT_GATE_STACK_NORMALIZATION: NormalizationOptions | None = None
 RECURRENT_GATE_STACK_NUM_LAYERS: int | None = None
 RECURRENT_GATE_STACK_ACTIVATION: ActivationOptions | None = None
 RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -235,6 +244,7 @@ RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
 RECURRENT_HALTING_STACK_INDEPENDENT_FLAG: bool = False
 RECURRENT_HALTING_STACK_HIDDEN_DIM: int | None = None
 RECURRENT_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+RECURRENT_HALTING_STACK_NORMALIZATION: NormalizationOptions | None = None
 RECURRENT_HALTING_STACK_NUM_LAYERS: int | None = None
 RECURRENT_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
 RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -289,6 +299,9 @@ CLUSTER_TERMINAL_ROUTER_ACTIVATION: ActivationOptions = ActivationOptions.DISABL
 CLUSTER_TERMINAL_ROUTER_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
+CLUSTER_TERMINAL_ROUTER_NORMALIZATION: NormalizationOptions = (
+    NormalizationOptions.RMS_NORM
+)
 CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 CLUSTER_TERMINAL_ROUTER_RESIDUAL_MODEL_FLAG: bool = False
 CLUSTER_TERMINAL_ROUTER_DROPOUT_PROBABILITY: float = 0.0
@@ -321,6 +334,9 @@ CLUSTER_HALTING_STACK_HIDDEN_DIM: int = HIDDEN_DIM
 CLUSTER_HALTING_OUTPUT_DIM: int = 2
 CLUSTER_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
+)
+CLUSTER_HALTING_STACK_NORMALIZATION: NormalizationOptions = (
+    NormalizationOptions.RMS_NORM
 )
 CLUSTER_HALTING_STACK_NUM_LAYERS: int = 1
 CLUSTER_HALTING_STACK_ACTIVATION: ActivationOptions = ActivationOptions.DISABLED

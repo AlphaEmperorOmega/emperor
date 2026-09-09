@@ -307,6 +307,7 @@ def _stack(values: StackValues) -> StackOptions:
         apply_output_postprocessing_flag=values.apply_output_postprocessing_flag,
         activation=values.activation,
         layer_norm_position=values.layer_norm_position,
+        normalization=values.normalization,
         residual_connection_option=values.residual_connection_option,
         residual_model_flag=values.residual_model_flag,
         dropout_probability=values.dropout_probability,
@@ -345,6 +346,11 @@ def _resolved_stack(
             defaults.layer_norm_position
             if values.layer_norm_position is None
             else values.layer_norm_position
+        ),
+        normalization=(
+            defaults.normalization
+            if values.normalization is None
+            else values.normalization
         ),
         residual_connection_option=(
             defaults.residual_connection_option
@@ -397,6 +403,7 @@ def _resolve_stacks(values: RuntimeDefaultValues) -> _ResolvedStacks:
             num_layers=residual_values.num_layers,
             activation=residual_values.activation,
             layer_norm_position=residual_values.layer_norm_position,
+            normalization=residual_values.normalization,
             residual_connection_option=residual_values.residual_connection_option,
             residual_model_flag=residual_values.residual_model_flag,
             dropout_probability=residual_values.dropout_probability,
@@ -480,6 +487,7 @@ def _resolve_control_defaults(
                 control.recurrent_smooth_iteration_growth_flag
             ),
             layer_norm_position=control.recurrent_layer_norm_position,
+            normalization=control.recurrent_normalization,
             gate=GateOptions(
                 enabled=control.recurrent_stack_gate_flag,
                 option=control.recurrent_gate_option,

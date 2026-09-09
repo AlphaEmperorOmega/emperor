@@ -68,6 +68,9 @@ class NeuronConfigBuilder:
         self.cluster_terminal_router_layer_norm_position = (
             terminal_router_options.layer_norm_position
         )
+        self.cluster_terminal_router_normalization = (
+            terminal_router_options.normalization
+        )
         self.cluster_terminal_router_residual_connection_option = (
             terminal_router_options.residual_connection_option
         )
@@ -124,6 +127,9 @@ class NeuronConfigBuilder:
         self.cluster_halting_output_dim = cluster_halting_options.output_dim
         self.cluster_halting_stack_layer_norm_position = (
             self.cluster_halting_stack_options.layer_norm_position
+        )
+        self.cluster_halting_stack_normalization = (
+            self.cluster_halting_stack_options.normalization
         )
         self.cluster_halting_stack_num_layers = (
             self.cluster_halting_stack_options.num_layers

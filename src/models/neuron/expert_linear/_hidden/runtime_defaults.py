@@ -23,6 +23,7 @@ _STACK_FIELDS = {
     "apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
+    "normalization": "normalization",
     "residual_connection_option": "residual_connection_option",
     "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
@@ -67,6 +68,10 @@ def builder_kwargs_from_flat(
             layer_norm_position=kwargs.pop(
                 "residual_stack_layer_norm_position",
                 config_module.RESIDUAL_STACK_LAYER_NORM_POSITION,
+            ),
+            normalization=kwargs.pop(
+                "residual_stack_normalization",
+                config_module.RESIDUAL_STACK_NORMALIZATION,
             ),
             residual_connection_option=kwargs.pop(
                 "residual_stack_residual_connection_option",
@@ -186,6 +191,7 @@ def _stack_options(
         hidden_dim=config.HIDDEN_DIM,
         bias_flag=config.STACK_BIAS_FLAG,
         layer_norm_position=config.LAYER_NORM_POSITION,
+        normalization=config.NORMALIZATION,
         num_layers=config.STACK_NUM_LAYERS,
         activation=config.STACK_ACTIVATION,
         residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -200,6 +206,7 @@ def _stack_options(
             "hidden_dim": "hidden_dim",
             "stack_bias_flag": "bias_flag",
             "layer_norm_position": "layer_norm_position",
+            "normalization": "normalization",
             "stack_num_layers": "num_layers",
             "stack_activation": "activation",
             "stack_residual_connection_option": "residual_connection_option",
@@ -224,6 +231,7 @@ def _submodule_stack_options(
         apply_output_postprocessing_flag=config.SUBMODULE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.SUBMODULE_STACK_ACTIVATION,
         layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
+        normalization=config.SUBMODULE_STACK_NORMALIZATION,
         residual_connection_option=config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
@@ -245,6 +253,7 @@ def _expert_stack_options(
     value = provided or replace(
         inherited,
         layer_norm_position=config_module.EXPERT_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.EXPERT_STACK_NORMALIZATION,
         apply_output_postprocessing_flag=(
             config_module.EXPERT_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG
         ),
@@ -260,6 +269,7 @@ def _expert_stack_options(
             ),
             "expert_stack_activation": "activation",
             "expert_stack_layer_norm_position": "layer_norm_position",
+            "expert_stack_normalization": "normalization",
             "expert_stack_residual_connection_option": ("residual_connection_option"),
             "expert_stack_residual_model_flag": "residual_model_flag",
             "expert_stack_dropout_probability": "dropout_probability",
@@ -287,6 +297,7 @@ def _router_stack_options(
             ),
             "router_stack_activation": "activation",
             "router_stack_layer_norm_position": "layer_norm_position",
+            "router_stack_normalization": "normalization",
             "router_stack_residual_connection_option": ("residual_connection_option"),
             "router_stack_residual_model_flag": "residual_model_flag",
             "router_stack_dropout_probability": "dropout_probability",
@@ -395,6 +406,7 @@ def _stack_source_updates(
             ),
             f"{flat_prefix}_activation": "activation",
             f"{flat_prefix}_layer_norm_position": "layer_norm_position",
+            f"{flat_prefix}_normalization": "normalization",
             f"{flat_prefix}_residual_connection_option": ("residual_connection_option"),
             f"{flat_prefix}_residual_model_flag": "residual_model_flag",
             f"{flat_prefix}_dropout_probability": "dropout_probability",
@@ -495,6 +507,7 @@ def _recurrent_options(
                 "recurrent_smooth_iteration_growth_flag"
             ),
             f"{recurrent_flat}layer_norm_position": "recurrent_layer_norm_position",
+            f"{recurrent_flat}normalization": "recurrent_normalization",
             f"{recurrent_flat}stack_gate_flag": "recurrent_stack_gate_flag",
             f"{recurrent_flat}gate_option": "recurrent_gate_option",
             f"{recurrent_flat}gate_activation": "recurrent_gate_activation",
