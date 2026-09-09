@@ -50,6 +50,7 @@ _STACK_FIELDS = (
     "independent_flag",
     "hidden_dim",
     "layer_norm_position",
+    "normalization",
     "num_layers",
     "activation",
     "residual_connection_option",

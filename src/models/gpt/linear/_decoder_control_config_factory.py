@@ -254,6 +254,7 @@ class RecurrentConfigFactory:
                 self.recurrent_controller_options.recurrent_smooth_iteration_growth_flag
             ),
             recurrent_layer_norm_position=self.recurrent_controller_options.recurrent_layer_norm_position,
+            recurrent_normalization=self.recurrent_controller_options.recurrent_normalization,
             block_config=block_config,
             gate_config=gate_config,
             residual_config=None,

@@ -1,4 +1,8 @@
-from emperor.layers import ActivationOptions, LayerNormPositionOptions
+from emperor.layers import (
+    ActivationOptions,
+    LayerNormPositionOptions,
+    NormalizationOptions,
+)
 
 from .config import *  # noqa: F401,F403
 
@@ -16,6 +20,7 @@ SEARCH_SPACE_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
 ]
+SEARCH_SPACE_NORMALIZATION: list = list(NormalizationOptions)
 
 SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.RELU,
@@ -24,3 +29,7 @@ SEARCH_SPACE_STACK_ACTIVATION: list = [
     ActivationOptions.GELU,
     ActivationOptions.TANH,
 ]
+
+# Embedding and output normalization
+SEARCH_SPACE_DECODER_OUTPUT_NORMALIZATION: list = list(NormalizationOptions)
+SEARCH_SPACE_EMBEDDING_NORMALIZATION: list = list(NormalizationOptions)

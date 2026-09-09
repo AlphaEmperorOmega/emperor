@@ -32,6 +32,7 @@ _CONTROLLER_STACK_FIELD_MAP = {
     "apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
+    "normalization": "normalization",
     "residual_connection_option": "residual_connection_option",
     "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
@@ -123,6 +124,10 @@ def linear_builder_kwargs_from_flat(
             layer_norm_position=kwargs.get(
                 "residual_stack_layer_norm_position",
                 config_module.RESIDUAL_STACK_LAYER_NORM_POSITION,
+            ),
+            normalization=kwargs.get(
+                "residual_stack_normalization",
+                config_module.RESIDUAL_STACK_NORMALIZATION,
             ),
             residual_connection_option=kwargs.get(
                 "residual_stack_residual_connection_option",
@@ -308,6 +313,7 @@ def _modern_embedding_options(
             kwargs,
             {
                 "embedding_layer_norm_flag": "layer_norm_flag",
+                "embedding_normalization": "normalization",
                 "embedding_dropout_probability": "dropout_probability",
             },
         ),
@@ -331,6 +337,8 @@ def _modern_decoder_options(
                 "stack_activation": "activation",
                 "stack_dropout_probability": "dropout_probability",
                 "layer_norm_position": "layer_norm_position",
+                "normalization": "normalization",
+                "decoder_output_normalization": "output_normalization",
             },
         ),
     )
@@ -431,6 +439,7 @@ def _modern_main_stack_options(
             {
                 "stack_bias_flag": "bias_flag",
                 "layer_norm_position": "layer_norm_position",
+                "normalization": "normalization",
                 "stack_num_layers": "num_layers",
                 "stack_activation": "activation",
                 "stack_residual_connection_option": "residual_connection_option",
@@ -643,6 +652,7 @@ def _modern_recurrent_controller_options(
                 "recurrent_smooth_iteration_growth_flag"
             ),
             f"{flat_lead}layer_norm_position": "recurrent_layer_norm_position",
+            f"{flat_lead}normalization": "recurrent_normalization",
             f"{flat_lead}stack_gate_flag": "recurrent_stack_gate_flag",
             f"{flat_lead}gate_option": "recurrent_gate_option",
             f"{flat_lead}gate_activation": "recurrent_gate_activation",
@@ -700,12 +710,14 @@ def _modern_option_updates(
 def _modern_supported_flat_keys() -> set[str]:
     keys = {
         "embedding_layer_norm_flag",
+        "embedding_normalization",
         "embedding_dropout_probability",
         "hidden_dim",
         "stack_num_layers",
         "stack_activation",
         "stack_dropout_probability",
         "layer_norm_position",
+        "normalization",
         "stack_residual_connection_option",
         "stack_residual_model_flag",
         "stack_last_layer_bias_option",
@@ -722,12 +734,14 @@ def _modern_supported_flat_keys() -> set[str]:
         "ff_bias_flag",
         "lm_head_weight_tying_flag",
         "lm_head_bias_flag",
+        "decoder_output_normalization",
     }
     keys.update(
         {
             "residual_stack_independent_flag",
             "residual_stack_hidden_dim",
             "residual_stack_layer_norm_position",
+            "residual_stack_normalization",
             "residual_stack_num_layers",
             "residual_stack_activation",
             "residual_stack_residual_connection_option",
@@ -787,6 +801,7 @@ def _modern_recurrent_flat_keys(prefix: str) -> set[str]:
         f"{prefix}_forward_calls_before_iteration_increment",
         f"{prefix}_smooth_iteration_growth_flag",
         f"{prefix}_layer_norm_position",
+        f"{prefix}_normalization",
         f"{prefix}_stack_gate_flag",
         f"{prefix}_gate_option",
         f"{prefix}_gate_activation",

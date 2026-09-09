@@ -99,6 +99,11 @@ class _GptExpertLinearConfigBuilderImplementation:
                 positional_embedding_config=self.__positional_embedding_config(),
                 boundary_config=self.__boundary_config(),
                 decoder_config=self.__decoder_config(),
+                decoder_output_normalization=(
+                    self.decoder_options.output_normalization
+                    if self.decoder_options is not None
+                    else config.DECODER_OUTPUT_NORMALIZATION
+                ),
             ),
         )
 

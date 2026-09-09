@@ -5,7 +5,9 @@ from dataclasses import dataclass, replace
 from types import ModuleType
 from typing import Any, Literal
 
-from emperor.layers import ActivationOptions
+from emperor.layers import (
+    ActivationOptions,
+)
 from model_runtime.packages.runtime_values import validate_runtime_default_values
 from models.gpt.expert_linear_adaptive._expert_adapter_support import (
     _SUBMODULE_STACK_FIELD_MAP,
@@ -281,6 +283,7 @@ def expert_linear_builder_kwargs_from_flat(
                 extra_mapping={"expert_bias_flag": "bias_flag"},
                 default_overrides={
                     "layer_norm_position": config_module.EXPERT_STACK_LAYER_NORM_POSITION,
+                    "normalization": config_module.EXPERT_STACK_NORMALIZATION,
                     "apply_output_postprocessing_flag": config_module.EXPERT_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
                 },
             ),
@@ -447,6 +450,10 @@ def _attach_residual_stack_options(
                 "residual_stack_layer_norm_position",
                 config_module.RESIDUAL_STACK_LAYER_NORM_POSITION,
             ),
+            normalization=flat_kwargs.get(
+                "residual_stack_normalization",
+                config_module.RESIDUAL_STACK_NORMALIZATION,
+            ),
             num_layers=flat_kwargs.get(
                 "residual_stack_num_layers", config_module.RESIDUAL_STACK_NUM_LAYERS
             ),
@@ -549,6 +556,8 @@ def _decoder_options_from_kwargs(
         activation=config_module.STACK_ACTIVATION,
         dropout_probability=config_module.STACK_DROPOUT_PROBABILITY,
         layer_norm_position=config_module.LAYER_NORM_POSITION,
+        normalization=config_module.NORMALIZATION,
+        output_normalization=config_module.DECODER_OUTPUT_NORMALIZATION,
     )
     updates = _pop_updates(
         kwargs,
@@ -558,6 +567,8 @@ def _decoder_options_from_kwargs(
             "stack_activation": "activation",
             "stack_dropout_probability": "dropout_probability",
             "layer_norm_position": "layer_norm_position",
+            "normalization": "normalization",
+            "decoder_output_normalization": "output_normalization",
         },
     )
     return replace(options, **updates) if updates else options
@@ -571,12 +582,14 @@ def _embedding_options_from_kwargs(
 ) -> GptEmbeddingOptions:
     options = provided or GptEmbeddingOptions(
         layer_norm_flag=config_module.EMBEDDING_LAYER_NORM_FLAG,
+        normalization=config_module.EMBEDDING_NORMALIZATION,
         dropout_probability=config_module.EMBEDDING_DROPOUT_PROBABILITY,
     )
     updates = _pop_updates(
         kwargs,
         {
             "embedding_layer_norm_flag": "layer_norm_flag",
+            "embedding_normalization": "normalization",
             "embedding_dropout_probability": "dropout_probability",
         },
     )
@@ -677,6 +690,7 @@ def _submodule_stack_options_from_kwargs(
         apply_output_postprocessing_flag=config_module.SUBMODULE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config_module.SUBMODULE_STACK_ACTIVATION,
         layer_norm_position=config_module.SUBMODULE_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.SUBMODULE_STACK_NORMALIZATION,
         residual_connection_option=config_module.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config_module.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.SUBMODULE_STACK_DROPOUT_PROBABILITY,
@@ -719,6 +733,7 @@ def _attention_projection_stack_options_from_kwargs(
             "attn_stack_apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
             "attn_stack_activation": "activation",
             "attn_stack_layer_norm_position": "layer_norm_position",
+            "attn_stack_normalization": "normalization",
             "attn_stack_residual_connection_option": "residual_connection_option",
             "attn_stack_residual_model_flag": "residual_model_flag",
             "attn_stack_dropout_probability": "dropout_probability",
@@ -751,6 +766,7 @@ def _feed_forward_stack_options_from_kwargs(
             "ff_stack_apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
             "ff_stack_activation": "activation",
             "ff_stack_layer_norm_position": "layer_norm_position",
+            "ff_stack_normalization": "normalization",
             "ff_stack_residual_connection_option": "residual_connection_option",
             "ff_stack_residual_model_flag": "residual_model_flag",
             "ff_stack_dropout_probability": "dropout_probability",
@@ -845,6 +861,7 @@ def _recurrent_controller_options_from_kwargs(
         ),
         recurrent_min_steps=config_module.RECURRENT_MIN_STEPS,
         recurrent_layer_norm_position=config_module.RECURRENT_LAYER_NORM_POSITION,
+        recurrent_normalization=config_module.RECURRENT_NORMALIZATION,
         recurrent_residual_connection_option=(
             config_module.RECURRENT_RESIDUAL_CONNECTION_OPTION
         ),
@@ -878,6 +895,7 @@ def _recurrent_controller_options_from_kwargs(
             ),
             "recurrent_min_steps": "recurrent_min_steps",
             "recurrent_layer_norm_position": "recurrent_layer_norm_position",
+            "recurrent_normalization": "recurrent_normalization",
             "recurrent_residual_connection_option": (
                 "recurrent_residual_connection_option"
             ),
@@ -923,6 +941,7 @@ def _linear_role_recurrent_controller_options_from_kwargs(
             f"{prefix}_flag": "recurrent_flag",
             f"{prefix}_max_steps": "recurrent_max_steps",
             f"{prefix}_layer_norm_position": "recurrent_layer_norm_position",
+            f"{prefix}_normalization": "recurrent_normalization",
             f"{prefix}_stack_gate_flag": "recurrent_stack_gate_flag",
             f"{prefix}_gate_option": "recurrent_gate_option",
             f"{prefix}_gate_activation": "recurrent_gate_activation",
@@ -964,6 +983,7 @@ def _default_attention_projection_stack_options(
         if activation is None
         else activation,
         layer_norm_position=config_module.ATTN_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.ATTN_STACK_NORMALIZATION,
         residual_connection_option=config_module.ATTN_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config_module.ATTN_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.ATTN_STACK_DROPOUT_PROBABILITY,
@@ -986,6 +1006,7 @@ def _default_feed_forward_stack_options(
         apply_output_postprocessing_flag=config_module.FF_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config_module.FF_STACK_ACTIVATION,
         layer_norm_position=config_module.FF_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.FF_STACK_NORMALIZATION,
         residual_connection_option=config_module.FF_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config_module.FF_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.FF_STACK_DROPOUT_PROBABILITY,
@@ -1007,6 +1028,7 @@ def _attention_projection_layer_stack_sources(
             ),
             activation=config_module.ATTN_GATE_STACK_ACTIVATION,
             layer_norm_position=config_module.ATTN_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config_module.ATTN_GATE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config_module.ATTN_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -1026,6 +1048,7 @@ def _attention_projection_layer_stack_sources(
             ),
             activation=config_module.ATTN_HALTING_STACK_ACTIVATION,
             layer_norm_position=config_module.ATTN_HALTING_STACK_LAYER_NORM_POSITION,
+            normalization=config_module.ATTN_HALTING_STACK_NORMALIZATION,
             residual_connection_option=(
                 config_module.ATTN_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -1050,6 +1073,7 @@ def _feed_forward_layer_stack_sources(
             ),
             activation=config_module.FF_GATE_STACK_ACTIVATION,
             layer_norm_position=config_module.FF_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config_module.FF_GATE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config_module.FF_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -1069,6 +1093,7 @@ def _feed_forward_layer_stack_sources(
             ),
             activation=config_module.FF_HALTING_STACK_ACTIVATION,
             layer_norm_position=config_module.FF_HALTING_STACK_LAYER_NORM_POSITION,
+            normalization=config_module.FF_HALTING_STACK_NORMALIZATION,
             residual_connection_option=(
                 config_module.FF_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -1129,6 +1154,7 @@ def _attention_projection_memory_stack_source(
         ),
         activation=config_module.ATTN_MEMORY_STACK_ACTIVATION,
         layer_norm_position=config_module.ATTN_MEMORY_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.ATTN_MEMORY_STACK_NORMALIZATION,
         residual_connection_option=(
             config_module.ATTN_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -1151,6 +1177,7 @@ def _feed_forward_memory_stack_source(
         ),
         activation=config_module.FF_MEMORY_STACK_ACTIVATION,
         layer_norm_position=config_module.FF_MEMORY_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.FF_MEMORY_STACK_NORMALIZATION,
         residual_connection_option=(
             config_module.FF_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -1207,6 +1234,7 @@ def _attention_projection_recurrent_stack_sources(
             layer_norm_position=(
                 config_module.ATTN_RECURRENT_GATE_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config_module.ATTN_RECURRENT_GATE_STACK_NORMALIZATION),
             residual_connection_option=(
                 config_module.ATTN_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -1234,6 +1262,7 @@ def _attention_projection_recurrent_stack_sources(
             layer_norm_position=(
                 config_module.ATTN_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config_module.ATTN_RECURRENT_HALTING_STACK_NORMALIZATION),
             residual_connection_option=(
                 config_module.ATTN_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -1266,6 +1295,7 @@ def _feed_forward_recurrent_stack_sources(
             layer_norm_position=(
                 config_module.FF_RECURRENT_GATE_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config_module.FF_RECURRENT_GATE_STACK_NORMALIZATION),
             residual_connection_option=(
                 config_module.FF_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -1293,6 +1323,7 @@ def _feed_forward_recurrent_stack_sources(
             layer_norm_position=(
                 config_module.FF_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config_module.FF_RECURRENT_HALTING_STACK_NORMALIZATION),
             residual_connection_option=(
                 config_module.FF_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -1316,6 +1347,7 @@ def _default_linear_role_recurrent_controller_options(
         recurrent_flag = config_module.ATTN_RECURRENT_FLAG
         recurrent_max_steps = config_module.ATTN_RECURRENT_MAX_STEPS
         recurrent_layer_norm_position = config_module.ATTN_RECURRENT_LAYER_NORM_POSITION
+        recurrent_normalization = config_module.ATTN_RECURRENT_NORMALIZATION
         recurrent_stack_gate_flag = config_module.ATTN_RECURRENT_STACK_GATE_FLAG
         recurrent_gate_option = config_module.ATTN_RECURRENT_GATE_OPTION
         recurrent_gate_activation = config_module.ATTN_RECURRENT_GATE_ACTIVATION
@@ -1330,6 +1362,7 @@ def _default_linear_role_recurrent_controller_options(
         recurrent_flag = config_module.FF_RECURRENT_FLAG
         recurrent_max_steps = config_module.FF_RECURRENT_MAX_STEPS
         recurrent_layer_norm_position = config_module.FF_RECURRENT_LAYER_NORM_POSITION
+        recurrent_normalization = config_module.FF_RECURRENT_NORMALIZATION
         recurrent_stack_gate_flag = config_module.FF_RECURRENT_STACK_GATE_FLAG
         recurrent_gate_option = config_module.FF_RECURRENT_GATE_OPTION
         recurrent_gate_activation = config_module.FF_RECURRENT_GATE_ACTIVATION
@@ -1344,6 +1377,7 @@ def _default_linear_role_recurrent_controller_options(
         recurrent_flag=recurrent_flag,
         recurrent_max_steps=recurrent_max_steps,
         recurrent_layer_norm_position=recurrent_layer_norm_position,
+        recurrent_normalization=recurrent_normalization,
         recurrent_stack_gate_flag=recurrent_stack_gate_flag,
         recurrent_gate_option=recurrent_gate_option,
         recurrent_gate_activation=recurrent_gate_activation,

@@ -127,6 +127,7 @@ class _GptExpertConfigFactoryBase:
             hidden_dim=feed_forward_stack_options.hidden_dim,
             bias_flag=feed_forward_stack_options.bias_flag,
             layer_norm_position=feed_forward_stack_options.layer_norm_position,
+            normalization=feed_forward_stack_options.normalization,
             num_layers=feed_forward_stack_options.num_layers,
             activation=feed_forward_stack_options.activation,
             residual_connection_option=(
@@ -147,6 +148,7 @@ class _GptExpertConfigFactoryBase:
             hidden_dim=dependencies.hidden_dim,
             bias_flag=dependencies.feed_forward_options.bias_flag,
             layer_norm_position=dependencies.decoder_options.layer_norm_position,
+            normalization=dependencies.decoder_options.normalization,
             num_layers=dependencies.feed_forward_options.num_layers,
             activation=dependencies.decoder_options.activation,
             residual_connection_option=None,
