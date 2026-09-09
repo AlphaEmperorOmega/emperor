@@ -6,9 +6,6 @@ class LayerStackTopology:
 
     def __init__(self, cfg: LayerStackConfig) -> None:
         self.cfg = cfg
-        self.__initialize_from_config()
-
-    def __initialize_from_config(self) -> None:
         self.input_dim: int = self.cfg.input_dim
         self.hidden_dim: int = self.cfg.hidden_dim
         self.output_dim: int = self.cfg.output_dim

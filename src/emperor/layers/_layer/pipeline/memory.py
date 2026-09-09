@@ -24,14 +24,11 @@ class LayerMemoryDelegate(Module):
         super().__init__()
         self.cfg = cfg
         self.VALIDATOR.validate(self)
-        self.__initialize_from_config()
-
-        self.model: MemoryInterface | None = self.__build_model()
-
-    def __initialize_from_config(self) -> None:
         self.config = self.cfg.memory_config
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
+
+        self.model: MemoryInterface | None = self.__build_model()
 
     def __build_model(self) -> MemoryInterface | None:
         model = self._build_from_config(
