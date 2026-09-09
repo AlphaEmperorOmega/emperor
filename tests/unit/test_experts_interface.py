@@ -95,6 +95,7 @@ LAYER_CONFIG_FIELDS = (
     "halting_config",
     "memory_config",
     "layer_model_config",
+    "normalization",
 )
 
 
