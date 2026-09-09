@@ -59,6 +59,8 @@ def build_controller_stack(
                 options.residual_connection_option,
                 options.residual_model_flag,
                 options.residual_stack_options,
+                residual_block_size=options.residual_block_size,
+                residual_rms_norm_epsilon=options.residual_rms_norm_epsilon,
             ),
             dropout_probability=options.dropout_probability,
             gate_config=None,

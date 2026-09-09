@@ -68,6 +68,12 @@ class AdaptiveDefaultValues:
     weight_generator_stack_residual_model_flag: bool = (
         config.WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
     )
+    weight_generator_stack_residual_block_size: int | None = (
+        config.WEIGHT_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    weight_generator_stack_residual_rms_norm_epsilon: float | None = (
+        config.WEIGHT_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     weight_generator_stack_dropout_probability: float | None = (
         config.WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY
     )
@@ -118,6 +124,12 @@ class AdaptiveDefaultValues:
     bias_generator_stack_residual_model_flag: bool = (
         config.BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
     )
+    bias_generator_stack_residual_block_size: int | None = (
+        config.BIAS_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    bias_generator_stack_residual_rms_norm_epsilon: float | None = (
+        config.BIAS_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     bias_generator_stack_dropout_probability: float | None = (
         config.BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY
     )
@@ -151,6 +163,12 @@ class AdaptiveDefaultValues:
     )
     diagonal_generator_stack_residual_model_flag: bool = (
         config.DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
+    )
+    diagonal_generator_stack_residual_block_size: int | None = (
+        config.DIAGONAL_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    diagonal_generator_stack_residual_rms_norm_epsilon: float | None = (
+        config.DIAGONAL_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON
     )
     diagonal_generator_stack_dropout_probability: float | None = (
         config.DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY
@@ -191,6 +209,12 @@ class AdaptiveDefaultValues:
     mask_generator_stack_residual_model_flag: bool = (
         config.MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
     )
+    mask_generator_stack_residual_block_size: int | None = (
+        config.MASK_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    mask_generator_stack_residual_rms_norm_epsilon: float | None = (
+        config.MASK_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     mask_generator_stack_dropout_probability: float | None = (
         config.MASK_GENERATOR_STACK_DROPOUT_PROBABILITY
     )
@@ -215,6 +239,12 @@ class AdaptiveDefaultValues:
     )
     adaptive_generator_stack_residual_model_flag: bool = (
         config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
+    )
+    adaptive_generator_stack_residual_block_size: int | None = (
+        config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    adaptive_generator_stack_residual_rms_norm_epsilon: float | None = (
+        config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON
     )
     adaptive_generator_stack_dropout_probability: float = (
         config.ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY
@@ -367,6 +397,12 @@ class AdaptiveDefaultValues:
     router_weight_generator_stack_residual_model_flag: bool = (
         config.ROUTER_WEIGHT_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
     )
+    router_weight_generator_stack_residual_block_size: int | None = (
+        config.ROUTER_WEIGHT_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    router_weight_generator_stack_residual_rms_norm_epsilon: float | None = (
+        config.ROUTER_WEIGHT_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     router_weight_generator_stack_dropout_probability: float | None = (
         config.ROUTER_WEIGHT_GENERATOR_STACK_DROPOUT_PROBABILITY
     )
@@ -413,6 +449,12 @@ class AdaptiveDefaultValues:
     router_bias_generator_stack_residual_model_flag: bool = (
         config.ROUTER_BIAS_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
     )
+    router_bias_generator_stack_residual_block_size: int | None = (
+        config.ROUTER_BIAS_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    router_bias_generator_stack_residual_rms_norm_epsilon: float | None = (
+        config.ROUTER_BIAS_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     router_bias_generator_stack_dropout_probability: float | None = (
         config.ROUTER_BIAS_GENERATOR_STACK_DROPOUT_PROBABILITY
     )
@@ -452,6 +494,12 @@ class AdaptiveDefaultValues:
     ) = config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
     router_diagonal_generator_stack_residual_model_flag: bool = (
         config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
+    )
+    router_diagonal_generator_stack_residual_block_size: int | None = (
+        config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    router_diagonal_generator_stack_residual_rms_norm_epsilon: float | None = (
+        config.ROUTER_DIAGONAL_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON
     )
     router_diagonal_generator_stack_dropout_probability: float | None = (
         config.ROUTER_DIAGONAL_GENERATOR_STACK_DROPOUT_PROBABILITY
@@ -497,6 +545,12 @@ class AdaptiveDefaultValues:
     ) = config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION
     router_mask_generator_stack_residual_model_flag: bool = (
         config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_MODEL_FLAG
+    )
+    router_mask_generator_stack_residual_block_size: int | None = (
+        config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    router_mask_generator_stack_residual_rms_norm_epsilon: float | None = (
+        config.ROUTER_MASK_GENERATOR_STACK_RESIDUAL_RMS_NORM_EPSILON
     )
     router_mask_generator_stack_dropout_probability: float | None = (
         config.ROUTER_MASK_GENERATOR_STACK_DROPOUT_PROBABILITY
@@ -572,6 +626,8 @@ class _GeneratorStackSourceValues:
     activation: ActivationOptions | None
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float | None
     last_layer_bias_option: LastLayerBiasOptions | None
     apply_output_postprocessing_flag: bool | None
@@ -657,6 +713,8 @@ def _generator_stack_source(
         num_layers=values.num_layers,
         activation=values.activation,
         residual_connection_option=values.residual_connection_option,
+        residual_block_size=values.residual_block_size,
+        residual_rms_norm_epsilon=values.residual_rms_norm_epsilon,
         residual_model_flag=values.residual_model_flag,
         dropout_probability=values.dropout_probability,
         last_layer_bias_option=values.last_layer_bias_option,
@@ -766,6 +824,8 @@ def _adaptive_generator_defaults(
             residual_connection_option=(
                 values.adaptive_generator_stack_residual_connection_option
             ),
+            residual_block_size=values.adaptive_generator_stack_residual_block_size,
+            residual_rms_norm_epsilon=values.adaptive_generator_stack_residual_rms_norm_epsilon,
             residual_model_flag=values.adaptive_generator_stack_residual_model_flag,
             dropout_probability=values.adaptive_generator_stack_dropout_probability,
             last_layer_bias_option=(
@@ -785,6 +845,8 @@ def _adaptive_generator_defaults(
         num_layers=provided.num_layers,
         activation=provided.activation,
         residual_connection_option=provided.residual_connection_option,
+        residual_block_size=provided.residual_block_size,
+        residual_rms_norm_epsilon=provided.residual_rms_norm_epsilon,
         residual_model_flag=provided.residual_model_flag,
         dropout_probability=provided.dropout_probability,
         last_layer_bias_option=provided.last_layer_bias_option,
@@ -837,6 +899,8 @@ def _hidden_adaptive_defaults(
                     residual_connection_option=(
                         values.weight_generator_stack_residual_connection_option
                     ),
+                    residual_block_size=values.weight_generator_stack_residual_block_size,
+                    residual_rms_norm_epsilon=values.weight_generator_stack_residual_rms_norm_epsilon,
                     residual_model_flag=values.weight_generator_stack_residual_model_flag,
                     dropout_probability=(
                         values.weight_generator_stack_dropout_probability
@@ -875,6 +939,8 @@ def _hidden_adaptive_defaults(
                     residual_connection_option=(
                         values.bias_generator_stack_residual_connection_option
                     ),
+                    residual_block_size=values.bias_generator_stack_residual_block_size,
+                    residual_rms_norm_epsilon=values.bias_generator_stack_residual_rms_norm_epsilon,
                     residual_model_flag=values.bias_generator_stack_residual_model_flag,
                     dropout_probability=values.bias_generator_stack_dropout_probability,
                     last_layer_bias_option=(
@@ -911,6 +977,8 @@ def _hidden_adaptive_defaults(
                         residual_connection_option=(
                             values.diagonal_generator_stack_residual_connection_option
                         ),
+                        residual_block_size=values.diagonal_generator_stack_residual_block_size,
+                        residual_rms_norm_epsilon=values.diagonal_generator_stack_residual_rms_norm_epsilon,
                         residual_model_flag=values.diagonal_generator_stack_residual_model_flag,
                         dropout_probability=(
                             values.diagonal_generator_stack_dropout_probability
@@ -951,6 +1019,8 @@ def _hidden_adaptive_defaults(
                     residual_connection_option=(
                         values.mask_generator_stack_residual_connection_option
                     ),
+                    residual_block_size=values.mask_generator_stack_residual_block_size,
+                    residual_rms_norm_epsilon=values.mask_generator_stack_residual_rms_norm_epsilon,
                     residual_model_flag=values.mask_generator_stack_residual_model_flag,
                     dropout_probability=values.mask_generator_stack_dropout_probability,
                     last_layer_bias_option=(
@@ -1085,6 +1155,8 @@ def _router_adaptive_defaults(
                     residual_connection_option=(
                         values.router_weight_generator_stack_residual_connection_option
                     ),
+                    residual_block_size=values.router_weight_generator_stack_residual_block_size,
+                    residual_rms_norm_epsilon=values.router_weight_generator_stack_residual_rms_norm_epsilon,
                     residual_model_flag=values.router_weight_generator_stack_residual_model_flag,
                     dropout_probability=(
                         values.router_weight_generator_stack_dropout_probability
@@ -1127,6 +1199,8 @@ def _router_adaptive_defaults(
                     residual_connection_option=(
                         values.router_bias_generator_stack_residual_connection_option
                     ),
+                    residual_block_size=values.router_bias_generator_stack_residual_block_size,
+                    residual_rms_norm_epsilon=values.router_bias_generator_stack_residual_rms_norm_epsilon,
                     residual_model_flag=values.router_bias_generator_stack_residual_model_flag,
                     dropout_probability=(
                         values.router_bias_generator_stack_dropout_probability
@@ -1169,6 +1243,8 @@ def _router_adaptive_defaults(
                         residual_connection_option=(
                             values.router_diagonal_generator_stack_residual_connection_option
                         ),
+                        residual_block_size=values.router_diagonal_generator_stack_residual_block_size,
+                        residual_rms_norm_epsilon=values.router_diagonal_generator_stack_residual_rms_norm_epsilon,
                         residual_model_flag=values.router_diagonal_generator_stack_residual_model_flag,
                         dropout_probability=(
                             values.router_diagonal_generator_stack_dropout_probability
@@ -1211,6 +1287,8 @@ def _router_adaptive_defaults(
                     residual_connection_option=(
                         values.router_mask_generator_stack_residual_connection_option
                     ),
+                    residual_block_size=values.router_mask_generator_stack_residual_block_size,
+                    residual_rms_norm_epsilon=values.router_mask_generator_stack_residual_rms_norm_epsilon,
                     residual_model_flag=values.router_mask_generator_stack_residual_model_flag,
                     dropout_probability=(
                         values.router_mask_generator_stack_dropout_probability
