@@ -5,6 +5,7 @@ from typing import Protocol
 
 from emperor.layers import (
     ActivationOptions,
+    AttentionResidualConfig,
     LastLayerBiasOptions,
     LayerConfig,
     LayerNormPositionOptions,
@@ -16,7 +17,8 @@ from emperor.layers import (
 )
 from emperor.linears import LinearLayerConfig
 
-_WEIGHTED_RESIDUAL_CONFIGS = (
+_MODELED_RESIDUAL_CONFIGS = (
+    AttentionResidualConfig,
     WeightedResidualConfig,
     WeightedBlendResidualConfig,
 )
@@ -30,6 +32,8 @@ class _SubmoduleStackDefaults(Protocol):
     normalization: NormalizationOptions
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_postprocessing_flag: bool
@@ -46,6 +50,8 @@ class ResidualStackSource:
     normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float | None
     last_layer_bias_option: LastLayerBiasOptions | None
     apply_output_postprocessing_flag: bool | None
@@ -63,6 +69,8 @@ class ResidualStackOptions:
     )
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_postprocessing_flag: bool
@@ -73,7 +81,7 @@ def resolve_residual_stack_options(
     source: ResidualStackSource,
     defaults: _SubmoduleStackDefaults,
 ) -> ResidualStackOptions:
-    """Resolve the residual coefficient stack from submodule-stack defaults."""
+    """Resolve the residual model stack from submodule-stack defaults."""
 
     if not source.independent_flag:
         return ResidualStackOptions(
@@ -83,6 +91,16 @@ def resolve_residual_stack_options(
             layer_norm_position=defaults.layer_norm_position,
             normalization=defaults.normalization,
             residual_connection_option=defaults.residual_connection_option,
+            residual_block_size=(
+                defaults.residual_block_size
+                if source.residual_block_size is None
+                else source.residual_block_size
+            ),
+            residual_rms_norm_epsilon=(
+                defaults.residual_rms_norm_epsilon
+                if source.residual_rms_norm_epsilon is None
+                else source.residual_rms_norm_epsilon
+            ),
             residual_model_flag=source.residual_model_flag,
             dropout_probability=defaults.dropout_probability,
             last_layer_bias_option=defaults.last_layer_bias_option,
@@ -114,6 +132,16 @@ def resolve_residual_stack_options(
             if source.residual_connection_option is None
             else source.residual_connection_option
         ),
+        residual_block_size=(
+            defaults.residual_block_size
+            if source.residual_block_size is None
+            else source.residual_block_size
+        ),
+        residual_rms_norm_epsilon=(
+            defaults.residual_rms_norm_epsilon
+            if source.residual_rms_norm_epsilon is None
+            else source.residual_rms_norm_epsilon
+        ),
         residual_model_flag=source.residual_model_flag,
         dropout_probability=(
             defaults.dropout_probability
@@ -137,7 +165,7 @@ def resolve_residual_stack_options(
 def build_residual_stack_config(
     options: ResidualStackOptions,
 ) -> LayerStackConfig:
-    """Build the coefficient stack owned by a residual."""
+    """Build the query or coefficient stack owned by a residual."""
 
     if options.residual_model_flag:
         raise ValueError(
@@ -161,6 +189,8 @@ def build_residual_stack_config(
             residual_config=build_residual_config(
                 options.residual_connection_option,
                 False,
+                residual_block_size=options.residual_block_size,
+                residual_rms_norm_epsilon=options.residual_rms_norm_epsilon,
                 selector_field="RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION",
                 model_flag_field="RESIDUAL_STACK_RESIDUAL_MODEL_FLAG",
             ),
@@ -178,6 +208,8 @@ def build_residual_config(
     residual_model_flag: bool,
     residual_stack_options: ResidualStackOptions | None = None,
     *,
+    residual_block_size: int | None = None,
+    residual_rms_norm_epsilon: float | None = None,
     selector_field: str = "residual_connection_option",
     model_flag_field: str = "residual_model_flag",
 ) -> ResidualConfig | None:
@@ -202,8 +234,13 @@ def build_residual_config(
             f"received {type(residual_connection_option).__name__}."
         )
     if not residual_model_flag:
+        if issubclass(residual_connection_option, AttentionResidualConfig):
+            return residual_connection_option(
+                block_size=residual_block_size,
+                rms_norm_epsilon=residual_rms_norm_epsilon,
+            )
         return residual_connection_option()
-    if not issubclass(residual_connection_option, _WEIGHTED_RESIDUAL_CONFIGS):
+    if not issubclass(residual_connection_option, _MODELED_RESIDUAL_CONFIGS):
         _raise_incompatible_selector(
             residual_connection_option,
             selector_field=selector_field,
@@ -213,6 +250,12 @@ def build_residual_config(
         raise ValueError(
             f"{model_flag_field}=True with {selector_field} requires resolved "
             "RESIDUAL_STACK options."
+        )
+    if issubclass(residual_connection_option, AttentionResidualConfig):
+        return residual_connection_option(
+            block_size=residual_block_size,
+            rms_norm_epsilon=residual_rms_norm_epsilon,
+            model_config=build_residual_stack_config(residual_stack_options),
         )
     return residual_connection_option(
         model_config=build_residual_stack_config(
@@ -238,6 +281,7 @@ def _raise_incompatible_selector(
     )
     raise ValueError(
         f"{model_flag_field}=True requires {selector_field} to select "
-        "WeightedResidualConfig or WeightedBlendResidualConfig; "
+        "WeightedResidualConfig, WeightedBlendResidualConfig, or "
+        "AttentionResidualConfig; "
         f"received {selected}."
     )

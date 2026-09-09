@@ -30,6 +30,8 @@ _SUBMODULE_STACK_FIELD_MAP = {
     "layer_norm_position": "layer_norm_position",
     "normalization": "normalization",
     "residual_connection_option": "residual_connection_option",
+    "residual_block_size": "residual_block_size",
+    "residual_rms_norm_epsilon": "residual_rms_norm_epsilon",
     "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
     "bias_flag": "bias_flag",
@@ -72,6 +74,8 @@ def _router_stack_options_from_config(
         layer_norm_position=config_module.ROUTER_STACK_LAYER_NORM_POSITION,
         normalization=config_module.ROUTER_STACK_NORMALIZATION,
         residual_connection_option=config_module.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_block_size=config_module.ROUTER_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config_module.ROUTER_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config_module.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.ROUTER_STACK_DROPOUT_PROBABILITY,
         bias_flag=config_module.ROUTER_BIAS_FLAG,
@@ -169,6 +173,8 @@ def _controller_stack_source(
     normalization: NormalizationOptions | None = None,
     residual_connection_option: type[ResidualConfig] | None,
     residual_model_flag: bool,
+    residual_block_size: int | None = None,
+    residual_rms_norm_epsilon: float | None = None,
     dropout_probability: float | None,
     bias_flag: bool | None,
 ) -> expert_options.ExpertsSubmoduleStackSource:
@@ -182,6 +188,8 @@ def _controller_stack_source(
         layer_norm_position=layer_norm_position,
         normalization=normalization,
         residual_connection_option=residual_connection_option,
+        residual_block_size=residual_block_size,
+        residual_rms_norm_epsilon=residual_rms_norm_epsilon,
         residual_model_flag=residual_model_flag,
         dropout_probability=dropout_probability,
         bias_flag=bias_flag,
@@ -201,6 +209,8 @@ def _gate_stack_source(
         layer_norm_position=config_module.GATE_STACK_LAYER_NORM_POSITION,
         normalization=config_module.GATE_STACK_NORMALIZATION,
         residual_connection_option=config_module.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_block_size=config_module.GATE_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config_module.GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config_module.GATE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.GATE_STACK_DROPOUT_PROBABILITY,
         bias_flag=config_module.GATE_STACK_BIAS_FLAG,
@@ -224,6 +234,8 @@ def _halting_stack_source(
         residual_connection_option=(
             config_module.HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        residual_block_size=config_module.HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config_module.HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config_module.HALTING_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.HALTING_STACK_DROPOUT_PROBABILITY,
         bias_flag=config_module.HALTING_STACK_BIAS_FLAG,
@@ -247,6 +259,8 @@ def _memory_stack_source(
         residual_connection_option=(
             config_module.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        residual_block_size=config_module.MEMORY_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config_module.MEMORY_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config_module.MEMORY_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.MEMORY_STACK_DROPOUT_PROBABILITY,
         bias_flag=config_module.MEMORY_STACK_BIAS_FLAG,
@@ -272,6 +286,8 @@ def _recurrent_gate_stack_source(
         residual_connection_option=(
             config_module.RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        residual_block_size=config_module.RECURRENT_GATE_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config_module.RECURRENT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config_module.RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
         bias_flag=config_module.RECURRENT_GATE_STACK_BIAS_FLAG,
@@ -297,6 +313,8 @@ def _recurrent_halting_stack_source(
         residual_connection_option=(
             config_module.RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        residual_block_size=config_module.RECURRENT_HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config_module.RECURRENT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config_module.RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=(config_module.RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY),
         bias_flag=config_module.RECURRENT_HALTING_STACK_BIAS_FLAG,
@@ -697,6 +715,8 @@ def _expert_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             residual_connection_option=(
                 config_module.EXPERT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config_module.EXPERT_GATE_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config_module.EXPERT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=config_module.EXPERT_GATE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config_module.EXPERT_GATE_STACK_DROPOUT_PROBABILITY,
             bias_flag=config_module.EXPERT_GATE_STACK_BIAS_FLAG,
@@ -719,6 +739,8 @@ def _expert_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             residual_connection_option=(
                 config_module.EXPERT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config_module.EXPERT_HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config_module.EXPERT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=(
                 config_module.EXPERT_HALTING_STACK_RESIDUAL_MODEL_FLAG
             ),
@@ -747,6 +769,8 @@ def _expert_memory_stack_source(
         residual_connection_option=(
             config_module.EXPERT_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        residual_block_size=config_module.EXPERT_MEMORY_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config_module.EXPERT_MEMORY_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config_module.EXPERT_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.EXPERT_MEMORY_STACK_DROPOUT_PROBABILITY,
         bias_flag=config_module.EXPERT_MEMORY_STACK_BIAS_FLAG,
@@ -777,6 +801,8 @@ def _expert_recurrent_stack_sources(
             residual_connection_option=(
                 config_module.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config_module.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config_module.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=(
                 config_module.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG
             ),
@@ -805,6 +831,8 @@ def _expert_recurrent_stack_sources(
             residual_connection_option=(
                 config_module.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config_module.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config_module.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=(
                 config_module.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG
             ),
@@ -834,6 +862,8 @@ def _router_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             residual_connection_option=(
                 config_module.ROUTER_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config_module.ROUTER_GATE_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config_module.ROUTER_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=config_module.ROUTER_GATE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config_module.ROUTER_GATE_STACK_DROPOUT_PROBABILITY,
             bias_flag=config_module.ROUTER_GATE_STACK_BIAS_FLAG,
@@ -856,6 +886,8 @@ def _router_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             residual_connection_option=(
                 config_module.ROUTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config_module.ROUTER_HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config_module.ROUTER_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=(
                 config_module.ROUTER_HALTING_STACK_RESIDUAL_MODEL_FLAG
             ),
@@ -884,6 +916,8 @@ def _router_memory_stack_source(
         residual_connection_option=(
             config_module.ROUTER_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        residual_block_size=config_module.ROUTER_MEMORY_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config_module.ROUTER_MEMORY_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config_module.ROUTER_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.ROUTER_MEMORY_STACK_DROPOUT_PROBABILITY,
         bias_flag=config_module.ROUTER_MEMORY_STACK_BIAS_FLAG,
@@ -914,6 +948,8 @@ def _router_recurrent_stack_sources(
             residual_connection_option=(
                 config_module.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config_module.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config_module.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=(
                 config_module.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG
             ),
@@ -942,6 +978,8 @@ def _router_recurrent_stack_sources(
             residual_connection_option=(
                 config_module.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
+            residual_block_size=config_module.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+            residual_rms_norm_epsilon=config_module.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
             residual_model_flag=(
                 config_module.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG
             ),

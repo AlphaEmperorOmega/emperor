@@ -235,6 +235,8 @@ class ExpertsRecurrentConfigFactory:
                 self.recurrent_controller_options.recurrent_residual_connection_option,
                 self.recurrent_controller_options.recurrent_residual_model_flag,
                 self.recurrent_controller_options.residual_stack_options,
+                residual_block_size=self.recurrent_controller_options.recurrent_residual_block_size,
+                residual_rms_norm_epsilon=self.recurrent_controller_options.recurrent_residual_rms_norm_epsilon,
             ),
             halting_config=self.halting_config_factory.build_recurrent_halting_config(),
         )

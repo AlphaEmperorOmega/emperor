@@ -220,23 +220,23 @@ _ORDERING_WITH_ATTENTION_SETTINGS_BY_PACKAGE = {
         37,
     ),
     "gpt/linear": (
-        "0bc262594db8cc2ef56d01b34e50708bf72628459cd75c063a155cb358ce9802",
-        364,
+        "cd79e495cace378967aae369fd11ae5b51930a4543eaf69b6841478169022718",
+        404,
         8,
     ),
     "gpt/linear_adaptive": (
-        "81b8421ea7c7f7f9bae9825ddbda3a758cd67fe438345a948964a01aeaa8a9bf",
-        825,
+        "3311fc8878d3e44cd75d20cfb1dc18add316cff747bcf34448181e988d55ba10",
+        921,
         123,
     ),
     "gpt/expert_linear": (
-        "045d8df1941df9c8f3454b89f7bbd6de6f9989d6e037e371d7d664b1f98f66d2",
-        491,
+        "e7edd272a09e55152976be831945922888216fdd2807527a75e1bb4fb4d13500",
+        545,
         9,
     ),
     "gpt/expert_linear_adaptive": (
-        "6559e3d67f67ac0385820d590d1c453575f0a688dfe8e3b4bfa7297f5d919a9e",
-        908,
+        "a2dd6c8bbdd25412484a777c13138fb29f482b4bc5e1ff962f3fae7c5f1213c1",
+        1010,
         39,
     ),
     "linears/linear": (
