@@ -11,6 +11,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -21,6 +22,9 @@ from models.linears.linear._residual import ResidualStackOptions
 class MainStackOptions:
     bias_flag: bool
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     num_layers: int
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig] | None
@@ -38,6 +42,9 @@ class ControllerStackOptions:
     apply_output_postprocessing_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float
@@ -83,6 +90,9 @@ class RecurrenceOptions:
     forward_calls_before_iteration_increment: int = field(default=1, kw_only=True)
     smooth_iteration_growth_flag: bool = field(default=False, kw_only=True)
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     gate: GateOptions
     halting: HaltingOptions
 

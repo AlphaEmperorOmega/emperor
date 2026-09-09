@@ -104,6 +104,7 @@ def _main_stack(reader: RuntimeOverrideReader) -> MainStackOptions:
     return MainStackOptions(
         bias_flag=values.bias_flag,
         layer_norm_position=values.layer_norm_position,
+        normalization=values.normalization,
         num_layers=values.num_layers,
         activation=values.activation,
         residual_connection_option=values.residual_connection_option,
@@ -130,6 +131,7 @@ def _submodule_stack(reader: RuntimeOverrideReader) -> ControllerStackOptions:
         apply_output_postprocessing_flag=values.apply_output_postprocessing_flag,
         activation=values.activation,
         layer_norm_position=values.layer_norm_position,
+        normalization=values.normalization,
         residual_connection_option=values.residual_connection_option,
         residual_model_flag=values.residual_model_flag,
         dropout_probability=values.dropout_probability,
@@ -183,6 +185,11 @@ def _resolved_controller_stack(
             if values.layer_norm_position is None
             else values.layer_norm_position
         ),
+        normalization=(
+            defaults.normalization
+            if values.normalization is None
+            else values.normalization
+        ),
         residual_connection_option=(
             defaults.residual_connection_option
             if values.residual_connection_option is None
@@ -223,6 +230,7 @@ def _residual_stack(
             num_layers=values.num_layers,
             activation=values.activation,
             layer_norm_position=values.layer_norm_position,
+            normalization=values.normalization,
             residual_connection_option=values.residual_connection_option,
             residual_model_flag=values.residual_model_flag,
             dropout_probability=values.dropout_probability,
@@ -377,6 +385,7 @@ def _recurrence_options(
         ),
         smooth_iteration_growth_flag=values.smooth_iteration_growth_flag,
         layer_norm_position=values.layer_norm_position,
+        normalization=values.normalization,
         gate=GateOptions(
             enabled=gate_condition.enabled,
             option=gate_condition.option,
