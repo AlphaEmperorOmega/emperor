@@ -313,7 +313,7 @@ class RunsPlanningTests(unittest.TestCase):
 
         with self.assertRaisesRegex(
             PlanTooLarge,
-            "requested 6 axes; limit 1.*--search-keys",
+            "requested 7 axes; limit 1.*--search-keys",
         ):
             plan_runs(
                 _linears_linear(),
@@ -429,7 +429,7 @@ class RunsPlanningTests(unittest.TestCase):
     ) -> None:
         with self.assertRaisesRegex(
             PlanTooLarge,
-            "requested 111 axes; limit 16.*--search-keys",
+            "requested 123 axes; limit 16.*--search-keys",
         ):
             plan_runs(
                 _gpt_linear_adaptive(),
@@ -560,8 +560,8 @@ class RunsPlanningTests(unittest.TestCase):
         self.assertIsNotNone(post_norm_search)
         assert baseline_search is not None
         assert post_norm_search is not None
-        self.assertEqual(len(baseline_search.axes or ()), 31)
-        self.assertEqual(len(post_norm_search.axes or ()), 30)
+        self.assertEqual(len(baseline_search.axes or ()), 33)
+        self.assertEqual(len(post_norm_search.axes or ()), 32)
         self.assertIn(
             "LAYER_NORM_POSITION",
             {axis.key for axis in baseline_search.axes or ()},
