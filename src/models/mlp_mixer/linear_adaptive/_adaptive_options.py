@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from emperor.augmentations.adaptive_parameters import (
     AxisMaskConfig,
@@ -18,6 +18,7 @@ from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 
@@ -33,6 +34,7 @@ class GeneratorStackSource:
     activation: ActivationOptions | None
     dropout_probability: float | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     last_layer_bias_option: LastLayerBiasOptions | None
@@ -61,6 +63,11 @@ class GeneratorStackSource:
                 defaults.layer_norm_position
                 if self.layer_norm_position is None
                 else self.layer_norm_position
+            ),
+            normalization=(
+                defaults.normalization
+                if self.normalization is None
+                else self.normalization
             ),
             residual_connection_option=(
                 defaults.residual_connection_option
@@ -145,6 +152,7 @@ def adaptive_options(runtime: RuntimeOptions) -> AdaptiveOptions:
             activation=runtime.adaptive_generator_stack_activation,
             dropout_probability=runtime.adaptive_generator_stack_dropout_probability,
             layer_norm_position=runtime.adaptive_generator_stack_layer_norm_position,
+            normalization=runtime.adaptive_generator_stack_normalization,
             residual_connection_option=(
                 runtime.adaptive_generator_stack_residual_connection_option
             ),
@@ -206,6 +214,7 @@ def _weight_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         activation=runtime.weight_generator_stack_activation,
         dropout_probability=runtime.weight_generator_stack_dropout_probability,
         layer_norm_position=runtime.weight_generator_stack_layer_norm_position,
+        normalization=runtime.weight_generator_stack_normalization,
         residual_connection_option=(
             runtime.weight_generator_stack_residual_connection_option
         ),
@@ -226,6 +235,7 @@ def _bias_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         activation=runtime.bias_generator_stack_activation,
         dropout_probability=runtime.bias_generator_stack_dropout_probability,
         layer_norm_position=runtime.bias_generator_stack_layer_norm_position,
+        normalization=runtime.bias_generator_stack_normalization,
         residual_connection_option=(
             runtime.bias_generator_stack_residual_connection_option
         ),
@@ -246,6 +256,7 @@ def _diagonal_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         activation=runtime.diagonal_generator_stack_activation,
         dropout_probability=runtime.diagonal_generator_stack_dropout_probability,
         layer_norm_position=runtime.diagonal_generator_stack_layer_norm_position,
+        normalization=runtime.diagonal_generator_stack_normalization,
         residual_connection_option=(
             runtime.diagonal_generator_stack_residual_connection_option
         ),
@@ -268,6 +279,7 @@ def _mask_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         activation=runtime.mask_generator_stack_activation,
         dropout_probability=runtime.mask_generator_stack_dropout_probability,
         layer_norm_position=runtime.mask_generator_stack_layer_norm_position,
+        normalization=runtime.mask_generator_stack_normalization,
         residual_connection_option=(
             runtime.mask_generator_stack_residual_connection_option
         ),

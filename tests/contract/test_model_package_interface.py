@@ -91,24 +91,24 @@ _ORDERING_DIGEST_BY_PACKAGE = {
         33,
     ),
     "mlp_mixer/linear": (
-        "4b71d52b0c9f819d25ec63dcd57a1e06fa255a300b890202f181fedad706ea40",
-        354,
-        7,
-    ),
-    "mlp_mixer/linear_adaptive": (
-        "1e559b7d472baae29174b3abee1e4dc8455ca3365ee0832301f26e0d2c10310c",
-        515,
-        8,
-    ),
-    "mlp_mixer/expert_linear": (
-        "c89a4ac19d84b1283d84e5a1c92bc19137a31a5ac4347d438262ac8680eaef60",
-        471,
+        "e18cf34ba92c58f0c8a4d6b86dfebea16f1faacd4f737432bf061fd30b038b60",
+        379,
         9,
     ),
-    "mlp_mixer/expert_linear_adaptive": (
-        "426ff7e0d4f426d8211bb47e143732f308e5b3d28797641b0626072bb0919220",
-        632,
+    "mlp_mixer/linear_adaptive": (
+        "f71a8301d9910f035d1c6f6bdafbac850122780d7893f52cc8e318555fd3365c",
+        550,
         10,
+    ),
+    "mlp_mixer/expert_linear": (
+        "58a7842502c265f746fcf8e0b5661931e2a7242d0185f33398cb166f35390df8",
+        504,
+        11,
+    ),
+    "mlp_mixer/expert_linear_adaptive": (
+        "aba748e4f80a6af0b9e75d064aeff5b094bd9277bcd50ce6fe0f40f514110c9a",
+        675,
+        12,
     ),
     "neuron/linear": (
         "6f98de2ee92999f4ef5907beacd91aae487a1e89ae350fdfeaa8c600f8b183f5",

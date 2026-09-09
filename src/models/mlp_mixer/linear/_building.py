@@ -9,6 +9,7 @@ from emperor.layers import (
     LayerNormPositionOptions,
     LayerStackConfig,
     MirroredLayerStackConfig,
+    NormalizationOptions,
     RecurrentLayerConfig,
 )
 from emperor.linears import LinearLayerConfig
@@ -53,7 +54,11 @@ def sequence_length(runtime: RuntimeOptions) -> int:
     return patches_per_side**2
 
 
-def _residual(runtime: RuntimeOptions, option, model_flag):
+def _residual(
+    runtime: RuntimeOptions,
+    option,
+    model_flag,
+):
     return build_residual_config(
         option,
         model_flag,
@@ -64,6 +69,7 @@ def _residual(runtime: RuntimeOptions, option, model_flag):
                 num_layers=runtime.residual_stack_num_layers,
                 activation=runtime.residual_stack_activation,
                 layer_norm_position=(runtime.residual_stack_layer_norm_position),
+                normalization=(runtime.residual_stack_normalization),
                 residual_connection_option=(
                     runtime.residual_stack_residual_connection_option
                 ),
@@ -102,6 +108,7 @@ def _affine_stack(
     activation,
     dropout_probability: float,
     layer_norm_position,
+    normalization=NormalizationOptions.RMS_NORM,
     residual_connection_option,
     residual_model_flag,
     last_layer_bias_option,
@@ -139,10 +146,13 @@ def _affine_stack(
         layer_config=LayerConfig(
             activation=activation,
             residual_config=_residual(
-                runtime, residual_connection_option, residual_model_flag
+                runtime,
+                residual_connection_option,
+                residual_model_flag,
             ),
             dropout_probability=dropout_probability,
             layer_norm_position=layer_norm_position,
+            normalization=normalization,
             gate_config=None,
             halting_config=None,
             memory_config=None,
@@ -162,6 +172,7 @@ def _affine_stack(
         activation=activation,
         dropout_probability=dropout_probability,
         layer_norm_position=layer_norm_position,
+        normalization=normalization,
         residual_connection_option=residual_connection_option,
         residual_model_flag=residual_model_flag,
         last_layer_bias_option=last_layer_bias_option,
@@ -188,6 +199,7 @@ def patch_config(runtime: RuntimeOptions) -> LinearPatchEmbeddingConfig:
         activation=ActivationOptions.DISABLED,
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
+        normalization=NormalizationOptions.RMS_NORM,
         residual_connection_option=None,
         residual_model_flag=False,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
@@ -217,6 +229,7 @@ def _token_mixing_model(runtime: RuntimeOptions, tokens: int):
         activation=runtime.token_mixer_stack_activation,
         dropout_probability=runtime.token_mixer_stack_dropout_probability,
         layer_norm_position=runtime.token_mixer_stack_layer_norm_position,
+        normalization=runtime.token_mixer_stack_normalization,
         residual_connection_option=(
             runtime.token_mixer_stack_residual_connection_option
         ),
@@ -241,6 +254,7 @@ def _channel_mixing_model(runtime: RuntimeOptions):
         activation=runtime.channel_mixer_stack_activation,
         dropout_probability=runtime.channel_mixer_stack_dropout_probability,
         layer_norm_position=runtime.channel_mixer_stack_layer_norm_position,
+        normalization=runtime.channel_mixer_stack_normalization,
         residual_connection_option=(
             runtime.channel_mixer_stack_residual_connection_option
         ),
@@ -273,6 +287,7 @@ def _controller_stack_config(
         activation=options.activation,
         dropout_probability=options.dropout_probability,
         layer_norm_position=options.layer_norm_position,
+        normalization=options.normalization,
         residual_connection_option=options.residual_connection_option,
         residual_model_flag=options.residual_model_flag,
         last_layer_bias_option=(
@@ -398,6 +413,7 @@ def _configure_controls(
         ),
         smooth_iteration_growth_flag=recurrent.smooth_iteration_growth_flag,
         recurrent_layer_norm_position=recurrent.layer_norm_position,
+        recurrent_normalization=recurrent.normalization,
         block_config=model_config,
         gate_config=_configured_gate(
             runtime,
@@ -429,6 +445,7 @@ def encoder_config(runtime: RuntimeOptions, tokens: int):
     mixer_layer = TransformerEncoderLayerConfig(
         embedding_dim=runtime.hidden_dim,
         layer_norm_position=runtime.layer_norm_position,
+        normalization=runtime.normalization,
         dropout_probability=runtime.stack_dropout_probability,
         residual_config=_residual(
             runtime,
@@ -456,6 +473,7 @@ def encoder_config(runtime: RuntimeOptions, tokens: int):
         ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
+        normalization=NormalizationOptions.RMS_NORM,
         gate_config=None,
         halting_config=None,
         memory_config=None,
@@ -491,6 +509,7 @@ def output_config(runtime: RuntimeOptions) -> LayerConfig:
         residual_config=None,
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
+        normalization=NormalizationOptions.RMS_NORM,
         gate_config=None,
         halting_config=None,
         memory_config=None,

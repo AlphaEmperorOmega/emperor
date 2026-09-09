@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from emperor.halting import HaltingConfig, HaltingHiddenStateModeOptions
 from emperor.layers import (
@@ -8,6 +8,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -22,6 +23,9 @@ class StackOptions:
     activation: ActivationOptions
     dropout_probability: float
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     last_layer_bias_option: LastLayerBiasOptions
@@ -37,6 +41,7 @@ class ControllerStackSource:
     activation: ActivationOptions | None
     dropout_probability: float | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     last_layer_bias_option: LastLayerBiasOptions | None
@@ -65,6 +70,11 @@ class ControllerStackSource:
                 defaults.layer_norm_position
                 if self.layer_norm_position is None
                 else self.layer_norm_position
+            ),
+            normalization=(
+                defaults.normalization
+                if self.normalization is None
+                else self.normalization
             ),
             residual_connection_option=(
                 defaults.residual_connection_option
@@ -127,6 +137,9 @@ class RecurrentOptions:
     forward_calls_before_iteration_increment: int
     smooth_iteration_growth_flag: bool
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     gate: GateOptions
@@ -149,6 +162,7 @@ def submodule_stack_options(runtime: RuntimeOptions) -> StackOptions:
         activation=runtime.submodule_stack_activation,
         dropout_probability=runtime.submodule_stack_dropout_probability,
         layer_norm_position=runtime.submodule_stack_layer_norm_position,
+        normalization=runtime.submodule_stack_normalization,
         residual_connection_option=runtime.submodule_stack_residual_connection_option,
         residual_model_flag=runtime.submodule_stack_residual_model_flag,
         last_layer_bias_option=runtime.submodule_stack_last_layer_bias_option,
@@ -200,6 +214,7 @@ def main_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 runtime.recurrent_smooth_iteration_growth_flag
             ),
             layer_norm_position=runtime.recurrent_layer_norm_position,
+            normalization=runtime.recurrent_normalization,
             residual_connection_option=runtime.recurrent_residual_connection_option,
             residual_model_flag=runtime.recurrent_residual_model_flag,
             gate=GateOptions(
@@ -257,6 +272,7 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 layer_norm_position=(
                     runtime.token_mixer_gate_stack_layer_norm_position
                 ),
+                normalization=(runtime.token_mixer_gate_stack_normalization),
                 residual_connection_option=(
                     runtime.token_mixer_gate_stack_residual_connection_option
                 ),
@@ -289,6 +305,7 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 layer_norm_position=(
                     runtime.token_mixer_halting_stack_layer_norm_position
                 ),
+                normalization=(runtime.token_mixer_halting_stack_normalization),
                 residual_connection_option=(
                     runtime.token_mixer_halting_stack_residual_connection_option
                 ),
@@ -325,6 +342,7 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 layer_norm_position=(
                     runtime.token_mixer_memory_stack_layer_norm_position
                 ),
+                normalization=(runtime.token_mixer_memory_stack_normalization),
                 residual_connection_option=(
                     runtime.token_mixer_memory_stack_residual_connection_option
                 ),
@@ -352,6 +370,7 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
             ),
             smooth_iteration_growth_flag=False,
             layer_norm_position=runtime.token_mixer_recurrent_layer_norm_position,
+            normalization=runtime.token_mixer_recurrent_normalization,
             residual_connection_option=(
                 runtime.token_mixer_recurrent_residual_connection_option
             ),
@@ -372,6 +391,9 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     ),
                     layer_norm_position=(
                         runtime.token_mixer_recurrent_gate_stack_layer_norm_position
+                    ),
+                    normalization=(
+                        runtime.token_mixer_recurrent_gate_stack_normalization
                     ),
                     residual_connection_option=(
                         runtime.token_mixer_recurrent_gate_stack_residual_connection_option
@@ -408,6 +430,9 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     ),
                     layer_norm_position=(
                         runtime.token_mixer_recurrent_halting_stack_layer_norm_position
+                    ),
+                    normalization=(
+                        runtime.token_mixer_recurrent_halting_stack_normalization
                     ),
                     residual_connection_option=(
                         runtime.token_mixer_recurrent_halting_stack_residual_connection_option
@@ -446,6 +471,7 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 layer_norm_position=(
                     runtime.channel_mixer_gate_stack_layer_norm_position
                 ),
+                normalization=(runtime.channel_mixer_gate_stack_normalization),
                 residual_connection_option=(
                     runtime.channel_mixer_gate_stack_residual_connection_option
                 ),
@@ -478,6 +504,7 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 layer_norm_position=(
                     runtime.channel_mixer_halting_stack_layer_norm_position
                 ),
+                normalization=(runtime.channel_mixer_halting_stack_normalization),
                 residual_connection_option=(
                     runtime.channel_mixer_halting_stack_residual_connection_option
                 ),
@@ -514,6 +541,7 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 layer_norm_position=(
                     runtime.channel_mixer_memory_stack_layer_norm_position
                 ),
+                normalization=(runtime.channel_mixer_memory_stack_normalization),
                 residual_connection_option=(
                     runtime.channel_mixer_memory_stack_residual_connection_option
                 ),
@@ -541,6 +569,7 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
             ),
             smooth_iteration_growth_flag=False,
             layer_norm_position=runtime.channel_mixer_recurrent_layer_norm_position,
+            normalization=runtime.channel_mixer_recurrent_normalization,
             residual_connection_option=(
                 runtime.channel_mixer_recurrent_residual_connection_option
             ),
@@ -561,6 +590,9 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     ),
                     layer_norm_position=(
                         runtime.channel_mixer_recurrent_gate_stack_layer_norm_position
+                    ),
+                    normalization=(
+                        runtime.channel_mixer_recurrent_gate_stack_normalization
                     ),
                     residual_connection_option=(
                         runtime.channel_mixer_recurrent_gate_stack_residual_connection_option
@@ -604,6 +636,9 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     layer_norm_position=(
                         runtime.channel_mixer_recurrent_halting_stack_layer_norm_position
                     ),
+                    normalization=(
+                        runtime.channel_mixer_recurrent_halting_stack_normalization
+                    ),
                     residual_connection_option=(
                         runtime.channel_mixer_recurrent_halting_stack_residual_connection_option
                     ),
@@ -632,6 +667,7 @@ def _main_gate_stack(runtime: RuntimeOptions) -> ControllerStackSource:
         activation=runtime.gate_stack_activation,
         dropout_probability=runtime.gate_stack_dropout_probability,
         layer_norm_position=runtime.gate_stack_layer_norm_position,
+        normalization=runtime.gate_stack_normalization,
         residual_connection_option=runtime.gate_stack_residual_connection_option,
         residual_model_flag=runtime.gate_stack_residual_model_flag,
         last_layer_bias_option=runtime.gate_stack_last_layer_bias_option,
@@ -648,6 +684,7 @@ def _main_halting_stack(runtime: RuntimeOptions) -> ControllerStackSource:
         activation=runtime.halting_stack_activation,
         dropout_probability=runtime.halting_stack_dropout_probability,
         layer_norm_position=runtime.halting_stack_layer_norm_position,
+        normalization=runtime.halting_stack_normalization,
         residual_connection_option=runtime.halting_stack_residual_connection_option,
         residual_model_flag=runtime.halting_stack_residual_model_flag,
         last_layer_bias_option=runtime.halting_stack_last_layer_bias_option,
@@ -664,6 +701,7 @@ def _main_memory_stack(runtime: RuntimeOptions) -> ControllerStackSource:
         activation=runtime.memory_stack_activation,
         dropout_probability=runtime.memory_stack_dropout_probability,
         layer_norm_position=runtime.memory_stack_layer_norm_position,
+        normalization=runtime.memory_stack_normalization,
         residual_connection_option=runtime.memory_stack_residual_connection_option,
         residual_model_flag=runtime.memory_stack_residual_model_flag,
         last_layer_bias_option=runtime.memory_stack_last_layer_bias_option,
@@ -680,6 +718,7 @@ def _main_recurrent_gate_stack(runtime: RuntimeOptions) -> ControllerStackSource
         activation=runtime.recurrent_gate_stack_activation,
         dropout_probability=runtime.recurrent_gate_stack_dropout_probability,
         layer_norm_position=runtime.recurrent_gate_stack_layer_norm_position,
+        normalization=runtime.recurrent_gate_stack_normalization,
         residual_connection_option=(
             runtime.recurrent_gate_stack_residual_connection_option
         ),
@@ -700,6 +739,7 @@ def _main_recurrent_halting_stack(runtime: RuntimeOptions) -> ControllerStackSou
         activation=runtime.recurrent_halting_stack_activation,
         dropout_probability=runtime.recurrent_halting_stack_dropout_probability,
         layer_norm_position=runtime.recurrent_halting_stack_layer_norm_position,
+        normalization=runtime.recurrent_halting_stack_normalization,
         residual_connection_option=(
             runtime.recurrent_halting_stack_residual_connection_option
         ),

@@ -13,6 +13,7 @@ _RUNTIME_FIELDS = {field.name for field in fields(RuntimeOptions)}
 _CONTROLLER_STACK_FIELDS = (
     "hidden_dim",
     "layer_norm_position",
+    "normalization",
     "num_layers",
     "activation",
     "residual_connection_option",
