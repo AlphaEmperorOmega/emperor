@@ -224,6 +224,8 @@ class HiddenModelConfigFactory:
                 self.stack_options.residual_connection_option,
                 self.stack_options.residual_model_flag,
                 self.stack_options.residual_stack_options,
+                residual_block_size=self.stack_options.residual_block_size,
+                residual_rms_norm_epsilon=self.stack_options.residual_rms_norm_epsilon,
             ),
             dropout_probability=self.stack_options.dropout_probability,
             gate_config=gate_config,

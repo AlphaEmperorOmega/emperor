@@ -33,6 +33,8 @@ class SubmoduleStackSource:
     normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float | None
     bias_flag: bool | None
 
@@ -50,6 +52,8 @@ class SubmoduleStackOptions:
     )
     residual_connection_option: type[ResidualConfig]
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     residual_stack_options: ResidualStackOptions | None = field(
         default=None, kw_only=True
     )
@@ -103,6 +107,8 @@ def resolve_controller_stack_options(
         layer_norm_position=layer_norm_position,
         normalization=normalization,
         residual_connection_option=residual_connection_option,
+        residual_block_size=source.residual_block_size,
+        residual_rms_norm_epsilon=source.residual_rms_norm_epsilon,
         residual_model_flag=(source.residual_model_flag),
         residual_stack_options=defaults.residual_stack_options,
         dropout_probability=dropout_probability,
@@ -121,6 +127,8 @@ class MainLayerStackOptions:
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
     residual_model_flag: bool = field(default=False, kw_only=True)
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     residual_stack_options: ResidualStackOptions | None = field(
         default=None, kw_only=True
     )

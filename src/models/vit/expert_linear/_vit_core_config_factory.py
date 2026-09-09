@@ -159,10 +159,14 @@ class VitCoreConfigFactory:
         )
         stack_residual_connection_option = self._stack_residual_connection_option()
         stack_residual_model_flag = self._stack_residual_model_flag()
+        stack_residual_block_size = self._stack_residual_block_size()
+        stack_residual_rms_norm_epsilon = self._stack_residual_rms_norm_epsilon()
         residual_config = build_residual_config(
             stack_residual_connection_option,
             stack_residual_model_flag,
             self.encoder_stack_options.residual_stack_options,
+            residual_block_size=stack_residual_block_size,
+            residual_rms_norm_epsilon=stack_residual_rms_norm_epsilon,
         )
         layer_config = TransformerEncoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
@@ -287,6 +291,8 @@ class VitCoreConfigFactory:
             num_layers=options.num_layers,
             activation=options.activation,
             residual_connection_option=options.residual_connection_option,
+            residual_block_size=options.residual_block_size,
+            residual_rms_norm_epsilon=options.residual_rms_norm_epsilon,
             residual_model_flag=options.residual_model_flag,
             residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
@@ -368,6 +374,8 @@ class VitCoreConfigFactory:
             num_layers=options.num_layers,
             activation=options.activation,
             residual_connection_option=options.residual_connection_option,
+            residual_block_size=options.residual_block_size,
+            residual_rms_norm_epsilon=options.residual_rms_norm_epsilon,
             residual_model_flag=options.residual_model_flag,
             residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
@@ -430,7 +438,11 @@ class VitCoreConfigFactory:
     def _stack_residual_model_flag(self) -> bool:
         return self.encoder_stack_options.residual_model_flag
 
+    def _stack_residual_block_size(self) -> int | None:
+        return self.encoder_stack_options.residual_block_size
 
+    def _stack_residual_rms_norm_epsilon(self) -> float | None:
+        return self.encoder_stack_options.residual_rms_norm_epsilon
 
     def _stack_last_layer_bias_option(self) -> LastLayerBiasOptions:
         return self.encoder_stack_options.last_layer_bias_option

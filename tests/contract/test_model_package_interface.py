@@ -325,23 +325,23 @@ _ORDERING_WITH_ATTENTION_SETTINGS_BY_PACKAGE = {
         30,
     ),
     "vit/linear": (
-        "5dba382f1c7bf26fabe6bdde50b442049296161386ee87d8cd6f9e1af9bcb4a4",
-        364,
+        "11ecd4021c689ab9446bf5c6ecd05fff4377c97ce0cd391ccc184ef2b5acf339",
+        404,
         8,
     ),
     "vit/linear_adaptive": (
-        "8e04dc711a7acc7524b594d78d971c010d851027346bff5aaec4f62c7eefdd52",
-        825,
+        "be1cb4c26ff648050b605ffae0967caec65bf455cfb7b3becd107b201d6a3e37",
+        921,
         122,
     ),
     "vit/expert_linear": (
-        "e795ab20898c060695a8e676172d26a86de5ef0da29fffd25562374bf00438ec",
-        491,
+        "a5ca988bca1cf16ec27fa107b7d79dfb6fc6073c7f968c93c612fb3873bd87ff",
+        545,
         8,
     ),
     "vit/expert_linear_adaptive": (
-        "c14ecc4b8a2fa4967facee1005c743a63825457c7179ebff5b50d12f250cb940",
-        909,
+        "b6f9253a80b2cecf720e769cdd9aad157c8fa4b4a7a61f723c2972ee8e5ac7f1",
+        1011,
         38,
     ),
 }
