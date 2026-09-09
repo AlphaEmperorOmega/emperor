@@ -212,6 +212,11 @@ def resolve_runtime_construction(
             "residual_stack_layer_norm_position",
             config.RESIDUAL_STACK_LAYER_NORM_POSITION,
         ),
+        normalization=_pop(
+            values,
+            "residual_stack_normalization",
+            config.RESIDUAL_STACK_NORMALIZATION,
+        ),
         num_layers=_pop(
             values,
             "residual_stack_num_layers",
