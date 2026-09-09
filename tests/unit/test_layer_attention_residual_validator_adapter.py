@@ -12,6 +12,8 @@ from emperor.layers._composition.residual.variants.attention import (
     AttentionResidualState,
 )
 
+from emperor.linears import LinearLayerConfig
+
 
 class TestAttentionResidualValidatorAdapter(unittest.TestCase):
     def test_component_and_state_expose_validator_adapter(self):
@@ -180,6 +182,33 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
         self.assertEqual(len(state.sources), 1)
         self.assertEqual(len(validated_connections), 1)
         self.assertIs(validated_connections[0], residual)
+
+
+    def test_generated_query_validation_dispatches_before_history_mutation(self):
+        class RejectingValidator(AttentionResidualValidator):
+            @staticmethod
+            def validate_query_model_output(query, current):
+                raise RuntimeError("substituted query validator was called")
+
+        class RejectingAttentionResidual(AttentionResidual):
+            VALIDATOR = RejectingValidator
+
+        residual = RejectingAttentionResidual(
+            AttentionResidualConfig(
+                block_size=1,
+                rms_norm_epsilon=1e-6,
+                residual_dim=2,
+                model_config=LinearLayerConfig(bias_flag=False),
+            )
+        )
+        initial = torch.zeros(1, 2)
+        state = residual.new_state(initial)
+        with self.assertRaisesRegex(
+            RuntimeError, "substituted query validator was called"
+        ):
+            residual(torch.ones_like(initial), initial, residual_state=state)
+        self.assertEqual(len(state.sources), 1)
+        self.assertIs(state.sources[0], initial)
 
 
 

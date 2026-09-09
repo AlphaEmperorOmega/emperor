@@ -37,13 +37,27 @@ class AttentionResidual(ResidualConnectionAbstract):
         overrides: AttentionResidualConfig | None = None,
     ) -> None:
         super().__init__(cfg, overrides)
+        self.model_config: LayerStackConfig | LinearLayerConfig | None = (
+            self.cfg.model_config
+        )
         self.block_size = 1 if self.cfg.block_size is None else self.cfg.block_size
         self.rms_norm_epsilon = 1e-6 if self.cfg.rms_norm_epsilon is None else float(self.cfg.rms_norm_epsilon)
 
-        self.query = nn.Parameter(torch.zeros(self.residual_dim))
+        self.query: nn.Parameter | None = None
+        self.query_model: LayerStack | LinearAbstract | None = None
+        self.__initialize_learned_query_or_query_model()
         self.key_norm = self.__build_key_norm()
         self.residual_state_lifecycle = self.__build_residual_state_lifecycle()
 
+    def __initialize_learned_query_or_query_model(self) -> None:
+        if self.model_config is None:
+            self.query = nn.Parameter(torch.zeros(self.residual_dim))
+            return
+        self.query_model = self._build_from_config(
+            self.model_config,
+            input_dim=self.residual_dim,
+            output_dim=self.residual_dim,
+        )
 
     def __build_key_norm(self) -> nn.RMSNorm:
         return nn.RMSNorm(
@@ -84,6 +98,7 @@ class AttentionResidual(ResidualConnectionAbstract):
     ) -> Tensor:
         self.__validate_attention_forward_inputs(current, residual_state)
         attention_state = cast(AttentionResidualState, residual_state)
+        query = self.__resolve_query(current)
         residual_sources = self.__append_and_stack_residual_sources(
             attention_state, current
         )
@@ -94,7 +109,7 @@ class AttentionResidual(ResidualConnectionAbstract):
             accumulator_sources,
         )
         depth_weights = self.__calculate_residual_depth_weights(
-            normalized_source_keys
+            normalized_source_keys, query
         )
         mixed_residual_sources = self.__mix_depth_weighted_residual_sources(
             accumulator_sources, depth_weights
@@ -112,6 +127,21 @@ class AttentionResidual(ResidualConnectionAbstract):
             residual_state,
         )
 
+    def __resolve_query(self, current: Tensor) -> Tensor:
+        if self.query is not None:
+            return self.query
+
+        from emperor.layers import LayerStack, LayerState
+
+        query_model_input = current.unsqueeze(0) if current.ndim == 1 else current
+        if isinstance(self.query_model, LayerStack):
+            query_input_state = LayerState(hidden=query_model_input)
+            query_output_state = self.query_model(query_input_state)
+            generated_query = query_output_state.hidden
+        else:
+            generated_query = self.query_model(query_model_input)
+        self.VALIDATOR.validate_query_model_output(generated_query, query_model_input)
+        return generated_query.reshape(current.shape)
 
     @staticmethod
     def __append_and_stack_residual_sources(
@@ -151,8 +181,9 @@ class AttentionResidual(ResidualConnectionAbstract):
     def __calculate_residual_depth_weights(
         self,
         normalized_source_keys: Tensor,
+        query: Tensor,
     ) -> Tensor:
-        accumulator_query = self.query.to(dtype=normalized_source_keys.dtype)
+        accumulator_query = query.to(dtype=normalized_source_keys.dtype)
         query_weighted_source_keys = normalized_source_keys * accumulator_query
         depth_attention_logits = torch.sum(query_weighted_source_keys, dim=-1)
         return torch.softmax(depth_attention_logits, dim=0)
