@@ -1,10 +1,11 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from types import ModuleType
 
 from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from models.gpt.expert_linear_adaptive.runtime_options import (
@@ -23,6 +24,7 @@ def adaptive_generator_stack_options(
     return AdaptiveGeneratorStackOptions(
         hidden_dim=config.ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
         layer_norm_position=config.ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION,
+        normalization=config.ADAPTIVE_GENERATOR_STACK_NORMALIZATION,
         num_layers=config.ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
         activation=config.ADAPTIVE_GENERATOR_STACK_ACTIVATION,
         residual_connection_option=(
@@ -43,6 +45,7 @@ class _AdaptiveGeneratorStackDefaults:
     independent_flag: bool
     hidden_dim: int | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     num_layers: int | None
     activation: ActivationOptions | None
     residual_connection_option: type[ResidualConfig] | None
@@ -60,6 +63,7 @@ def _adaptive_generator_stack_source(
         independent_flag=defaults.independent_flag,
         hidden_dim=defaults.hidden_dim,
         layer_norm_position=defaults.layer_norm_position,
+        normalization=defaults.normalization,
         num_layers=defaults.num_layers,
         activation=defaults.activation,
         residual_connection_option=defaults.residual_connection_option,
@@ -77,6 +81,7 @@ def weight_generator_stack_source(config: ModuleType) -> AdaptiveGeneratorStackS
             independent_flag=config.WEIGHT_GENERATOR_STACK_INDEPENDENT_FLAG,
             hidden_dim=config.WEIGHT_GENERATOR_STACK_HIDDEN_DIM,
             layer_norm_position=config.WEIGHT_GENERATOR_STACK_LAYER_NORM_POSITION,
+            normalization=config.WEIGHT_GENERATOR_STACK_NORMALIZATION,
             num_layers=config.WEIGHT_GENERATOR_STACK_NUM_LAYERS,
             activation=config.WEIGHT_GENERATOR_STACK_ACTIVATION,
             residual_connection_option=(
@@ -101,6 +106,7 @@ def bias_generator_stack_source(config: ModuleType) -> AdaptiveGeneratorStackSou
             independent_flag=config.BIAS_GENERATOR_STACK_INDEPENDENT_FLAG,
             hidden_dim=config.BIAS_GENERATOR_STACK_HIDDEN_DIM,
             layer_norm_position=config.BIAS_GENERATOR_STACK_LAYER_NORM_POSITION,
+            normalization=config.BIAS_GENERATOR_STACK_NORMALIZATION,
             num_layers=config.BIAS_GENERATOR_STACK_NUM_LAYERS,
             activation=config.BIAS_GENERATOR_STACK_ACTIVATION,
             residual_connection_option=(
@@ -125,6 +131,7 @@ def diagonal_generator_stack_source(
             independent_flag=config.DIAGONAL_GENERATOR_STACK_INDEPENDENT_FLAG,
             hidden_dim=config.DIAGONAL_GENERATOR_STACK_HIDDEN_DIM,
             layer_norm_position=config.DIAGONAL_GENERATOR_STACK_LAYER_NORM_POSITION,
+            normalization=config.DIAGONAL_GENERATOR_STACK_NORMALIZATION,
             num_layers=config.DIAGONAL_GENERATOR_STACK_NUM_LAYERS,
             activation=config.DIAGONAL_GENERATOR_STACK_ACTIVATION,
             residual_connection_option=(
@@ -149,6 +156,7 @@ def mask_generator_stack_source(config: ModuleType) -> AdaptiveGeneratorStackSou
             independent_flag=config.MASK_GENERATOR_STACK_INDEPENDENT_FLAG,
             hidden_dim=config.MASK_GENERATOR_STACK_HIDDEN_DIM,
             layer_norm_position=config.MASK_GENERATOR_STACK_LAYER_NORM_POSITION,
+            normalization=config.MASK_GENERATOR_STACK_NORMALIZATION,
             num_layers=config.MASK_GENERATOR_STACK_NUM_LAYERS,
             activation=config.MASK_GENERATOR_STACK_ACTIVATION,
             residual_connection_option=(
@@ -175,6 +183,7 @@ def router_weight_generator_stack_source(
             layer_norm_position=(
                 config.ROUTER_WEIGHT_GENERATOR_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config.ROUTER_WEIGHT_GENERATOR_STACK_NORMALIZATION),
             num_layers=config.ROUTER_WEIGHT_GENERATOR_STACK_NUM_LAYERS,
             activation=config.ROUTER_WEIGHT_GENERATOR_STACK_ACTIVATION,
             residual_connection_option=(
@@ -207,6 +216,7 @@ def router_bias_generator_stack_source(
             layer_norm_position=(
                 config.ROUTER_BIAS_GENERATOR_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config.ROUTER_BIAS_GENERATOR_STACK_NORMALIZATION),
             num_layers=config.ROUTER_BIAS_GENERATOR_STACK_NUM_LAYERS,
             activation=config.ROUTER_BIAS_GENERATOR_STACK_ACTIVATION,
             residual_connection_option=(
@@ -239,6 +249,7 @@ def router_diagonal_generator_stack_source(
             layer_norm_position=(
                 config.ROUTER_DIAGONAL_GENERATOR_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config.ROUTER_DIAGONAL_GENERATOR_STACK_NORMALIZATION),
             num_layers=config.ROUTER_DIAGONAL_GENERATOR_STACK_NUM_LAYERS,
             activation=config.ROUTER_DIAGONAL_GENERATOR_STACK_ACTIVATION,
             residual_connection_option=(
@@ -271,6 +282,7 @@ def router_mask_generator_stack_source(
             layer_norm_position=(
                 config.ROUTER_MASK_GENERATOR_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config.ROUTER_MASK_GENERATOR_STACK_NORMALIZATION),
             num_layers=config.ROUTER_MASK_GENERATOR_STACK_NUM_LAYERS,
             activation=config.ROUTER_MASK_GENERATOR_STACK_ACTIVATION,
             residual_connection_option=(

@@ -224,6 +224,7 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
             hidden_dim=feed_forward_stack_options.hidden_dim,
             bias_flag=feed_forward_stack_options.bias_flag,
             layer_norm_position=feed_forward_stack_options.layer_norm_position,
+            normalization=feed_forward_stack_options.normalization,
             num_layers=feed_forward_stack_options.num_layers,
             activation=feed_forward_stack_options.activation,
             residual_connection_option=(
@@ -243,6 +244,7 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
             hidden_dim=self.hidden_dim,
             bias_flag=self.feed_forward_options.bias_flag,
             layer_norm_position=self.decoder_options.layer_norm_position,
+            normalization=self.decoder_options.normalization,
             num_layers=self.feed_forward_options.num_layers,
             activation=self.decoder_options.activation,
             residual_connection_option=None,
