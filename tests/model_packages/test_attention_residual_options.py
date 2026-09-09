@@ -18,7 +18,7 @@ from models.catalog import discover_model_packages, model_package
 
 PACKAGES = tuple(
     package.catalog_key for package in discover_model_packages()
-    if package.identity.model_type in ('linears', 'transformer', 'bert')
+    if package.identity.model_type in ('linears', 'transformer', 'bert', 'gpt')
 )
 SETTINGS = (("RESIDUAL_BLOCK_SIZE", int, 3), ("RESIDUAL_RMS_NORM_EPSILON", float, 2e-5))
 
