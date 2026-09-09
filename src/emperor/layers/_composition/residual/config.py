@@ -78,6 +78,15 @@ class AttentionResidualConfig(ResidualConfig):
         "to 1e-6."
     )
 
+    model_config: "LayerStackConfig | LinearLayerConfig | None" = optional_field(
+        "Optional input-dependent query model. Receives the current raw "
+        "transformation output and returns a query with the same shape; input "
+        "and output feature dimensions are set to residual_dim. When omitted, "
+        "a zero-initialized learned query vector is used. The query model retains "
+        "its own parameter initialization."
+    )
+
+
     def _registry_owner(self) -> type:
         from emperor.layers._composition.residual.variants.attention import (
             AttentionResidual,

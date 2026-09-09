@@ -36,6 +36,7 @@ class TestLayerStack(unittest.TestCase):
         scales: tuple[float, ...],
         *,
         block_size: int = 1,
+        query_model_config: LayerStackConfig | LinearLayerConfig | None = None,
     ) -> LayerStack:
         dim = 2
         stack = LayerStack(
@@ -54,6 +55,7 @@ class TestLayerStack(unittest.TestCase):
                     residual_config=AttentionResidualConfig(
                         block_size=block_size,
                         rms_norm_epsilon=1e-6,
+                        model_config=query_model_config,
                     ),
                     dropout_probability=0.0,
                     layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -69,6 +71,71 @@ class TestLayerStack(unittest.TestCase):
                 layer.model.weight_params.copy_(torch.eye(dim) * scale)
                 layer.model.bias_params.zero_()
         return stack
+
+    def test_attention_residual_stack_generates_distinct_queries_at_each_depth(self):
+        for block_size in (1, 2):
+            with self.subTest(block_size=block_size):
+                scales = (0.75, 1.25, -0.5)
+                stack = self.attention_residual_stack(
+                    scales,
+                    block_size=block_size,
+                    query_model_config=LinearLayerConfig(bias_flag=True),
+                ).double()
+                with torch.no_grad():
+                    for depth, layer in enumerate(stack, start=1):
+                        query_model = layer.residual.connection.query_model
+                        query_model.weight_params.copy_(
+                            torch.tensor([[0.3, -0.2], [0.1, 0.4]]) * depth
+                        )
+                        query_model.bias_params.copy_(torch.tensor([0.1, -0.15]))
+                self.assertEqual(
+                    len({id(layer.residual.connection.query_model) for layer in stack}),
+                    len(scales),
+                )
+                initial = torch.tensor(
+                    [[[0.2, -0.3], [0.1, 0.4]], [[-0.5, 0.2], [0.6, -0.1]]],
+                    dtype=torch.float64,
+                    requires_grad=True,
+                )
+                expected = initial
+                raw_outputs = []
+                for layer, scale in zip(stack, scales, strict=True):
+                    current = expected * scale
+                    raw_outputs.append(current)
+                    sources = [initial]
+                    for start in range(0, len(raw_outputs), block_size):
+                        sources.append(
+                            torch.stack(raw_outputs[start : start + block_size]).sum(0)
+                        )
+                    values = torch.stack(sources, dim=-2)
+                    connection = layer.residual.connection
+                    query = (
+                        current @ connection.query_model.weight_params
+                        + connection.query_model.bias_params
+                    )
+                    keys = (
+                        values * (values.square().mean(-1, keepdim=True) + 1e-6).rsqrt()
+                    )
+                    keys = keys * connection.key_norm.weight
+                    scores = torch.einsum("...sd,...d->...s", keys, query)
+                    expected = torch.einsum(
+                        "...s,...sd->...d", scores.softmax(-1), values
+                    )
+
+                outer_state = LayerState(hidden=initial)
+                actual = stack(outer_state)
+                torch.testing.assert_close(
+                    actual.hidden, expected, rtol=1e-10, atol=1e-11
+                )
+                self.assertIsNone(actual.residual_state)
+                actual.hidden.square().sum().backward()
+                for layer in stack:
+                    self.assertIsNone(layer.residual.connection.query)
+                    for parameter in layer.residual.connection.query_model.parameters():
+                        self.assertIsNotNone(parameter.grad)
+                        self.assertGreater(
+                            torch.count_nonzero(parameter.grad).item(), 0
+                        )
 
     def test_attention_residual_stack_mixes_raw_outputs_across_depth(self):
         scales = (2.0, 3.0, 4.0)

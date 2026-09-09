@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
 
 class AttentionResidualValidator(ResidualConnectionValidator):
-    OPTIONAL_FIELDS = {"block_size", "rms_norm_epsilon"}
+    OPTIONAL_FIELDS = {"model_config", "block_size", "rms_norm_epsilon"}
 
     @staticmethod
     def validate_state_lifecycle(connection: ResidualConnectionAbstract) -> None:
@@ -57,9 +57,73 @@ class AttentionResidualValidator(ResidualConnectionValidator):
                 config.rms_norm_epsilon,
                 name="rms_norm_epsilon",
             )
+        cls.__validate_query_model_config(config)
 
+    @classmethod
+    def __validate_query_model_config(cls, config: object) -> None:
+        model_config = config.model_config
+        if model_config is None:
+            return
+        from emperor.layers import LayerConfig, LayerStackConfig
+        from emperor.linears import LinearLayerConfig
 
+        if isinstance(model_config, LinearLayerConfig):
+            return
+        if not isinstance(model_config, LayerStackConfig):
+            raise TypeError(
+                "AttentionResidualConfig.model_config must be a LayerStackConfig "
+                "or LinearLayerConfig when provided, "
+                f"got {type(model_config).__name__}."
+            )
+        layer_config = model_config.layer_config
+        if type(layer_config) is not LayerConfig:
+            raise TypeError(
+                "AttentionResidualConfig.model_config.layer_config must be "
+                f"exactly LayerConfig, got {type(layer_config).__name__}."
+            )
+        if not isinstance(layer_config.layer_model_config, LinearLayerConfig):
+            raise TypeError(
+                "AttentionResidualConfig.model_config.layer_config."
+                "layer_model_config must be LinearLayerConfig, "
+                f"got {type(layer_config.layer_model_config).__name__}."
+            )
+        cls.__validate_query_model_controllers(model_config, layer_config)
 
+    @staticmethod
+    def __validate_query_model_controllers(
+        model_config: object, layer_config: object
+    ) -> None:
+        nested_configs = {
+            "layer_config.gate_config": layer_config.gate_config,
+            "layer_config.halting_config": layer_config.halting_config,
+            "layer_config.memory_config": layer_config.memory_config,
+            "shared_gate_config": model_config.shared_gate_config,
+            "shared_halting_config": model_config.shared_halting_config,
+            "shared_memory_config": model_config.shared_memory_config,
+        }
+        for path, nested_config in nested_configs.items():
+            if nested_config is not None:
+                raise ValueError(
+                    f"AttentionResidualConfig.model_config.{path} must be None "
+                    "for a residual query model."
+                )
+
+    @staticmethod
+    def validate_query_model_output(query: object, current: Tensor) -> None:
+        if not isinstance(query, Tensor) or not torch.is_floating_point(query):
+            raise TypeError(
+                "attention residual query model must return a floating-point tensor."
+            )
+        if query.shape != current.shape:
+            raise ValueError(
+                "attention residual query model output must have shape "
+                f"{tuple(current.shape)}, got {tuple(query.shape)}."
+            )
+        if query.device != current.device:
+            raise ValueError(
+                "attention residual query model output must be on device "
+                f"{current.device}, got {query.device}."
+            )
 
     @staticmethod
     def validate_stack_config(config: LayerStackConfig) -> None:
