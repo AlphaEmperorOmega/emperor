@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import cast
 
 import models.experts.linear_adaptive.config as config
@@ -18,6 +18,7 @@ from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from models.experts.linear_adaptive._projection_config_factory import (
@@ -51,6 +52,9 @@ class AdaptiveDefaultValues:
     )
     weight_generator_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.WEIGHT_GENERATOR_STACK_LAYER_NORM_POSITION
+    )
+    weight_generator_stack_normalization: NormalizationOptions | None = field(
+        default=(config.WEIGHT_GENERATOR_STACK_NORMALIZATION), kw_only=True
     )
     weight_generator_stack_num_layers: int | None = (
         config.WEIGHT_GENERATOR_STACK_NUM_LAYERS
@@ -101,6 +105,9 @@ class AdaptiveDefaultValues:
     bias_generator_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.BIAS_GENERATOR_STACK_LAYER_NORM_POSITION
     )
+    bias_generator_stack_normalization: NormalizationOptions | None = field(
+        default=(config.BIAS_GENERATOR_STACK_NORMALIZATION), kw_only=True
+    )
     bias_generator_stack_num_layers: int | None = config.BIAS_GENERATOR_STACK_NUM_LAYERS
     bias_generator_stack_activation: ActivationOptions | None = (
         config.BIAS_GENERATOR_STACK_ACTIVATION
@@ -129,6 +136,9 @@ class AdaptiveDefaultValues:
     )
     diagonal_generator_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.DIAGONAL_GENERATOR_STACK_LAYER_NORM_POSITION
+    )
+    diagonal_generator_stack_normalization: NormalizationOptions | None = field(
+        default=(config.DIAGONAL_GENERATOR_STACK_NORMALIZATION), kw_only=True
     )
     diagonal_generator_stack_num_layers: int | None = (
         config.DIAGONAL_GENERATOR_STACK_NUM_LAYERS
@@ -167,6 +177,9 @@ class AdaptiveDefaultValues:
     mask_generator_stack_hidden_dim: int | None = config.MASK_GENERATOR_STACK_HIDDEN_DIM
     mask_generator_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.MASK_GENERATOR_STACK_LAYER_NORM_POSITION
+    )
+    mask_generator_stack_normalization: NormalizationOptions | None = field(
+        default=(config.MASK_GENERATOR_STACK_NORMALIZATION), kw_only=True
     )
     mask_generator_stack_num_layers: int | None = config.MASK_GENERATOR_STACK_NUM_LAYERS
     mask_generator_stack_activation: ActivationOptions | None = (
@@ -208,6 +221,9 @@ class AdaptiveDefaultValues:
     )
     adaptive_generator_stack_layer_norm_position: LayerNormPositionOptions = (
         config.ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION
+    )
+    adaptive_generator_stack_normalization: NormalizationOptions = field(
+        default=(config.ADAPTIVE_GENERATOR_STACK_NORMALIZATION), kw_only=True
     )
     adaptive_generator_stack_last_layer_bias_option: LastLayerBiasOptions = (
         config.ADAPTIVE_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION
@@ -336,6 +352,9 @@ class AdaptiveDefaultValues:
     router_weight_generator_stack_layer_norm_position: (
         LayerNormPositionOptions | None
     ) = config.ROUTER_WEIGHT_GENERATOR_STACK_LAYER_NORM_POSITION
+    router_weight_generator_stack_normalization: NormalizationOptions | None = field(
+        default=config.ROUTER_WEIGHT_GENERATOR_STACK_NORMALIZATION, kw_only=True
+    )
     router_weight_generator_stack_num_layers: int | None = (
         config.ROUTER_WEIGHT_GENERATOR_STACK_NUM_LAYERS
     )
@@ -379,6 +398,9 @@ class AdaptiveDefaultValues:
     router_bias_generator_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.ROUTER_BIAS_GENERATOR_STACK_LAYER_NORM_POSITION
     )
+    router_bias_generator_stack_normalization: NormalizationOptions | None = field(
+        default=(config.ROUTER_BIAS_GENERATOR_STACK_NORMALIZATION), kw_only=True
+    )
     router_bias_generator_stack_num_layers: int | None = (
         config.ROUTER_BIAS_GENERATOR_STACK_NUM_LAYERS
     )
@@ -416,6 +438,9 @@ class AdaptiveDefaultValues:
     router_diagonal_generator_stack_layer_norm_position: (
         LayerNormPositionOptions | None
     ) = config.ROUTER_DIAGONAL_GENERATOR_STACK_LAYER_NORM_POSITION
+    router_diagonal_generator_stack_normalization: NormalizationOptions | None = field(
+        default=config.ROUTER_DIAGONAL_GENERATOR_STACK_NORMALIZATION, kw_only=True
+    )
     router_diagonal_generator_stack_num_layers: int | None = (
         config.ROUTER_DIAGONAL_GENERATOR_STACK_NUM_LAYERS
     )
@@ -457,6 +482,9 @@ class AdaptiveDefaultValues:
     )
     router_mask_generator_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.ROUTER_MASK_GENERATOR_STACK_LAYER_NORM_POSITION
+    )
+    router_mask_generator_stack_normalization: NormalizationOptions | None = field(
+        default=(config.ROUTER_MASK_GENERATOR_STACK_NORMALIZATION), kw_only=True
     )
     router_mask_generator_stack_num_layers: int | None = (
         config.ROUTER_MASK_GENERATOR_STACK_NUM_LAYERS
@@ -539,6 +567,7 @@ class _GeneratorStackSourceValues:
     independent_flag: bool
     hidden_dim: int | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     num_layers: int | None
     activation: ActivationOptions | None
     residual_connection_option: type[ResidualConfig] | None
@@ -624,6 +653,7 @@ def _generator_stack_source(
         independent_flag=values.independent_flag,
         hidden_dim=values.hidden_dim,
         layer_norm_position=values.layer_norm_position,
+        normalization=values.normalization,
         num_layers=values.num_layers,
         activation=values.activation,
         residual_connection_option=values.residual_connection_option,
@@ -730,6 +760,7 @@ def _adaptive_generator_defaults(
         return AdaptiveGeneratorStackOptions(
             hidden_dim=values.adaptive_generator_stack_hidden_dim,
             layer_norm_position=values.adaptive_generator_stack_layer_norm_position,
+            normalization=values.adaptive_generator_stack_normalization,
             num_layers=values.adaptive_generator_stack_num_layers,
             activation=values.adaptive_generator_stack_activation,
             residual_connection_option=(
@@ -750,6 +781,7 @@ def _adaptive_generator_defaults(
     return AdaptiveGeneratorStackOptions(
         hidden_dim=provided.hidden_dim,
         layer_norm_position=provided.layer_norm_position,
+        normalization=provided.normalization,
         num_layers=provided.num_layers,
         activation=provided.activation,
         residual_connection_option=provided.residual_connection_option,
@@ -800,6 +832,7 @@ def _hidden_adaptive_defaults(
                     layer_norm_position=(
                         values.weight_generator_stack_layer_norm_position
                     ),
+                    normalization=(values.weight_generator_stack_normalization),
                     num_layers=values.weight_generator_stack_num_layers,
                     activation=values.weight_generator_stack_activation,
                     residual_connection_option=(
@@ -837,6 +870,7 @@ def _hidden_adaptive_defaults(
                     independent_flag=values.bias_generator_stack_independent_flag,
                     hidden_dim=values.bias_generator_stack_hidden_dim,
                     layer_norm_position=values.bias_generator_stack_layer_norm_position,
+                    normalization=values.bias_generator_stack_normalization,
                     num_layers=values.bias_generator_stack_num_layers,
                     activation=values.bias_generator_stack_activation,
                     residual_connection_option=(
@@ -872,6 +906,7 @@ def _hidden_adaptive_defaults(
                         layer_norm_position=(
                             values.diagonal_generator_stack_layer_norm_position
                         ),
+                        normalization=(values.diagonal_generator_stack_normalization),
                         num_layers=values.diagonal_generator_stack_num_layers,
                         activation=values.diagonal_generator_stack_activation,
                         residual_connection_option=(
@@ -911,6 +946,7 @@ def _hidden_adaptive_defaults(
                     independent_flag=values.mask_generator_stack_independent_flag,
                     hidden_dim=values.mask_generator_stack_hidden_dim,
                     layer_norm_position=values.mask_generator_stack_layer_norm_position,
+                    normalization=values.mask_generator_stack_normalization,
                     num_layers=values.mask_generator_stack_num_layers,
                     activation=values.mask_generator_stack_activation,
                     residual_connection_option=(
@@ -1044,6 +1080,7 @@ def _router_adaptive_defaults(
                     layer_norm_position=(
                         values.router_weight_generator_stack_layer_norm_position
                     ),
+                    normalization=(values.router_weight_generator_stack_normalization),
                     num_layers=values.router_weight_generator_stack_num_layers,
                     activation=values.router_weight_generator_stack_activation,
                     residual_connection_option=(
@@ -1085,6 +1122,7 @@ def _router_adaptive_defaults(
                     layer_norm_position=(
                         values.router_bias_generator_stack_layer_norm_position
                     ),
+                    normalization=(values.router_bias_generator_stack_normalization),
                     num_layers=values.router_bias_generator_stack_num_layers,
                     activation=values.router_bias_generator_stack_activation,
                     residual_connection_option=(
@@ -1123,6 +1161,9 @@ def _router_adaptive_defaults(
                         hidden_dim=values.router_diagonal_generator_stack_hidden_dim,
                         layer_norm_position=(
                             values.router_diagonal_generator_stack_layer_norm_position
+                        ),
+                        normalization=(
+                            values.router_diagonal_generator_stack_normalization
                         ),
                         num_layers=values.router_diagonal_generator_stack_num_layers,
                         activation=values.router_diagonal_generator_stack_activation,
@@ -1165,6 +1206,7 @@ def _router_adaptive_defaults(
                     layer_norm_position=(
                         values.router_mask_generator_stack_layer_norm_position
                     ),
+                    normalization=(values.router_mask_generator_stack_normalization),
                     num_layers=values.router_mask_generator_stack_num_layers,
                     activation=values.router_mask_generator_stack_activation,
                     residual_connection_option=(

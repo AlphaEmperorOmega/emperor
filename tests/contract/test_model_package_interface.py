@@ -51,14 +51,14 @@ _ORDERING_DIGEST_BY_PACKAGE = {
         40,
     ),
     "experts/linear": (
-        "4c0b454f615e9053c21b21b138062bce9006c54be3ee1ab9976e512cd6b0762b",
-        270,
-        6,
+        "7a63485a775991bde435a97fe7ace7ded5023c31a437edeba1e69ef71032ee65",
+        287,
+        7,
     ),
     "experts/linear_adaptive": (
-        "601678a78315af663f05c50c3acde5bea87de923013703fcc4841c2e4a929c86",
-        828,
-        35,
+        "e78713ab982fd82f450e8a0e833fc8f25af991d96db52019d11f1d766cbc3cf5",
+        880,
+        37,
     ),
     "gpt/linear": (
         "0bc262594db8cc2ef56d01b34e50708bf72628459cd75c063a155cb358ce9802",

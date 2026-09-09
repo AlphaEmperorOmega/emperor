@@ -27,7 +27,11 @@ from emperor.augmentations.adaptive_parameters import (
     WeightNormalizationOptions,
     WeightNormalizationPositionOptions,
 )
-from emperor.layers import ActivationOptions, LayerNormPositionOptions
+from emperor.layers import (
+    ActivationOptions,
+    LayerNormPositionOptions,
+    NormalizationOptions,
+)
 
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
 
@@ -43,6 +47,7 @@ SEARCH_SPACE_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
 ]
+SEARCH_SPACE_NORMALIZATION: list = list(NormalizationOptions)
 
 
 SEARCH_SPACE_STACK_ACTIVATION: list = [
@@ -182,6 +187,7 @@ SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
 ]
+SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_NORMALIZATION: list = list(NormalizationOptions)
 
 SEARCH_SPACE_ROUTER_WEIGHT_OPTION: list = SEARCH_SPACE_WEIGHT_OPTION
 
