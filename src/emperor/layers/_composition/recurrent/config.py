@@ -13,6 +13,7 @@ if TYPE_CHECKING:
     from emperor.layers._composition.residual.config import ResidualConfig
     from emperor.layers._config import GateConfig
     from emperor.memory import DynamicMemoryConfig
+    from emperor.sampler import TokenSamplerConfig
 
 
 @dataclass
@@ -141,6 +142,29 @@ class RecurrentLayerConfig(RecurrentCompositionConfig):
         )
 
         return RecurrentLayer
+
+
+@dataclass
+class InnerThinkingRecurrentConfig(RecurrentLayerConfig):
+    """Token-selective recurrence with a full first pass and masked updates."""
+
+    sampler_config: TokenSamplerConfig | None = optional_field(
+        "Token sampler selecting and weighting positions for each pass after the "
+        "first. Each extra step builds an independent sampler from this config. "
+        "Inputs use [..., tokens, features]; blocks must accept variable token "
+        "counts. max_steps includes the initial all-token pass."
+    )
+    thinking_step_scale: float | None = optional_field(
+        "Non-negative scale of each selected residual update, before learned "
+        "router and per-feature thinking-step weights. None uses 1.0."
+    )
+
+    def _registry_owner(self) -> type:
+        from emperor.layers._composition.recurrent.variants.inner_thinking import (
+            InnerThinkingRecurrent,
+        )
+
+        return InnerThinkingRecurrent
 
 
 @dataclass
