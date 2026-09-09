@@ -1,5 +1,5 @@
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from types import MappingProxyType, ModuleType
 
@@ -7,6 +7,7 @@ from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from models.vit.expert_linear_adaptive.runtime_options import (
@@ -50,6 +51,7 @@ class MainControllerStackDefaults:
     apply_output_postprocessing_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     dropout_probability: float | None
@@ -73,6 +75,7 @@ _STACK_OPTIONS_FACTORIES: Mapping[ExpertStackRole, _StackOptionsFactory] = (
                 apply_output_postprocessing_flag=config.SUBMODULE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
                 activation=config.SUBMODULE_STACK_ACTIVATION,
                 layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
+                normalization=config.SUBMODULE_STACK_NORMALIZATION,
                 residual_connection_option=config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
                 residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
                 dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
@@ -85,6 +88,7 @@ _STACK_OPTIONS_FACTORIES: Mapping[ExpertStackRole, _StackOptionsFactory] = (
                 apply_output_postprocessing_flag=config.EXPERT_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
                 activation=config.EXPERT_STACK_ACTIVATION,
                 layer_norm_position=config.EXPERT_STACK_LAYER_NORM_POSITION,
+                normalization=config.EXPERT_STACK_NORMALIZATION,
                 residual_connection_option=config.EXPERT_STACK_RESIDUAL_CONNECTION_OPTION,
                 residual_model_flag=config.EXPERT_STACK_RESIDUAL_MODEL_FLAG,
                 dropout_probability=config.EXPERT_STACK_DROPOUT_PROBABILITY,
@@ -97,6 +101,7 @@ _STACK_OPTIONS_FACTORIES: Mapping[ExpertStackRole, _StackOptionsFactory] = (
                 apply_output_postprocessing_flag=config.ROUTER_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
                 activation=config.ROUTER_STACK_ACTIVATION,
                 layer_norm_position=config.ROUTER_STACK_LAYER_NORM_POSITION,
+                normalization=config.ROUTER_STACK_NORMALIZATION,
                 residual_connection_option=config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
                 residual_model_flag=config.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
                 dropout_probability=config.ROUTER_STACK_DROPOUT_PROBABILITY,
@@ -126,6 +131,7 @@ def main_controller_stack_defaults(
             apply_output_postprocessing_flag=config.GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.GATE_STACK_ACTIVATION,
             layer_norm_position=config.GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.GATE_STACK_NORMALIZATION,
             residual_connection_option=config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.GATE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.GATE_STACK_DROPOUT_PROBABILITY,
@@ -140,6 +146,7 @@ def main_controller_stack_defaults(
             apply_output_postprocessing_flag=config.HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.HALTING_STACK_ACTIVATION,
             layer_norm_position=config.HALTING_STACK_LAYER_NORM_POSITION,
+            normalization=config.HALTING_STACK_NORMALIZATION,
             residual_connection_option=config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.HALTING_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.HALTING_STACK_DROPOUT_PROBABILITY,
@@ -154,6 +161,7 @@ def main_controller_stack_defaults(
             apply_output_postprocessing_flag=config.MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.MEMORY_STACK_ACTIVATION,
             layer_norm_position=config.MEMORY_STACK_LAYER_NORM_POSITION,
+            normalization=config.MEMORY_STACK_NORMALIZATION,
             residual_connection_option=config.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.MEMORY_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.MEMORY_STACK_DROPOUT_PROBABILITY,
@@ -168,6 +176,7 @@ def main_controller_stack_defaults(
             apply_output_postprocessing_flag=config.RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.RECURRENT_GATE_STACK_NORMALIZATION,
             residual_connection_option=config.RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
@@ -181,6 +190,7 @@ def main_controller_stack_defaults(
         apply_output_postprocessing_flag=config.RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+        normalization=config.RECURRENT_HALTING_STACK_NORMALIZATION,
         residual_connection_option=config.RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config.RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
@@ -199,6 +209,7 @@ def _experts_submodule_stack_source(
         apply_output_postprocessing_flag=defaults.apply_output_postprocessing_flag,
         activation=defaults.activation,
         layer_norm_position=defaults.layer_norm_position,
+        normalization=defaults.normalization,
         residual_connection_option=defaults.residual_connection_option,
         residual_model_flag=defaults.residual_model_flag,
         dropout_probability=defaults.dropout_probability,
@@ -221,6 +232,7 @@ _STACK_SOURCE_FACTORIES: Mapping[
             apply_output_postprocessing_flag=config.EXPERT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.EXPERT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.EXPERT_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.EXPERT_GATE_STACK_NORMALIZATION,
             residual_connection_option=config.EXPERT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.EXPERT_GATE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.EXPERT_GATE_STACK_DROPOUT_PROBABILITY,
@@ -237,6 +249,7 @@ _STACK_SOURCE_FACTORIES: Mapping[
             apply_output_postprocessing_flag=config.EXPERT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.EXPERT_HALTING_STACK_ACTIVATION,
             layer_norm_position=config.EXPERT_HALTING_STACK_LAYER_NORM_POSITION,
+            normalization=config.EXPERT_HALTING_STACK_NORMALIZATION,
             residual_connection_option=config.EXPERT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.EXPERT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.EXPERT_HALTING_STACK_DROPOUT_PROBABILITY,
@@ -253,6 +266,7 @@ _STACK_SOURCE_FACTORIES: Mapping[
             apply_output_postprocessing_flag=config.EXPERT_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.EXPERT_MEMORY_STACK_ACTIVATION,
             layer_norm_position=config.EXPERT_MEMORY_STACK_LAYER_NORM_POSITION,
+            normalization=config.EXPERT_MEMORY_STACK_NORMALIZATION,
             residual_connection_option=config.EXPERT_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.EXPERT_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.EXPERT_MEMORY_STACK_DROPOUT_PROBABILITY,
@@ -269,6 +283,7 @@ _STACK_SOURCE_FACTORIES: Mapping[
             apply_output_postprocessing_flag=config.EXPERT_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.EXPERT_RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.EXPERT_RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.EXPERT_RECURRENT_GATE_STACK_NORMALIZATION,
             residual_connection_option=config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.EXPERT_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
@@ -285,6 +300,7 @@ _STACK_SOURCE_FACTORIES: Mapping[
             apply_output_postprocessing_flag=config.EXPERT_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.EXPERT_RECURRENT_HALTING_STACK_ACTIVATION,
             layer_norm_position=config.EXPERT_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+            normalization=config.EXPERT_RECURRENT_HALTING_STACK_NORMALIZATION,
             residual_connection_option=config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.EXPERT_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
@@ -301,6 +317,7 @@ _STACK_SOURCE_FACTORIES: Mapping[
             apply_output_postprocessing_flag=config.ROUTER_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.ROUTER_GATE_STACK_ACTIVATION,
             layer_norm_position=config.ROUTER_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.ROUTER_GATE_STACK_NORMALIZATION,
             residual_connection_option=config.ROUTER_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.ROUTER_GATE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ROUTER_GATE_STACK_DROPOUT_PROBABILITY,
@@ -317,6 +334,7 @@ _STACK_SOURCE_FACTORIES: Mapping[
             apply_output_postprocessing_flag=config.ROUTER_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.ROUTER_HALTING_STACK_ACTIVATION,
             layer_norm_position=config.ROUTER_HALTING_STACK_LAYER_NORM_POSITION,
+            normalization=config.ROUTER_HALTING_STACK_NORMALIZATION,
             residual_connection_option=config.ROUTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.ROUTER_HALTING_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ROUTER_HALTING_STACK_DROPOUT_PROBABILITY,
@@ -333,6 +351,7 @@ _STACK_SOURCE_FACTORIES: Mapping[
             apply_output_postprocessing_flag=config.ROUTER_MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.ROUTER_MEMORY_STACK_ACTIVATION,
             layer_norm_position=config.ROUTER_MEMORY_STACK_LAYER_NORM_POSITION,
+            normalization=config.ROUTER_MEMORY_STACK_NORMALIZATION,
             residual_connection_option=config.ROUTER_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.ROUTER_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ROUTER_MEMORY_STACK_DROPOUT_PROBABILITY,
@@ -349,6 +368,7 @@ _STACK_SOURCE_FACTORIES: Mapping[
             apply_output_postprocessing_flag=config.ROUTER_RECURRENT_GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.ROUTER_RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.ROUTER_RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.ROUTER_RECURRENT_GATE_STACK_NORMALIZATION,
             residual_connection_option=config.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ROUTER_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
@@ -365,6 +385,7 @@ _STACK_SOURCE_FACTORIES: Mapping[
             apply_output_postprocessing_flag=config.ROUTER_RECURRENT_HALTING_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.ROUTER_RECURRENT_HALTING_STACK_ACTIVATION,
             layer_norm_position=config.ROUTER_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+            normalization=config.ROUTER_RECURRENT_HALTING_STACK_NORMALIZATION,
             residual_connection_option=config.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ROUTER_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
@@ -510,6 +531,7 @@ _RECURRENT_CONTROLLER_FACTORIES: Mapping[
             recurrent_iteration_increment=config.RECURRENT_ITERATION_INCREMENT,
             recurrent_forward_calls_before_iteration_increment=config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT,
             recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
+            recurrent_normalization=config.RECURRENT_NORMALIZATION,
             recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.RECURRENT_GATE_OPTION,
             recurrent_gate_activation=config.RECURRENT_GATE_ACTIVATION,
@@ -536,6 +558,7 @@ _RECURRENT_CONTROLLER_FACTORIES: Mapping[
             recurrent_iteration_increment=1,
             recurrent_forward_calls_before_iteration_increment=1,
             recurrent_layer_norm_position=config.EXPERT_RECURRENT_LAYER_NORM_POSITION,
+            recurrent_normalization=config.EXPERT_RECURRENT_NORMALIZATION,
             recurrent_stack_gate_flag=config.EXPERT_RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.EXPERT_RECURRENT_GATE_OPTION,
             recurrent_gate_activation=config.EXPERT_RECURRENT_GATE_ACTIVATION,
@@ -562,6 +585,7 @@ _RECURRENT_CONTROLLER_FACTORIES: Mapping[
             recurrent_iteration_increment=1,
             recurrent_forward_calls_before_iteration_increment=1,
             recurrent_layer_norm_position=config.ROUTER_RECURRENT_LAYER_NORM_POSITION,
+            recurrent_normalization=config.ROUTER_RECURRENT_NORMALIZATION,
             recurrent_stack_gate_flag=config.ROUTER_RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.ROUTER_RECURRENT_GATE_OPTION,
             recurrent_gate_activation=config.ROUTER_RECURRENT_GATE_ACTIVATION,

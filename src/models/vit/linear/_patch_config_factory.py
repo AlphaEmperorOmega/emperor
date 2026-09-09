@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 import models.vit.linear.config as config
-from emperor.layers import LayerNormPositionOptions
+from emperor.layers import LayerNormPositionOptions, NormalizationOptions
 from emperor.patch import LinearPatchEmbeddingConfig
 from models.vit.linear import _config_defaults as config_defaults
 from models.vit.linear._linear_layer_config_factory import (
@@ -63,6 +63,7 @@ class PatchConfigFactory:
                 num_layers=1,
                 bias_flag=options.bias_flag,
                 layer_norm_position=LayerNormPositionOptions.DISABLED,
+                normalization=NormalizationOptions.RMS_NORM,
                 dropout_probability=self.encoder_options.dropout_probability,
                 apply_output_postprocessing_flag=False,
             )
