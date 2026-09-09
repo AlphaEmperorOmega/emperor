@@ -13,8 +13,6 @@ from emperor.layers._composition.residual.pairwise import (
 
 
 class WeightedBlendResidual(WeightedPairwiseResidualAbstract):
-    DEFAULT_INITIAL_ALPHA = 0.9
-
     def __init__(
         self,
         cfg: WeightedBlendResidualConfig,
@@ -24,7 +22,7 @@ class WeightedBlendResidual(WeightedPairwiseResidualAbstract):
 
     @staticmethod
     def _initial_raw_mix_coefficient() -> Tensor:
-        initial_alpha = WeightedBlendResidual.DEFAULT_INITIAL_ALPHA
+        initial_alpha = 0.9
         initial_logit = math.log(initial_alpha / (1.0 - initial_alpha))
         return torch.tensor(initial_logit)
 
@@ -36,8 +34,8 @@ class WeightedBlendResidual(WeightedPairwiseResidualAbstract):
         residual_state: ResidualState | None = None,
     ) -> Tensor:
         raw_mix_coefficient = self._resolve_raw_mix_coefficient(current, previous)
-        current_blend_coefficient = torch.sigmoid(raw_mix_coefficient)
-        previous_blend_coefficient = 1.0 - current_blend_coefficient
-        current_blend_contribution = current_blend_coefficient * current
-        previous_blend_contribution = previous_blend_coefficient * previous
-        return current_blend_contribution + previous_blend_contribution
+        current_coefficient = torch.sigmoid(raw_mix_coefficient)
+        previous_coefficient = 1.0 - current_coefficient
+        current_contribution = current_coefficient * current
+        previous_contribution = previous_coefficient * previous
+        return current_contribution + previous_contribution
