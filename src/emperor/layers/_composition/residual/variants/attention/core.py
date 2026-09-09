@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
@@ -13,7 +12,6 @@ from emperor.layers._composition.residual.base import (
     ResidualRuntimeRequirement,
     ResidualStackRequirements,
     ResidualState,
-    ResidualStateLifecycle,
 )
 from emperor.layers._composition.residual.config import AttentionResidualConfig
 from emperor.layers._composition.residual.validation import (
@@ -24,71 +22,8 @@ if TYPE_CHECKING:
     from emperor.layers._state import LayerState
 
 
-@dataclass(slots=True)
-class AttentionResidualState(ResidualState):
-    """Forward-local sources mixed once per physical residual-depth execution."""
-
-    VALIDATOR: ClassVar[type[ResidualConnectionValidator]] = ResidualConnectionValidator
-
-    initial_source: Tensor
-    block_size: int
-    _completed_blocks: list[Tensor] = field(
-        default_factory=list,
-        init=False,
-        repr=False,
-    )
-    _partial_block: Tensor | None = field(default=None, init=False, repr=False)
-    _partial_count: int = field(default=0, init=False, repr=False)
-
-    def __post_init__(self) -> None:
-        self.VALIDATOR.validate_positive_integer(
-            self.block_size,
-            name="block_size",
-        )
-
-    @property
-    def sources(self) -> tuple[Tensor, ...]:
-        partial_sources = () if self._partial_block is None else (self._partial_block,)
-        return (self.initial_source, *self._completed_blocks, *partial_sources)
-
-    def append(self, raw_output: Tensor) -> None:
-        self._partial_block = (
-            raw_output
-            if self._partial_block is None
-            else self._partial_block + raw_output
-        )
-        self._partial_count += 1
-        if self._partial_count == self.block_size:
-            self._completed_blocks.append(self._partial_block)
-            self._partial_block = None
-            self._partial_count = 0
-
-    def fork(self) -> AttentionResidualState:
-        forked = AttentionResidualState(
-            self.initial_source,
-            block_size=self.block_size,
-        )
-        forked._completed_blocks = list(self._completed_blocks)
-        forked._partial_block = self._partial_block
-        forked._partial_count = self._partial_count
-        return forked
-
-
-@dataclass(frozen=True, slots=True)
-class _AttentionResidualStateLifecycle(ResidualStateLifecycle):
-    residual_dim: int
-    block_size: int
-    validator: type[ResidualConnectionValidator]
-
-    def create_state(self, initial_source: Tensor) -> AttentionResidualState:
-        self.validator.validate_source(
-            initial_source,
-            residual_dim=self.residual_dim,
-        )
-        return AttentionResidualState(
-            initial_source,
-            block_size=self.block_size,
-        )
+from emperor.layers._composition.residual.variants.attention.state import AttentionResidualState
+from emperor.layers._composition.residual.variants.attention.lifecycle import AttentionResidualStateLifecycle
 
 
 class AttentionResidual(ResidualConnectionAbstract):
@@ -154,8 +89,8 @@ class AttentionResidual(ResidualConnectionAbstract):
 
     def __build_residual_state_lifecycle(
         self,
-    ) -> _AttentionResidualStateLifecycle:
-        return _AttentionResidualStateLifecycle(
+    ) -> AttentionResidualStateLifecycle:
+        return AttentionResidualStateLifecycle(
             residual_dim=self.residual_dim,
             block_size=self.block_size,
             validator=self.VALIDATOR,
