@@ -11,6 +11,8 @@ from emperor.layers._options import (
 )
 
 if TYPE_CHECKING:
+    from torch import nn
+
     from emperor.halting import HaltingConfig
     from emperor.layers._composition.residual.config import ResidualConfig
     from emperor.memory import DynamicMemoryConfig
@@ -78,6 +80,14 @@ class LayerConfig(ConfigBase):
         "DYISRU starts with beta=4, learned through softplus with a 1e-5 floor. "
         "Disable with layer_norm_position=DISABLED."
     )
+
+    def build_normalization(self) -> "nn.Module | None":
+        """Build the configured feature normalization without a wrapped layer."""
+        from emperor.layers._layer.pipeline.normalization import (
+            LayerNormalizationDelegate,
+        )
+
+        return LayerNormalizationDelegate(self).module
 
     def _registry_owner(self) -> type:
         from emperor.layers._layer import Layer
