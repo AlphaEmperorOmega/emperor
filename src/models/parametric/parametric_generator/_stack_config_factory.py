@@ -41,6 +41,8 @@ def build_linear_stack_config(
     activation: ActivationOptions,
     residual_connection_option: type[ResidualConfig],
     residual_model_flag: bool,
+    residual_block_size: int | None = None,
+    residual_rms_norm_epsilon: float | None = None,
     dropout_probability: float,
     apply_output_postprocessing_flag: bool,
 ) -> LayerStackConfig:
@@ -54,6 +56,8 @@ def build_linear_stack_config(
         residual_config=build_residual_config(
             residual_connection_option,
             residual_model_flag,
+            residual_block_size=residual_block_size,
+            residual_rms_norm_epsilon=residual_rms_norm_epsilon,
         ),
         dropout_probability=dropout_probability,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -87,6 +91,8 @@ def build_router_config(
         num_layers=1,
         activation=router_options.activation,
         residual_connection_option=None,
+        residual_block_size=None,
+        residual_rms_norm_epsilon=None,
         residual_model_flag=False,
         dropout_probability=0.0,
         apply_output_postprocessing_flag=False,

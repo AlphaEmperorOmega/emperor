@@ -16,10 +16,7 @@ from emperor.layers import (
 from model_runtime.inspection import configuration_schema
 from models.catalog import discover_model_packages, model_package
 
-PACKAGES = tuple(
-    package.catalog_key for package in discover_model_packages()
-    if package.identity.model_type in ('linears', 'transformer', 'bert', 'gpt', 'vit', 'experts', 'neuron', 'mlp_mixer')
-)
+PACKAGES = tuple(package.catalog_key for package in discover_model_packages())
 SETTINGS = (("RESIDUAL_BLOCK_SIZE", int, 3), ("RESIDUAL_RMS_NORM_EPSILON", float, 2e-5))
 
 
@@ -289,7 +286,6 @@ def test_model_residual_options_forward_update_and_checkpoint(
 ADDITIONAL_PLACEMENTS = tuple(
     (package.catalog_key, prefix)
     for package in discover_model_packages()
-    if package.catalog_key in PACKAGES
     for prefix in ("stack", "recurrent")
     if prefix != small_overrides(package)[0]
     and f"{prefix.upper()}_RESIDUAL_CONNECTION_OPTION"

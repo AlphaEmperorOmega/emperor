@@ -101,6 +101,10 @@ class _ParametricMatrixConfigBuilderImplementation:
         router_options: ParametricRouterOptions | None = None,
         residual_stack_options: ResidualStackOptions | None = None,
         *,
+        residual_stack_residual_block_size: int | None = None,
+        residual_stack_residual_rms_norm_epsilon: float | None = None,
+        stack_residual_block_size: int | None = None,
+        stack_residual_rms_norm_epsilon: float | None = None,
         residual_stack_normalization: NormalizationOptions | None = (
             config.RESIDUAL_STACK_NORMALIZATION
         ),
@@ -110,6 +114,8 @@ class _ParametricMatrixConfigBuilderImplementation:
             num_layers=stack_num_layers,
             activation=stack_activation,
             residual_connection_option=stack_residual_connection_option,
+            residual_block_size=stack_residual_block_size,
+            residual_rms_norm_epsilon=stack_residual_rms_norm_epsilon,
             residual_model_flag=stack_residual_model_flag,
             dropout_probability=stack_dropout_probability,
         )
@@ -126,6 +132,8 @@ class _ParametricMatrixConfigBuilderImplementation:
                     residual_connection_option=(
                         residual_stack_residual_connection_option
                     ),
+                    residual_block_size=residual_stack_residual_block_size,
+                    residual_rms_norm_epsilon=residual_stack_residual_rms_norm_epsilon,
                     residual_model_flag=(residual_stack_residual_model_flag),
                     dropout_probability=(residual_stack_dropout_probability),
                     last_layer_bias_option=(residual_stack_last_layer_bias_option),
@@ -168,6 +176,8 @@ class _ParametricMatrixConfigBuilderImplementation:
         self.stack_activation = stack_options.activation
         self.stack_residual_connection_option = stack_options.residual_connection_option
         self.stack_residual_model_flag = stack_options.residual_model_flag
+        self.stack_residual_block_size = stack_options.residual_block_size
+        self.stack_residual_rms_norm_epsilon = stack_options.residual_rms_norm_epsilon
         self.stack_dropout_probability = stack_options.dropout_probability
         self.residual_stack_options = residual_stack_options
         self.mixture_options = mixture_options
