@@ -72,6 +72,12 @@ class NeuronConfigBuilder:
         self.cluster_terminal_router_residual_model_flag = (
             terminal_router_options.residual_model_flag
         )
+        self.cluster_terminal_router_residual_block_size = (
+            terminal_router_options.residual_block_size
+        )
+        self.cluster_terminal_router_residual_rms_norm_epsilon = (
+            terminal_router_options.residual_rms_norm_epsilon
+        )
         self.cluster_terminal_router_dropout_probability = (
             terminal_router_options.dropout_probability
         )
@@ -137,6 +143,12 @@ class NeuronConfigBuilder:
         )
         self.cluster_halting_stack_residual_model_flag = (
             self.cluster_halting_stack_options.residual_model_flag
+        )
+        self.cluster_halting_stack_residual_block_size = (
+            self.cluster_halting_stack_options.residual_block_size
+        )
+        self.cluster_halting_stack_residual_rms_norm_epsilon = (
+            self.cluster_halting_stack_options.residual_rms_norm_epsilon
         )
         self.cluster_halting_stack_dropout_probability = (
             self.cluster_halting_stack_options.dropout_probability

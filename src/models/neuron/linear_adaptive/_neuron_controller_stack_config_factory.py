@@ -34,6 +34,8 @@ class NeuronControllerStackConfigFactory:
                 options.residual_connection_option,
                 options.residual_model_flag,
                 options.residual_stack_options,
+                residual_block_size=options.residual_block_size,
+                residual_rms_norm_epsilon=options.residual_rms_norm_epsilon,
             ),
             dropout_probability=options.dropout_probability,
             layer_norm_position=options.layer_norm_position,

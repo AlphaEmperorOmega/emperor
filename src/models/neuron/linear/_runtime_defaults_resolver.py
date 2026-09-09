@@ -53,6 +53,12 @@ _CLUSTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION_DEFAULT = (
 _CLUSTER_HALTING_STACK_RESIDUAL_MODEL_FLAG_DEFAULT = (
     config.CLUSTER_HALTING_STACK_RESIDUAL_MODEL_FLAG
 )
+_CLUSTER_HALTING_STACK_RESIDUAL_BLOCK_SIZE_DEFAULT = (
+    config.CLUSTER_HALTING_STACK_RESIDUAL_BLOCK_SIZE
+)
+_CLUSTER_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON_DEFAULT = (
+    config.CLUSTER_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON
+)
 _CLUSTER_HALTING_THRESHOLD_DEFAULT = config.CLUSTER_HALTING_THRESHOLD
 _CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS_DEFAULT = (
     config.CLUSTER_INITIAL_X_AXIS_TOTAL_NEURONS
@@ -93,6 +99,12 @@ _CLUSTER_TERMINAL_ROUTER_RESIDUAL_CONNECTION_OPTION_DEFAULT = (
 )
 _CLUSTER_TERMINAL_ROUTER_RESIDUAL_MODEL_FLAG_DEFAULT = (
     config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_MODEL_FLAG
+)
+_CLUSTER_TERMINAL_ROUTER_RESIDUAL_BLOCK_SIZE_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_BLOCK_SIZE
+)
+_CLUSTER_TERMINAL_ROUTER_RESIDUAL_RMS_NORM_EPSILON_DEFAULT = (
+    config.CLUSTER_TERMINAL_ROUTER_RESIDUAL_RMS_NORM_EPSILON
 )
 _CLUSTER_TERMINAL_SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT_DEFAULT = (
     config.CLUSTER_TERMINAL_SAMPLER_COEFFICIENT_OF_VARIATION_LOSS_WEIGHT
@@ -396,6 +408,16 @@ def _terminal_router_options(
         "cluster_terminal_router_residual_model_flag",
         _CLUSTER_TERMINAL_ROUTER_RESIDUAL_MODEL_FLAG_DEFAULT,
     )
+    residual_block_size = _pop(
+        values,
+        "cluster_terminal_router_residual_block_size",
+        _CLUSTER_TERMINAL_ROUTER_RESIDUAL_BLOCK_SIZE_DEFAULT,
+    )
+    residual_rms_norm_epsilon = _pop(
+        values,
+        "cluster_terminal_router_residual_rms_norm_epsilon",
+        _CLUSTER_TERMINAL_ROUTER_RESIDUAL_RMS_NORM_EPSILON_DEFAULT,
+    )
     dropout_probability = _pop(
         values,
         "cluster_terminal_router_dropout_probability",
@@ -417,6 +439,8 @@ def _terminal_router_options(
         layer_norm_position=layer_norm_position,
         normalization=normalization,
         residual_connection_option=residual_connection_option,
+        residual_block_size=residual_block_size,
+        residual_rms_norm_epsilon=residual_rms_norm_epsilon,
         residual_model_flag=residual_model_flag,
         dropout_probability=dropout_probability,
         bias_flag=bias_flag,
@@ -558,6 +582,16 @@ def _cluster_halting_options(
         "cluster_halting_stack_residual_model_flag",
         _CLUSTER_HALTING_STACK_RESIDUAL_MODEL_FLAG_DEFAULT,
     )
+    residual_block_size = _pop(
+        values,
+        "cluster_halting_stack_residual_block_size",
+        _CLUSTER_HALTING_STACK_RESIDUAL_BLOCK_SIZE_DEFAULT,
+    )
+    residual_rms_norm_epsilon = _pop(
+        values,
+        "cluster_halting_stack_residual_rms_norm_epsilon",
+        _CLUSTER_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON_DEFAULT,
+    )
     dropout_probability = _pop(
         values,
         "cluster_halting_stack_dropout_probability",
@@ -585,6 +619,8 @@ def _cluster_halting_options(
             layer_norm_position=layer_norm_position,
             normalization=normalization,
             residual_connection_option=residual_connection_option,
+            residual_block_size=residual_block_size,
+            residual_rms_norm_epsilon=residual_rms_norm_epsilon,
             residual_model_flag=residual_model_flag,
             dropout_probability=dropout_probability,
             bias_flag=bias_flag,

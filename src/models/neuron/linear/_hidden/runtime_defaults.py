@@ -108,6 +108,8 @@ def _main_stack(reader: RuntimeOverrideReader) -> MainStackOptions:
         num_layers=values.num_layers,
         activation=values.activation,
         residual_connection_option=values.residual_connection_option,
+        residual_block_size=values.residual_block_size,
+        residual_rms_norm_epsilon=values.residual_rms_norm_epsilon,
         residual_model_flag=values.residual_model_flag,
         dropout_probability=values.dropout_probability,
         last_layer_bias_option=values.last_layer_bias_option,
@@ -133,6 +135,8 @@ def _submodule_stack(reader: RuntimeOverrideReader) -> ControllerStackOptions:
         layer_norm_position=values.layer_norm_position,
         normalization=values.normalization,
         residual_connection_option=values.residual_connection_option,
+        residual_block_size=values.residual_block_size,
+        residual_rms_norm_epsilon=values.residual_rms_norm_epsilon,
         residual_model_flag=values.residual_model_flag,
         dropout_probability=values.dropout_probability,
         bias_flag=values.bias_flag,
@@ -195,6 +199,8 @@ def _resolved_controller_stack(
             if values.residual_connection_option is None
             else values.residual_connection_option
         ),
+        residual_block_size=values.residual_block_size,
+        residual_rms_norm_epsilon=values.residual_rms_norm_epsilon,
         residual_model_flag=values.residual_model_flag,
         dropout_probability=(
             defaults.dropout_probability
@@ -233,6 +239,8 @@ def _residual_stack(
             layer_norm_position=values.layer_norm_position,
             normalization=values.normalization,
             residual_connection_option=values.residual_connection_option,
+            residual_block_size=values.residual_block_size,
+            residual_rms_norm_epsilon=values.residual_rms_norm_epsilon,
             residual_model_flag=values.residual_model_flag,
             dropout_probability=values.dropout_probability,
             last_layer_bias_option=values.last_layer_bias_option,

@@ -270,23 +270,23 @@ _ORDERING_WITH_ATTENTION_SETTINGS_BY_PACKAGE = {
         12,
     ),
     "neuron/linear": (
-        "6f98de2ee92999f4ef5907beacd91aae487a1e89ae350fdfeaa8c600f8b183f5",
-        220,
+        "7175e838ed89e0aef4980421b966b0a28745f609223d709995200d3a8a0f37a6",
+        240,
         10,
     ),
     "neuron/linear_adaptive": (
-        "583faece6a7290b937849ffd9a11ace0b5495954c461a2f40406290d5813f7c8",
-        577,
+        "09d76dd6c31179fb5bd7f6f15d8c736d4d809b495a30064ec78385368b7f9a4d",
+        637,
         36,
     ),
     "neuron/expert_linear": (
-        "ab457987d08c5f5a284c94eab7a0481916a60e8a1bdcb045ae5bf03a1de00af7",
-        347,
+        "f899de69833246528654dceb16161a5a1399c2499b30177a5b3f33929984f766",
+        381,
         10,
     ),
     "neuron/expert_linear_adaptive": (
-        "cbd39b8ba892d7900885c2088af942234c0ee61b1b0ba5820bbaf9f4ef452ac6",
-        940,
+        "304078b24337cb79c89a284a54c127b8175d3ed31f4cfaed56a7fee807fc1002",
+        1042,
         40,
     ),
     "parametric/parametric_generator": (
