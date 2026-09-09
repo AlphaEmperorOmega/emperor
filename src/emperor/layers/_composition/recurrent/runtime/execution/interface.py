@@ -68,14 +68,8 @@ class RecurrentExecutionAdapter(Protocol[_StateT]):
     def _run_recurrent_transition(
         self,
         recurrent_state: _StateT,
+        prepared_transition: PreparedRecurrentTransition,
         *,
-        run_transition: Callable[[LayerState], LayerState],
-        transition_input: Tensor,
-        previous_evolving_hidden: Tensor,
-        halting_update_enabled: bool,
-        loss: Tensor | None = None,
-        residual_state: ResidualState | None = None,
-        residual_schedule: RecurrentResidualSchedule | None = None,
         transition_index: int = 0,
         observe_transition: bool = True,
     ) -> RecurrentTransitionResult: ...
@@ -83,19 +77,13 @@ class RecurrentExecutionAdapter(Protocol[_StateT]):
     def _run_shared_handoff_boundary_transition(
         self,
         recurrent_state: _StateT,
+        prepared_transition: PreparedRecurrentTransition,
         *,
-        run_transition: Callable[[LayerState], LayerState],
-        transition_input: Tensor,
-        previous_evolving_hidden: Tensor,
-        source_halting_update_enabled: bool,
         run_provisional_source_branch: Callable[
             [RecurrentTransitionResult],
             _ProvisionalSourceBranchOutput,
         ],
-        loss: Tensor | None = None,
-        residual_state: ResidualState | None = None,
         target_residual_state: ResidualState | None = None,
-        residual_schedule: RecurrentResidualSchedule | None = None,
         transition_index: int = 0,
     ) -> tuple[_ProvisionalSourceBranchOutput, RecurrentTransitionResult]: ...
 
