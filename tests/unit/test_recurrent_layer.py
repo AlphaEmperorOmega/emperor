@@ -1277,7 +1277,6 @@ class TestRecurrentLayer(unittest.TestCase):
                     self.assertTrue(torch.isfinite(normalization.weight.grad).all())
                     self.assertGreater(normalization.weight.grad.abs().sum(), 0)
 
-
     def test_recurrent_layer_norm_before_normalizes_block_input(self):
         dim = 3
         hidden = torch.zeros(2, dim)
@@ -4741,6 +4740,75 @@ class TestRecurrentLayer(unittest.TestCase):
         self.assertEqual(set(restored.state_dict()), set(checkpoint))
         torch.testing.assert_close(actual, expected)
 
+    def test_recurrent_attention_query_models_are_independent_and_checkpointed(self):
+        config = replace(
+            self.recurrent_config(
+                dim=2,
+                max_steps=3,
+                block_config=self.layer_block_config(increment=1.0),
+                residual_connection_option=AttentionResidualConfig,
+            ),
+            residual_config=AttentionResidualConfig(
+                rms_norm_epsilon=1e-6,
+                block_size=2,
+                model_config=LinearLayerConfig(bias_flag=True),
+            ),
+        )
+        model = RecurrentLayer(config).double()
+        connections = [
+            model.recurrent_residual_schedule.connection_for_transition(
+                model.residual_connection, step
+            )
+            for step in range(model.max_steps)
+        ]
+        self.assertEqual(
+            len({id(connection.query_model) for connection in connections}), 3
+        )
+        with torch.no_grad():
+            for step, connection in enumerate(connections, start=1):
+                connection.query_model.weight_params.copy_(
+                    torch.tensor([[0.3, -0.2], [0.1, 0.4]]) * step
+                )
+                connection.query_model.bias_params.copy_(torch.tensor([0.1, -0.15]))
+        initial = torch.tensor(
+            [[0.1, -0.2], [-0.3, 0.5]], dtype=torch.float64, requires_grad=True
+        )
+        expected = initial
+        raw_outputs = []
+        for connection in connections:
+            current = expected + 1.0
+            raw_outputs.append(current)
+            sources = [initial]
+            for start in range(0, len(raw_outputs), 2):
+                sources.append(torch.stack(raw_outputs[start : start + 2]).sum(0))
+            values = torch.stack(sources, dim=-2)
+            query = (
+                current @ connection.query_model.weight_params
+                + connection.query_model.bias_params
+            )
+            keys = values * (values.square().mean(-1, keepdim=True) + 1e-6).rsqrt()
+            scores = torch.einsum(
+                "...sd,...d->...s", keys * connection.key_norm.weight, query
+            )
+            expected = torch.einsum("...s,...sd->...d", scores.softmax(-1), values)
+
+        actual = model(LayerState(hidden=initial)).hidden
+        torch.testing.assert_close(actual, expected, rtol=1e-10, atol=1e-11)
+        actual.square().sum().backward()
+        for connection in connections:
+            self.assertIsNone(connection.query)
+            for parameter in connection.query_model.parameters():
+                self.assertIsNotNone(parameter.grad)
+                self.assertGreater(torch.count_nonzero(parameter.grad).item(), 0)
+        restored = RecurrentLayer(config).double()
+        restored.load_state_dict(model.state_dict(), strict=True)
+        restored_output = restored(LayerState(hidden=initial.detach())).hidden
+        torch.testing.assert_close(restored_output, actual.detach(), rtol=0, atol=0)
+        next_input = initial.detach() * -2
+        reused_output = model(LayerState(hidden=next_input)).hidden
+        fresh_output = restored(LayerState(hidden=next_input)).hidden
+        torch.testing.assert_close(reused_output, fresh_output, rtol=0, atol=0)
+
     def test_pairwise_recurrent_residual_checkpoint_paths_remain_compatible(self):
         config = self.recurrent_config(
             dim=2,
@@ -4816,76 +4884,6 @@ class TestRecurrentLayer(unittest.TestCase):
             self.assertIsNotNone(parameter.grad)
             self.assertTrue(torch.isfinite(parameter.grad).all())
             self.assertGreater(torch.count_nonzero(parameter.grad).item(), 0)
-
-    def test_recurrent_attention_query_models_are_independent_and_checkpointed(self):
-        config = replace(
-            self.recurrent_config(
-                dim=2,
-                max_steps=3,
-                block_config=self.layer_block_config(increment=1.0),
-                residual_connection_option=AttentionResidualConfig,
-            ),
-            residual_config=AttentionResidualConfig(
-                rms_norm_epsilon=1e-6,
-                block_size=2,
-                model_config=LinearLayerConfig(bias_flag=True),
-            ),
-        )
-        model = RecurrentLayer(config).double()
-        connections = [
-            model.recurrent_residual_schedule.connection_for_transition(
-                model.residual_connection, step
-            )
-            for step in range(model.max_steps)
-        ]
-        self.assertEqual(
-            len({id(connection.query_model) for connection in connections}), 3
-        )
-        with torch.no_grad():
-            for step, connection in enumerate(connections, start=1):
-                connection.query_model.weight_params.copy_(
-                    torch.tensor([[0.3, -0.2], [0.1, 0.4]]) * step
-                )
-                connection.query_model.bias_params.copy_(torch.tensor([0.1, -0.15]))
-        initial = torch.tensor(
-            [[0.1, -0.2], [-0.3, 0.5]], dtype=torch.float64, requires_grad=True
-        )
-        expected = initial
-        raw_outputs = []
-        for connection in connections:
-            current = expected + 1.0
-            raw_outputs.append(current)
-            sources = [initial]
-            for start in range(0, len(raw_outputs), 2):
-                sources.append(torch.stack(raw_outputs[start : start + 2]).sum(0))
-            values = torch.stack(sources, dim=-2)
-            query = (
-                current @ connection.query_model.weight_params
-                + connection.query_model.bias_params
-            )
-            keys = values * (values.square().mean(-1, keepdim=True) + 1e-6).rsqrt()
-            scores = torch.einsum(
-                "...sd,...d->...s", keys * connection.key_norm.weight, query
-            )
-            expected = torch.einsum("...s,...sd->...d", scores.softmax(-1), values)
-
-        actual = model(LayerState(hidden=initial)).hidden
-        torch.testing.assert_close(actual, expected, rtol=1e-10, atol=1e-11)
-        actual.square().sum().backward()
-        for connection in connections:
-            self.assertIsNone(connection.query)
-            for parameter in connection.query_model.parameters():
-                self.assertIsNotNone(parameter.grad)
-                self.assertGreater(torch.count_nonzero(parameter.grad).item(), 0)
-        restored = RecurrentLayer(config).double()
-        restored.load_state_dict(model.state_dict(), strict=True)
-        restored_output = restored(LayerState(hidden=initial.detach())).hidden
-        torch.testing.assert_close(restored_output, actual.detach(), rtol=0, atol=0)
-        next_input = initial.detach() * -2
-        reused_output = model(LayerState(hidden=next_input)).hidden
-        fresh_output = restored(LayerState(hidden=next_input)).hidden
-        torch.testing.assert_close(reused_output, fresh_output, rtol=0, atol=0)
-
 
     def test_recurrent_residual_options_apply_between_steps(self):
         dim = 3
