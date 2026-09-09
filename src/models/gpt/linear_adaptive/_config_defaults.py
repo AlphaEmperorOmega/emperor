@@ -19,6 +19,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -78,6 +79,7 @@ class _AdaptiveParameter(Enum):
 def gpt_embedding_options(config: ModuleType) -> GptEmbeddingOptions:
     return GptEmbeddingOptions(
         layer_norm_flag=config.EMBEDDING_LAYER_NORM_FLAG,
+        normalization=config.EMBEDDING_NORMALIZATION,
         dropout_probability=config.EMBEDDING_DROPOUT_PROBABILITY,
     )
 
@@ -106,6 +108,8 @@ def gpt_decoder_options(config: ModuleType) -> TransformerDecoderOptions:
         activation=config.STACK_ACTIVATION,
         dropout_probability=config.STACK_DROPOUT_PROBABILITY,
         layer_norm_position=config.LAYER_NORM_POSITION,
+        normalization=config.NORMALIZATION,
+        output_normalization=config.DECODER_OUTPUT_NORMALIZATION,
     )
 
 
@@ -129,6 +133,7 @@ def main_layer_stack_options(config: ModuleType) -> MainLayerStackOptions:
     return MainLayerStackOptions(
         bias_flag=config.STACK_BIAS_FLAG,
         layer_norm_position=config.LAYER_NORM_POSITION,
+        normalization=config.NORMALIZATION,
         num_layers=config.STACK_NUM_LAYERS,
         activation=config.STACK_ACTIVATION,
         residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -153,6 +158,7 @@ def linears_submodule_stack_options(
             ),
             activation=config.SUBMODULE_STACK_ACTIVATION,
             layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
+            normalization=config.SUBMODULE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -168,6 +174,7 @@ def linears_submodule_stack_options(
             apply_output_postprocessing_flag=config.ATTN_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.ATTN_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_STACK_LAYER_NORM_POSITION,
+            normalization=config.ATTN_STACK_NORMALIZATION,
             residual_connection_option=config.ATTN_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.ATTN_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ATTN_STACK_DROPOUT_PROBABILITY,
@@ -180,6 +187,7 @@ def linears_submodule_stack_options(
         apply_output_postprocessing_flag=config.FF_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.FF_STACK_ACTIVATION,
         layer_norm_position=config.FF_STACK_LAYER_NORM_POSITION,
+        normalization=config.FF_STACK_NORMALIZATION,
         residual_connection_option=config.FF_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config.FF_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.FF_STACK_DROPOUT_PROBABILITY,
@@ -195,6 +203,7 @@ def _submodule_stack_options(
     apply_output_postprocessing_flag: bool,
     activation: ActivationOptions,
     layer_norm_position: LayerNormPositionOptions,
+    normalization: NormalizationOptions = NormalizationOptions.RMS_NORM,
     residual_connection_option: type[ResidualConfig] | None,
     residual_model_flag: bool,
     dropout_probability: float,
@@ -207,6 +216,7 @@ def _submodule_stack_options(
         apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         activation=activation,
         layer_norm_position=layer_norm_position,
+        normalization=normalization,
         residual_connection_option=residual_connection_option,
         residual_model_flag=residual_model_flag,
         dropout_probability=dropout_probability,
@@ -254,6 +264,7 @@ def _main_controller_stack_source(
             config.GATE_STACK_RESIDUAL_MODEL_FLAG,
             config.GATE_STACK_DROPOUT_PROBABILITY,
             config.GATE_STACK_BIAS_FLAG,
+            normalization=config.GATE_STACK_NORMALIZATION,
         )
     if role is _ControllerStackRole.MAIN_HALTING:
         return _controller_stack_source(
@@ -268,6 +279,7 @@ def _main_controller_stack_source(
             config.HALTING_STACK_RESIDUAL_MODEL_FLAG,
             config.HALTING_STACK_DROPOUT_PROBABILITY,
             config.HALTING_STACK_BIAS_FLAG,
+            normalization=config.HALTING_STACK_NORMALIZATION,
         )
     if role is _ControllerStackRole.MAIN_MEMORY:
         return _controller_stack_source(
@@ -282,6 +294,7 @@ def _main_controller_stack_source(
             config.MEMORY_STACK_RESIDUAL_MODEL_FLAG,
             config.MEMORY_STACK_DROPOUT_PROBABILITY,
             config.MEMORY_STACK_BIAS_FLAG,
+            normalization=config.MEMORY_STACK_NORMALIZATION,
         )
     if role is _ControllerStackRole.MAIN_RECURRENT_GATE:
         return _controller_stack_source(
@@ -296,6 +309,7 @@ def _main_controller_stack_source(
             config.RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
             config.RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
             config.RECURRENT_GATE_STACK_BIAS_FLAG,
+            normalization=config.RECURRENT_GATE_STACK_NORMALIZATION,
         )
     if role is _ControllerStackRole.MAIN_RECURRENT_HALTING:
         return _controller_stack_source(
@@ -310,6 +324,7 @@ def _main_controller_stack_source(
             config.RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
             config.RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
             config.RECURRENT_HALTING_STACK_BIAS_FLAG,
+            normalization=config.RECURRENT_HALTING_STACK_NORMALIZATION,
         )
 
 
@@ -330,6 +345,7 @@ def _attention_controller_stack_source(
             config.ATTN_GATE_STACK_RESIDUAL_MODEL_FLAG,
             config.ATTN_GATE_STACK_DROPOUT_PROBABILITY,
             config.ATTN_GATE_STACK_BIAS_FLAG,
+            normalization=config.ATTN_GATE_STACK_NORMALIZATION,
         )
     if role is _ControllerStackRole.ATTENTION_HALTING:
         return _controller_stack_source(
@@ -344,6 +360,7 @@ def _attention_controller_stack_source(
             config.ATTN_HALTING_STACK_RESIDUAL_MODEL_FLAG,
             config.ATTN_HALTING_STACK_DROPOUT_PROBABILITY,
             config.ATTN_HALTING_STACK_BIAS_FLAG,
+            normalization=config.ATTN_HALTING_STACK_NORMALIZATION,
         )
     if role is _ControllerStackRole.ATTENTION_MEMORY:
         return _controller_stack_source(
@@ -358,6 +375,7 @@ def _attention_controller_stack_source(
             config.ATTN_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
             config.ATTN_MEMORY_STACK_DROPOUT_PROBABILITY,
             config.ATTN_MEMORY_STACK_BIAS_FLAG,
+            normalization=config.ATTN_MEMORY_STACK_NORMALIZATION,
         )
     if role is _ControllerStackRole.ATTENTION_RECURRENT_GATE:
         return _controller_stack_source(
@@ -372,6 +390,7 @@ def _attention_controller_stack_source(
             config.ATTN_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
             config.ATTN_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
             config.ATTN_RECURRENT_GATE_STACK_BIAS_FLAG,
+            normalization=config.ATTN_RECURRENT_GATE_STACK_NORMALIZATION,
         )
     if role is _ControllerStackRole.ATTENTION_RECURRENT_HALTING:
         return _controller_stack_source(
@@ -386,6 +405,7 @@ def _attention_controller_stack_source(
             config.ATTN_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
             config.ATTN_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
             config.ATTN_RECURRENT_HALTING_STACK_BIAS_FLAG,
+            normalization=config.ATTN_RECURRENT_HALTING_STACK_NORMALIZATION,
         )
 
 
@@ -406,6 +426,7 @@ def _feed_forward_controller_stack_source(
             config.FF_GATE_STACK_RESIDUAL_MODEL_FLAG,
             config.FF_GATE_STACK_DROPOUT_PROBABILITY,
             config.FF_GATE_STACK_BIAS_FLAG,
+            normalization=config.FF_GATE_STACK_NORMALIZATION,
         )
     if role is _ControllerStackRole.FEED_FORWARD_HALTING:
         return _controller_stack_source(
@@ -420,6 +441,7 @@ def _feed_forward_controller_stack_source(
             config.FF_HALTING_STACK_RESIDUAL_MODEL_FLAG,
             config.FF_HALTING_STACK_DROPOUT_PROBABILITY,
             config.FF_HALTING_STACK_BIAS_FLAG,
+            normalization=config.FF_HALTING_STACK_NORMALIZATION,
         )
     if role is _ControllerStackRole.FEED_FORWARD_MEMORY:
         return _controller_stack_source(
@@ -434,6 +456,7 @@ def _feed_forward_controller_stack_source(
             config.FF_MEMORY_STACK_RESIDUAL_MODEL_FLAG,
             config.FF_MEMORY_STACK_DROPOUT_PROBABILITY,
             config.FF_MEMORY_STACK_BIAS_FLAG,
+            normalization=config.FF_MEMORY_STACK_NORMALIZATION,
         )
     if role is _ControllerStackRole.FEED_FORWARD_RECURRENT_GATE:
         return _controller_stack_source(
@@ -448,6 +471,7 @@ def _feed_forward_controller_stack_source(
             config.FF_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
             config.FF_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
             config.FF_RECURRENT_GATE_STACK_BIAS_FLAG,
+            normalization=config.FF_RECURRENT_GATE_STACK_NORMALIZATION,
         )
     return _controller_stack_source(
         config.FF_RECURRENT_HALTING_STACK_INDEPENDENT_FLAG,
@@ -461,6 +485,7 @@ def _feed_forward_controller_stack_source(
         config.FF_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         config.FF_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
         config.FF_RECURRENT_HALTING_STACK_BIAS_FLAG,
+        normalization=config.FF_RECURRENT_HALTING_STACK_NORMALIZATION,
     )
 
 
@@ -476,6 +501,8 @@ def _controller_stack_source(
     residual_model_flag: bool,
     dropout_probability: float | None,
     bias_flag: bool | None,
+    *,
+    normalization: NormalizationOptions | None = None,
 ) -> SubmoduleStackSource:
     return SubmoduleStackSource(
         independent_flag=independent_flag,
@@ -485,6 +512,7 @@ def _controller_stack_source(
         apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         activation=activation,
         layer_norm_position=layer_norm_position,
+        normalization=normalization,
         residual_connection_option=residual_connection_option,
         residual_model_flag=residual_model_flag,
         dropout_probability=dropout_probability,
@@ -655,6 +683,7 @@ def linears_recurrent_controller_options(
             linears_controller_stack_source(
                 config, _ControllerStackRole.MAIN_RECURRENT_HALTING
             ),
+            recurrent_normalization=config.RECURRENT_NORMALIZATION,
         )
     if role is LinearRole.ATTENTION:
         return _recurrent_controller_options(
@@ -681,6 +710,7 @@ def linears_recurrent_controller_options(
             linears_controller_stack_source(
                 config, _ControllerStackRole.ATTENTION_RECURRENT_HALTING
             ),
+            recurrent_normalization=config.ATTN_RECURRENT_NORMALIZATION,
         )
     return _recurrent_controller_options(
         config.FF_RECURRENT_FLAG,
@@ -706,6 +736,7 @@ def linears_recurrent_controller_options(
         linears_controller_stack_source(
             config, _ControllerStackRole.FEED_FORWARD_RECURRENT_HALTING
         ),
+        recurrent_normalization=config.FF_RECURRENT_NORMALIZATION,
     )
 
 
@@ -729,6 +760,8 @@ def _recurrent_controller_options(
     recurrent_halting_dropout: float,
     recurrent_halting_hidden_state_mode: HaltingHiddenStateModeOptions,
     recurrent_halting_stack_source: SubmoduleStackSource,
+    *,
+    recurrent_normalization: NormalizationOptions = NormalizationOptions.LAYER_NORM,
 ) -> RecurrentControllerOptions:
     return RecurrentControllerOptions(
         recurrent_flag=recurrent_flag,
@@ -742,6 +775,7 @@ def _recurrent_controller_options(
         ),
         recurrent_smooth_iteration_growth_flag=(recurrent_smooth_iteration_growth_flag),
         recurrent_layer_norm_position=recurrent_layer_norm_position,
+        recurrent_normalization=recurrent_normalization,
         recurrent_stack_gate_flag=recurrent_stack_gate_flag,
         recurrent_gate_option=recurrent_gate_option,
         recurrent_gate_activation=recurrent_gate_activation,
@@ -761,6 +795,7 @@ def adaptive_generator_stack_options(
     return AdaptiveGeneratorStackOptions(
         hidden_dim=config.ADAPTIVE_GENERATOR_STACK_HIDDEN_DIM,
         layer_norm_position=config.ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION,
+        normalization=config.ADAPTIVE_GENERATOR_STACK_NORMALIZATION,
         num_layers=config.ADAPTIVE_GENERATOR_STACK_NUM_LAYERS,
         activation=config.ADAPTIVE_GENERATOR_STACK_ACTIVATION,
         residual_connection_option=(
@@ -805,6 +840,7 @@ def _main_adaptive_generator_stack_source(
             config.WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
             config.WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.WEIGHT_GENERATOR_STACK_BIAS_FLAG,
+            normalization=config.WEIGHT_GENERATOR_STACK_NORMALIZATION,
         )
     if parameter is _AdaptiveParameter.BIAS:
         return _adaptive_stack_source(
@@ -819,6 +855,7 @@ def _main_adaptive_generator_stack_source(
             config.BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
             config.BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.BIAS_GENERATOR_STACK_BIAS_FLAG,
+            normalization=config.BIAS_GENERATOR_STACK_NORMALIZATION,
         )
     if parameter is _AdaptiveParameter.DIAGONAL:
         return _adaptive_stack_source(
@@ -833,6 +870,7 @@ def _main_adaptive_generator_stack_source(
             config.DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
             config.DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
+            normalization=config.DIAGONAL_GENERATOR_STACK_NORMALIZATION,
         )
     return _adaptive_stack_source(
         config.MASK_GENERATOR_STACK_INDEPENDENT_FLAG,
@@ -846,6 +884,7 @@ def _main_adaptive_generator_stack_source(
         config.MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
         config.MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         config.MASK_GENERATOR_STACK_BIAS_FLAG,
+        normalization=config.MASK_GENERATOR_STACK_NORMALIZATION,
     )
 
 
@@ -866,6 +905,7 @@ def _attention_adaptive_generator_stack_source(
             config.ATTN_WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
             config.ATTN_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.ATTN_WEIGHT_GENERATOR_STACK_BIAS_FLAG,
+            normalization=config.ATTN_WEIGHT_GENERATOR_STACK_NORMALIZATION,
         )
     if parameter is _AdaptiveParameter.BIAS:
         return _adaptive_stack_source(
@@ -880,6 +920,7 @@ def _attention_adaptive_generator_stack_source(
             config.ATTN_BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
             config.ATTN_BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.ATTN_BIAS_GENERATOR_STACK_BIAS_FLAG,
+            normalization=config.ATTN_BIAS_GENERATOR_STACK_NORMALIZATION,
         )
     if parameter is _AdaptiveParameter.DIAGONAL:
         return _adaptive_stack_source(
@@ -894,6 +935,7 @@ def _attention_adaptive_generator_stack_source(
             config.ATTN_DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
             config.ATTN_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.ATTN_DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
+            normalization=config.ATTN_DIAGONAL_GENERATOR_STACK_NORMALIZATION,
         )
     return _adaptive_stack_source(
         config.ATTN_MASK_GENERATOR_STACK_INDEPENDENT_FLAG,
@@ -907,6 +949,7 @@ def _attention_adaptive_generator_stack_source(
         config.ATTN_MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
         config.ATTN_MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         config.ATTN_MASK_GENERATOR_STACK_BIAS_FLAG,
+        normalization=config.ATTN_MASK_GENERATOR_STACK_NORMALIZATION,
     )
 
 
@@ -927,6 +970,7 @@ def _feed_forward_adaptive_generator_stack_source(
             config.FF_WEIGHT_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
             config.FF_WEIGHT_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.FF_WEIGHT_GENERATOR_STACK_BIAS_FLAG,
+            normalization=config.FF_WEIGHT_GENERATOR_STACK_NORMALIZATION,
         )
     if parameter is _AdaptiveParameter.BIAS:
         return _adaptive_stack_source(
@@ -941,6 +985,7 @@ def _feed_forward_adaptive_generator_stack_source(
             config.FF_BIAS_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
             config.FF_BIAS_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.FF_BIAS_GENERATOR_STACK_BIAS_FLAG,
+            normalization=config.FF_BIAS_GENERATOR_STACK_NORMALIZATION,
         )
     if parameter is _AdaptiveParameter.DIAGONAL:
         return _adaptive_stack_source(
@@ -955,6 +1000,7 @@ def _feed_forward_adaptive_generator_stack_source(
             config.FF_DIAGONAL_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
             config.FF_DIAGONAL_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             config.FF_DIAGONAL_GENERATOR_STACK_BIAS_FLAG,
+            normalization=config.FF_DIAGONAL_GENERATOR_STACK_NORMALIZATION,
         )
     return _adaptive_stack_source(
         config.FF_MASK_GENERATOR_STACK_INDEPENDENT_FLAG,
@@ -968,6 +1014,7 @@ def _feed_forward_adaptive_generator_stack_source(
         config.FF_MASK_GENERATOR_STACK_LAST_LAYER_BIAS_OPTION,
         config.FF_MASK_GENERATOR_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         config.FF_MASK_GENERATOR_STACK_BIAS_FLAG,
+        normalization=config.FF_MASK_GENERATOR_STACK_NORMALIZATION,
     )
 
 
@@ -983,11 +1030,14 @@ def _adaptive_stack_source(
     last_layer_bias_option: LastLayerBiasOptions | None,
     apply_output_postprocessing_flag: bool | None,
     bias_flag: bool | None,
+    *,
+    normalization: NormalizationOptions | None = None,
 ) -> AdaptiveGeneratorStackSource:
     return AdaptiveGeneratorStackSource(
         independent_flag=independent_flag,
         hidden_dim=hidden_dim,
         layer_norm_position=layer_norm_position,
+        normalization=normalization,
         num_layers=num_layers,
         activation=activation,
         residual_connection_option=residual_connection_option,

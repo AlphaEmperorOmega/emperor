@@ -23,6 +23,7 @@ _ADAPTIVE_GENERATOR_SOURCE_FIELD_MAP = {
     "independent_flag": "independent_flag",
     "hidden_dim": "hidden_dim",
     "layer_norm_position": "layer_norm_position",
+    "normalization": "normalization",
     "num_layers": "num_layers",
     "activation": "activation",
     "residual_connection_option": "residual_connection_option",
@@ -80,6 +81,7 @@ def _adaptive_generator_stack_options_from_kwargs(
         {
             "adaptive_generator_stack_hidden_dim": "hidden_dim",
             "adaptive_generator_stack_layer_norm_position": "layer_norm_position",
+            "adaptive_generator_stack_normalization": "normalization",
             "adaptive_generator_stack_num_layers": "num_layers",
             "adaptive_generator_stack_activation": "activation",
             "adaptive_generator_stack_residual_connection_option": "residual_connection_option",

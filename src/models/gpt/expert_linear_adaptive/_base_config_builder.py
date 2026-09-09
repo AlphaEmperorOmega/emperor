@@ -16,6 +16,7 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    NormalizationOptions,
     RecurrentLayerConfig,
     ResidualConfig,
 )
@@ -55,6 +56,7 @@ from models.gpt.expert_linear_adaptive.runtime_options import (
     TransformerPositionalEmbeddingOptions,
 )
 
+from . import config
 from ._residual import build_residual_config
 
 if TYPE_CHECKING:
@@ -113,6 +115,7 @@ class GptBackendConfigBuilder:
         self.stack_activation = decoder_options.activation
         self.stack_dropout_probability = decoder_options.dropout_probability
         self.layer_norm_position = decoder_options.layer_norm_position
+        self.normalization = decoder_options.normalization
         self.positional_embedding_options = positional_embedding_options
         self.positional_embedding_option = positional_embedding_options.option
         self.positional_embedding_padding_idx = positional_embedding_options.padding_idx
@@ -177,6 +180,11 @@ class GptBackendConfigBuilder:
                 positional_embedding_config=positional_embedding_config,
                 boundary_config=boundary_config,
                 decoder_config=decoder_config,
+                decoder_output_normalization=(
+                    self.decoder_options.output_normalization
+                    if self.decoder_options is not None
+                    else config.DECODER_OUTPUT_NORMALIZATION
+                ),
             ),
         )
 
@@ -209,6 +217,7 @@ class GptBackendConfigBuilder:
         layer_config = TransformerDecoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_config=None,
             dropout_probability=0.0,
             gate_config=gate_factory.build_gate_config(),
@@ -247,6 +256,7 @@ class GptBackendConfigBuilder:
         return TransformerDecoderLayerConfig(
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             residual_config=AdditiveResidualConfig(),
             self_attention_config=attention_config,
@@ -309,6 +319,7 @@ class GptBackendConfigBuilder:
             residual_model_flag=options.residual_model_flag,
             residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
             apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
@@ -373,6 +384,7 @@ class GptBackendConfigBuilder:
             residual_model_flag=options.residual_model_flag,
             residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
             apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
@@ -434,6 +446,7 @@ class GptBackendConfigBuilder:
         num_layers: int,
         bias_flag: bool,
         layer_norm_position: LayerNormPositionOptions,
+        normalization: NormalizationOptions = NormalizationOptions.RMS_NORM,
         dropout_probability: float,
         input_dim: int | None = None,
         hidden_dim: int | None = None,
@@ -451,6 +464,7 @@ class GptBackendConfigBuilder:
                 self.decoder_options.activation if activation is None else activation
             ),
             layer_norm_position=layer_norm_position,
+            normalization=normalization,
             residual_config=build_residual_config(
                 residual_connection_option,
                 residual_model_flag,
@@ -491,6 +505,7 @@ class GptBackendConfigBuilder:
             hidden_dim=self.hidden_dim,
             bias_flag=True,
             layer_norm_position=self.decoder_options.layer_norm_position,
+            normalization=self.decoder_options.normalization,
             num_layers=self.decoder_options.num_layers,
             activation=self.decoder_options.activation,
             residual_connection_option=None,
@@ -518,6 +533,7 @@ class GptBackendConfigBuilder:
             apply_output_postprocessing_flag=True,
             activation=self.decoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_connection_option=None,
             residual_model_flag=False,
             residual_stack_options=self.submodule_stack_options.residual_stack_options,
@@ -535,6 +551,7 @@ class GptBackendConfigBuilder:
             apply_output_postprocessing_flag=True,
             activation=self.decoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_connection_option=None,
             residual_model_flag=False,
             residual_stack_options=self.submodule_stack_options.residual_stack_options,

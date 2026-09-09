@@ -5,6 +5,7 @@ import torch.nn as nn
 from torch import Tensor
 
 from emperor.experiments.language_model import LanguageModelExperiment
+from emperor.layers import LayerConfig, LayerNormPositionOptions
 from emperor.transformer import TransformerDecoderLayerState
 from models.gpt.linear_adaptive._boundary_config_factory import GptBoundaryConfig
 from models.gpt.linear_adaptive.experiment_config import ExperimentConfig
@@ -84,7 +85,12 @@ class Model(LanguageModelExperiment):
     def __build_embedding_layer_norm(self) -> nn.Module:
         if not self.boundary_config.embedding_options.layer_norm_flag:
             return nn.Identity()
-        return nn.LayerNorm(self.cfg.hidden_dim)
+        return LayerConfig(
+            input_dim=self.cfg.hidden_dim,
+            output_dim=self.cfg.hidden_dim,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            normalization=self.boundary_config.embedding_options.normalization,
+        ).build_normalization()
 
     def __build_embedding_dropout(self) -> nn.Dropout:
         return nn.Dropout(self.boundary_config.embedding_options.dropout_probability)
@@ -92,8 +98,13 @@ class Model(LanguageModelExperiment):
     def __build_decoder(self) -> nn.Module:
         return self.experiment_config.decoder_config.build()
 
-    def __build_decoder_layer_norm(self) -> nn.LayerNorm:
-        return nn.LayerNorm(self.cfg.hidden_dim)
+    def __build_decoder_layer_norm(self) -> nn.Module:
+        return LayerConfig(
+            input_dim=self.cfg.hidden_dim,
+            output_dim=self.cfg.hidden_dim,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            normalization=self.experiment_config.decoder_output_normalization,
+        ).build_normalization()
 
     def __build_lm_head(self) -> nn.Linear:
         return nn.Linear(

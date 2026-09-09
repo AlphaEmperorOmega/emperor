@@ -20,6 +20,8 @@ from models.gpt.linear.experiment_config import ExperimentConfig
 from models.gpt.linear.runtime_defaults import DEFAULT_RUNTIME
 from models.gpt.linear.runtime_options import RuntimeOptions
 
+from . import config
+
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
@@ -121,6 +123,11 @@ class GptLinearConfigBuilder:
                 positional_embedding_config=self.__positional_embedding_config(),
                 boundary_config=self.__boundary_config(),
                 decoder_config=self.__decoder_config(),
+                decoder_output_normalization=(
+                    self.decoder_options.output_normalization
+                    if self.decoder_options is not None
+                    else config.DECODER_OUTPUT_NORMALIZATION
+                ),
             ),
         )
 
