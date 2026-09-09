@@ -1220,12 +1220,12 @@ class TestLayer(unittest.TestCase):
             (
                 WeightedResidualConfig,
                 LinearLayerConfig(bias_flag=True),
-                lambda current, previous: previous,
+                None,
             ),
             (
                 WeightedBlendResidualConfig,
                 LinearLayerConfig(bias_flag=True),
-                lambda current, previous: 0.9 * current + 0.1 * previous,
+                None,
             ),
         ]
 
@@ -1246,12 +1246,24 @@ class TestLayer(unittest.TestCase):
                 model_output = torch.randn(batch_size, dim)
                 state = LayerState(hidden=model_output)
                 result = layer.residual.apply_residual(state, x)
-                expected = expected_fn(model_output, x)
+                if residual_model_config is None:
+                    expected = expected_fn(model_output, x)
+                else:
+                    raw_coefficients = layer.residual.connection.model(
+                        torch.cat((model_output, x), dim=-1)
+                    )
+                    if option is WeightedResidualConfig:
+                        expected = x + torch.tanh(raw_coefficients) * model_output
+                    else:
+                        blend = torch.sigmoid(raw_coefficients)
+                        expected = blend * model_output + (1.0 - blend) * x
 
                 self.assertIs(result, state)
                 torch.testing.assert_close(result.hidden, expected)
 
-    def test_data_dependent_weighted_blend_initializes_as_ninety_ten_blend(self):
+    def test_data_dependent_weighted_blend_uses_model_predictions_for_feature_last_inputs(
+        self,
+    ):
         output_dim = 3
         connection = WeightedBlendResidualConfig(
             residual_dim=output_dim,
@@ -1272,16 +1284,10 @@ class TestLayer(unittest.TestCase):
 
         result = connection(current, previous)
 
-        expected_raw_blend_bias = math.log(0.9 / (1.0 - 0.9))
-        torch.testing.assert_close(result, 0.9 * current + 0.1 * previous)
-        torch.testing.assert_close(
-            connection.model.weight_params,
-            torch.zeros(output_dim * 2, output_dim),
-        )
-        torch.testing.assert_close(
-            connection.model.bias_params,
-            torch.full((output_dim,), expected_raw_blend_bias),
-        )
+        raw_coefficients = connection.model(torch.cat((current, previous), dim=-1))
+        blend = torch.sigmoid(raw_coefficients)
+        expected = blend * current + (1.0 - blend) * previous
+        torch.testing.assert_close(result, expected)
         self.assertEqual(
             tuple(connection.state_dict()),
             ("model.weight_params", "model.bias_params"),
@@ -1391,19 +1397,12 @@ class TestLayer(unittest.TestCase):
                         model_config=LinearLayerConfig(bias_flag=True),
                     ).build()
 
-    def test_data_dependent_residual_requires_a_biased_linear_model_config(self):
-        invalid_model_configs = (
-            (object(), TypeError),
-            (LinearLayerConfig(bias_flag=False), ValueError),
-        )
-
-        for model_config, error_type in invalid_model_configs:
-            with self.subTest(model_config=model_config):
-                with self.assertRaisesRegex(error_type, "model_config"):
-                    WeightedBlendResidualConfig(
-                        residual_dim=2,
-                        model_config=model_config,
-                    ).build()
+    def test_data_dependent_residual_rejects_an_unsupported_model_config(self):
+        with self.assertRaisesRegex(TypeError, "model_config"):
+            WeightedBlendResidualConfig(
+                residual_dim=2,
+                model_config=object(),
+            ).build()
 
     def test_attention_residual_requires_a_positive_integer_dimension(self):
         invalid_dimensions = (

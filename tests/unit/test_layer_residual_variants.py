@@ -1,6 +1,6 @@
 import math
 import unittest
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import torch
 
@@ -241,38 +241,62 @@ class TestPairwiseResidualVariants(unittest.TestCase):
             torch.tensor(math.log(0.9 / (1.0 - 0.9))),
         )
 
-    def test_data_dependent_coefficient_model_owns_expected_dimensions_and_init(self):
+    def test_data_dependent_coefficient_preserves_model_initialization(self):
         residual_dim = 2
-        cases = (
-            (WeightedResidualConfig, 0.0),
+        model_configs = (
+            ("linear", LinearLayerConfig(bias_flag=True)),
+            ("biasless_linear", LinearLayerConfig(bias_flag=False)),
+            ("stack", _coefficient_stack_config()),
+            ("biasless_stack", _coefficient_stack_config(bias_flag=False)),
             (
-                WeightedBlendResidualConfig,
-                math.log(0.9 / (1.0 - 0.9)),
+                "stack_without_final_bias",
+                _coefficient_stack_config(
+                    last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                ),
+            ),
+            (
+                "stack_with_output_postprocessing",
+                replace(
+                    _coefficient_stack_config(),
+                    apply_output_postprocessing_flag=True,
+                ),
             ),
         )
 
-        for config_type, expected_bias in cases:
-            with self.subTest(config=config_type.__name__):
-                residual = config_type(
-                    residual_dim=residual_dim,
-                    model_config=LinearLayerConfig(bias_flag=True),
-                ).build()
-                model = residual.model
+        for config_type in (WeightedResidualConfig, WeightedBlendResidualConfig):
+            for model_name, model_config in model_configs:
+                with (
+                    self.subTest(config=config_type.__name__, model=model_name),
+                    torch.random.fork_rng(devices=[]),
+                ):
+                    torch.manual_seed(17)
+                    reference_model = model_config.build(
+                        overrides=type(model_config)(
+                            input_dim=residual_dim * 2,
+                            output_dim=residual_dim,
+                        )
+                    )
+                    expected_rng_state = torch.random.get_rng_state().clone()
+                    torch.manual_seed(17)
+                    residual = config_type(
+                        residual_dim=residual_dim,
+                        model_config=model_config,
+                    ).build()
+                    model = residual.model
 
-                self.assertIsNone(residual.raw_weight)
-                self.assertIsNotNone(model)
-                assert model is not None
-                self.assertEqual(model.input_dim, residual_dim * 2)
-                self.assertEqual(model.output_dim, residual_dim)
-                torch.testing.assert_close(
-                    model.weight_params,
-                    torch.zeros_like(model.weight_params),
-                )
-                assert model.bias_params is not None
-                torch.testing.assert_close(
-                    model.bias_params,
-                    torch.full_like(model.bias_params, expected_bias),
-                )
+                    self.assertIsNone(residual.raw_weight)
+                    self.assertEqual(model.input_dim, residual_dim * 2)
+                    self.assertEqual(model.output_dim, residual_dim)
+                    self.assertEqual(
+                        tuple(model.state_dict()), tuple(reference_model.state_dict())
+                    )
+                    for name, expected in reference_model.state_dict().items():
+                        torch.testing.assert_close(
+                            model.state_dict()[name], expected, rtol=0, atol=0
+                        )
+                    torch.testing.assert_close(
+                        torch.random.get_rng_state(), expected_rng_state
+                    )
 
     def test_data_dependent_coefficient_changes_the_output_and_receives_gradients(self):
         residual = WeightedResidualConfig(
@@ -303,73 +327,64 @@ class TestPairwiseResidualVariants(unittest.TestCase):
             0,
         )
 
-    def test_residual_stack_owns_dimensions_initialization_behavior_and_gradients(
-        self,
-    ):
-        residual_dim = 2
-        cases = (
-            (WeightedResidualConfig, 0.0),
-            (
-                WeightedBlendResidualConfig,
-                math.log(0.9 / (1.0 - 0.9)),
-            ),
-        )
-        current = torch.tensor([[2.0, 3.0]], requires_grad=True)
-        previous = torch.tensor([[5.0, 7.0]], requires_grad=True)
-
-        for config_type, expected_bias in cases:
-            with self.subTest(config=config_type.__name__):
+    def test_residual_stack_uses_model_predictions_and_preserves_gradients(self):
+        for config_type in (WeightedResidualConfig, WeightedBlendResidualConfig):
+            with (
+                self.subTest(config=config_type.__name__),
+                torch.random.fork_rng(devices=[]),
+            ):
+                torch.manual_seed(17)
                 residual = config_type(
-                    residual_dim=residual_dim,
+                    residual_dim=2,
                     model_config=_coefficient_stack_config(),
                 ).build()
-                model = residual.model
-
-                self.assertIsNone(residual.raw_weight)
-                self.assertIsInstance(model, LayerStack)
-                self.assertEqual(model.input_dim, residual_dim * 2)
-                self.assertEqual(model.output_dim, residual_dim)
-                affine_output = model[-1].model
-                torch.testing.assert_close(
-                    affine_output.weight_params,
-                    torch.zeros_like(affine_output.weight_params),
-                )
-                torch.testing.assert_close(
-                    affine_output.bias_params,
-                    torch.full_like(affine_output.bias_params, expected_bias),
-                )
+                current = torch.tensor([[0.2, 0.3]], requires_grad=True)
+                previous = torch.tensor([[0.5, 0.7]], requires_grad=True)
+                coefficient_input = torch.cat((current, previous), dim=-1)
+                with torch.no_grad():
+                    raw_coefficients = residual.model(
+                        LayerState(hidden=coefficient_input)
+                    ).hidden
+                    if config_type is WeightedResidualConfig:
+                        expected = previous + torch.tanh(raw_coefficients) * current
+                    else:
+                        blend = torch.sigmoid(raw_coefficients)
+                        expected = blend * current + (1.0 - blend) * previous
 
                 output = residual(current, previous)
-                if config_type is WeightedResidualConfig:
-                    expected = previous
-                else:
-                    expected = 0.9 * current + 0.1 * previous
                 torch.testing.assert_close(output, expected)
-                output.sum().backward(retain_graph=True)
-                self.assertIsNotNone(affine_output.weight_params.grad)
-                self.assertGreater(
-                    torch.count_nonzero(affine_output.weight_params.grad).item(),
-                    0,
-                )
-
-    def test_residual_stack_requires_an_effective_final_bias(self):
-        invalid_stacks = (
-            _coefficient_stack_config(bias_flag=False),
-            _coefficient_stack_config(
-                last_layer_bias_option=LastLayerBiasOptions.DISABLED,
-            ),
-        )
-
-        for model_config in invalid_stacks:
-            with self.subTest(model_config=model_config):
-                with self.assertRaisesRegex(
-                    ValueError,
-                    "must enable bias on its final layer",
+                output.sum().backward()
+                for gradient in (
+                    current.grad,
+                    previous.grad,
+                    *(parameter.grad for parameter in residual.model.parameters()),
                 ):
-                    WeightedResidualConfig(
+                    self.assertIsNotNone(gradient)
+                    self.assertTrue(torch.isfinite(gradient).all())
+                    self.assertGreater(torch.count_nonzero(gradient).item(), 0)
+
+    def test_coefficient_model_does_not_use_the_scalar_initializer(self):
+        for config_type, residual_type in (
+            (WeightedResidualConfig, WeightedResidual),
+            (WeightedBlendResidualConfig, WeightedBlendResidual),
+        ):
+
+            class ModelInitializedResidual(residual_type):
+                @staticmethod
+                def _initial_raw_mix_coefficient():
+                    raise AssertionError(
+                        "model coefficients must use model initialization"
+                    )
+
+            with self.subTest(config=config_type.__name__):
+                residual = ModelInitializedResidual(
+                    config_type(
                         residual_dim=2,
-                        model_config=model_config,
-                    ).build()
+                        model_config=LinearLayerConfig(bias_flag=True),
+                    )
+                )
+                self.assertIsNone(residual.raw_weight)
+                self.assertIsNotNone(residual.model)
 
     def test_runtime_parameter_names_remain_stable_and_attention_is_direct(self):
         cases = (
@@ -433,6 +448,100 @@ class TestPairwiseResidualVariants(unittest.TestCase):
                     actual = restored(current, previous)
 
                 torch.testing.assert_close(actual, expected)
+
+
+class TestWeightedResidualValidationContracts(unittest.TestCase):
+    def test_each_nested_controller_is_rejected_for_both_weighted_variants(self):
+        paths = (
+            "layer_config.gate_config",
+            "layer_config.halting_config",
+            "layer_config.memory_config",
+            "shared_gate_config",
+            "shared_halting_config",
+            "shared_memory_config",
+        )
+        for config_type in (WeightedResidualConfig, WeightedBlendResidualConfig):
+            for path in paths:
+                with self.subTest(variant=config_type.__name__, path=path):
+                    stack = _coefficient_stack_config()
+                    if path.startswith("layer_config."):
+                        stack.layer_config = replace(
+                            stack.layer_config, **{path.split(".")[1]: object()}
+                        )
+                    else:
+                        setattr(stack, path, object())
+                    with self.assertRaises(ValueError) as raised:
+                        config_type(residual_dim=2, model_config=stack).build()
+                    self.assertEqual(
+                        str(raised.exception),
+                        f"{config_type.__name__}.model_config.{path} must be None "
+                        "for a residual coefficient model.",
+                    )
+
+    def test_stack_structure_and_error_precedence_are_preserved(self):
+        class DerivedLayerConfig(LayerConfig):
+            pass
+
+        for config_type in (WeightedResidualConfig, WeightedBlendResidualConfig):
+            stack = _coefficient_stack_config()
+            cases = (
+                (
+                    object(),
+                    TypeError,
+                    "must be a LayerStackConfig or LinearLayerConfig",
+                ),
+                (
+                    replace(stack, layer_config=DerivedLayerConfig()),
+                    TypeError,
+                    "must be exactly LayerConfig",
+                ),
+                (
+                    replace(
+                        stack,
+                        layer_config=replace(
+                            stack.layer_config, layer_model_config=object()
+                        ),
+                    ),
+                    TypeError,
+                    "layer_model_config must be LinearLayerConfig",
+                ),
+                (
+                    replace(
+                        stack,
+                        last_layer_bias_option=LastLayerBiasOptions.DISABLED,
+                        shared_gate_config=object(),
+                    ),
+                    ValueError,
+                    "shared_gate_config must be None",
+                ),
+                (
+                    replace(
+                        stack,
+                        shared_gate_config=object(),
+                        shared_memory_config=object(),
+                    ),
+                    ValueError,
+                    "shared_gate_config must be None",
+                ),
+                (stack, TypeError, "residual_dim must be int"),
+            )
+            for model_config, error, message in cases:
+                with self.subTest(variant=config_type.__name__, message=message):
+                    with self.assertRaisesRegex(error, message):
+                        config_type(
+                            residual_dim=None, model_config=model_config
+                        ).build()
+
+    def test_explicit_final_bias_enables_both_weighted_stack_variants(self):
+        for config_type in (WeightedResidualConfig, WeightedBlendResidualConfig):
+            with self.subTest(variant=config_type.__name__):
+                stack = _coefficient_stack_config(
+                    bias_flag=False, last_layer_bias_option=LastLayerBiasOptions.ENABLED
+                )
+                residual = config_type(residual_dim=2, model_config=stack).build()
+                self.assertIsNotNone(residual.model[-1].model.bias_params)
+                self.assertFalse(stack.layer_config.layer_model_config.bias_flag)
+
 
 
 if __name__ == "__main__":
