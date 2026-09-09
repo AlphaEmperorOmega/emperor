@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, cast
 
 from emperor.layers import (
@@ -9,6 +9,7 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    NormalizationOptions,
     ResidualConfig,
     WeightedBlendResidualConfig,
     WeightedResidualConfig,
@@ -35,10 +36,15 @@ class _SubmoduleStackDefaults(Protocol):
     def layer_norm_position(self) -> LayerNormPositionOptions: ...
 
     @property
+    def normalization(self) -> NormalizationOptions: ...
+
+    @property
     def residual_connection_option(self) -> type[ResidualConfig] | None: ...
 
     @property
     def residual_model_flag(self) -> bool: ...
+
+
 
     @property
     def dropout_probability(self) -> float: ...
@@ -60,6 +66,7 @@ class ResidualStackSource:
     num_layers: int | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     dropout_probability: float | None
@@ -74,6 +81,9 @@ class ResidualStackOptions:
     num_layers: int
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     dropout_probability: float
@@ -94,6 +104,7 @@ def resolve_residual_stack_options(
             num_layers=defaults.num_layers,
             activation=defaults.activation,
             layer_norm_position=defaults.layer_norm_position,
+            normalization=defaults.normalization,
             residual_connection_option=defaults.residual_connection_option,
             residual_model_flag=source.residual_model_flag,
             dropout_probability=defaults.dropout_probability,
@@ -115,6 +126,11 @@ def resolve_residual_stack_options(
             defaults.layer_norm_position
             if source.layer_norm_position is None
             else source.layer_norm_position
+        ),
+        normalization=(
+            defaults.normalization
+            if source.normalization is None
+            else source.normalization
         ),
         residual_connection_option=(
             defaults.residual_connection_option
@@ -164,6 +180,7 @@ def build_residual_stack_config(
         layer_config=LayerConfig(
             activation=options.activation,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             residual_config=build_residual_config(
                 options.residual_connection_option,
                 False,
