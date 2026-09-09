@@ -24,6 +24,9 @@ from emperor.layers._support import LayerModuleBase
 from emperor.memory import MemoryPositionOptions
 
 if TYPE_CHECKING:
+    from emperor.layers._composition.recurrent.runtime.execution.interface import (
+        PreparedRecurrentTransition,
+    )
     from collections.abc import Callable, Iterable, Iterator
 
     from emperor.config import ConfigBase
@@ -210,14 +213,8 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
     def _run_recurrent_transition(
         self,
         recurrent_state: _RecurrentTransitionContext,
+        prepared_transition: PreparedRecurrentTransition,
         *,
-        run_transition: Callable[[LayerState], LayerState],
-        transition_input: Tensor,
-        previous_evolving_hidden: Tensor,
-        halting_update_enabled: bool,
-        loss: Tensor | None = None,
-        residual_state: ResidualState | None = None,
-        residual_schedule: RecurrentResidualSchedule | None = None,
         transition_index: int = 0,
         observe_transition: bool = True,
     ) -> RecurrentTransitionResult:
@@ -226,64 +223,48 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         ):
             transition_candidate = self.__compute_recurrent_transition_candidate(
                 recurrent_state,
-                run_transition=run_transition,
-                transition_input=transition_input,
-                previous_evolving_hidden=previous_evolving_hidden,
-                loss=loss,
-                residual_state=residual_state,
-                residual_schedule=residual_schedule,
+                prepared_transition,
                 transition_index=transition_index,
             )
         return self.__apply_halting_and_observe_recurrent_transition(
             recurrent_state,
             transition_candidate,
-            previous_evolving_hidden=previous_evolving_hidden,
-            halting_update_enabled=halting_update_enabled,
+            previous_evolving_hidden=prepared_transition.previous_evolving_hidden,
+            halting_update_enabled=prepared_transition.halting_update_enabled,
             observe_transition=observe_transition,
         )
 
     def _run_shared_handoff_boundary_transition(
         self,
         recurrent_state: _RecurrentTransitionContext,
+        prepared_transition: PreparedRecurrentTransition,
         *,
-        run_transition: Callable[[LayerState], LayerState],
-        transition_input: Tensor,
-        previous_evolving_hidden: Tensor,
-        source_halting_update_enabled: bool,
         run_provisional_source_branch: Callable[
             [RecurrentTransitionResult],
             _ProvisionalSourceBranchOutput,
         ],
-        loss: Tensor | None = None,
-        residual_state: ResidualState | None = None,
         target_residual_state: ResidualState | None = None,
-        residual_schedule: RecurrentResidualSchedule | None = None,
         transition_index: int = 0,
     ) -> tuple[_ProvisionalSourceBranchOutput, RecurrentTransitionResult]:
         """Share one candidate, roll back the full source branch, then commit target."""
         transition_candidate = self.__compute_recurrent_transition_candidate(
             recurrent_state,
-            run_transition=run_transition,
-            transition_input=transition_input,
-            previous_evolving_hidden=previous_evolving_hidden,
-            loss=loss,
-            residual_state=residual_state,
-            residual_schedule=residual_schedule,
+            prepared_transition,
             transition_index=transition_index,
         )
         self.__advance_detached_target_residual_state(
             transition_candidate.residual_input,
-            previous_evolving_hidden,
+            prepared_transition.previous_evolving_hidden,
             target_residual_state,
-            residual_schedule,
+            prepared_transition.residual_schedule,
             transition_index,
         )
         with self.__runtime_state_guard.isolate_provisional_branch(self):
             source_result = self.__apply_halting_and_observe_recurrent_transition(
                 recurrent_state,
                 transition_candidate,
-                previous_evolving_hidden=previous_evolving_hidden,
-                halting_update_enabled=source_halting_update_enabled,
+                previous_evolving_hidden=prepared_transition.previous_evolving_hidden,
+                halting_update_enabled=prepared_transition.halting_update_enabled,
                 observe_transition=False,
             )
             provisional_source_branch_output = run_provisional_source_branch(
@@ -302,7 +283,7 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         target_result = self.__apply_halting_and_observe_recurrent_transition(
             recurrent_state,
             target_candidate,
-            previous_evolving_hidden=previous_evolving_hidden,
+            previous_evolving_hidden=prepared_transition.previous_evolving_hidden,
             halting_update_enabled=False,
             observe_transition=True,
         )
@@ -311,26 +292,23 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
     def __compute_recurrent_transition_candidate(
         self,
         recurrent_state: _RecurrentTransitionContext,
+        prepared_transition: PreparedRecurrentTransition,
         *,
-        run_transition: Callable[[LayerState], LayerState],
-        transition_input: Tensor,
-        previous_evolving_hidden: Tensor,
-        loss: Tensor | None,
-        residual_state: ResidualState | None,
-        residual_schedule: RecurrentResidualSchedule | None,
         transition_index: int,
     ) -> _RecurrentTransitionCandidate:
-        transition_model_input = self.__maybe_apply_layer_norm_before(transition_input)
+        transition_model_input = self.__maybe_apply_layer_norm_before(
+            prepared_transition.transition_input
+        )
         transition_model_input = self.__maybe_apply_memory_before(
             transition_model_input
         )
         transition_state = replace(
             recurrent_state.context_state,
             hidden=transition_model_input,
-            loss=loss,
+            loss=prepared_transition.loss,
             halting_state=None,
         )
-        output_state = run_transition(transition_state)
+        output_state = prepared_transition.run_transition(transition_state)
         self.VALIDATOR.validate_transition_output(
             output_state,
             transition_model_input,
@@ -344,9 +322,9 @@ class RecurrentCompositionAbstract(LayerModuleBase, ABC):
         residual_input = candidate_hidden
         candidate_hidden = self.__maybe_apply_residual_connection(
             candidate_hidden,
-            previous_evolving_hidden,
-            residual_state,
-            residual_schedule,
+            prepared_transition.previous_evolving_hidden,
+            prepared_transition.residual_state,
+            prepared_transition.residual_schedule,
             transition_index,
         )
         candidate_hidden = self.__maybe_apply_layer_norm_after(candidate_hidden)
