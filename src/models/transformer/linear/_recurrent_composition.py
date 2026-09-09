@@ -7,6 +7,7 @@ from emperor.halting import HaltingConfig
 from emperor.layers import (
     GateConfig,
     LayerNormPositionOptions,
+    NormalizationOptions,
     RecurrentCompositionConfig,
     ResidualConfig,
 )
@@ -21,6 +22,7 @@ def build_recurrent_composition(
     block_config: ConfigBase,
     max_steps: int,
     recurrent_layer_norm_position: LayerNormPositionOptions,
+    recurrent_normalization: NormalizationOptions = NormalizationOptions.LAYER_NORM,
     gate_config: GateConfig | None,
     residual_config: ResidualConfig | None,
     halting_config: HaltingConfig | None,
@@ -61,6 +63,7 @@ def build_recurrent_composition(
         "forward_calls_before_iteration_increment": forward_calls_before_iteration_increment,
         "smooth_iteration_growth_flag": smooth_iteration_growth_flag,
         "recurrent_layer_norm_position": recurrent_layer_norm_position,
+        "recurrent_normalization": recurrent_normalization,
         "gate_config": gate_config,
         "residual_config": residual_config,
         "halting_config": halting_config,

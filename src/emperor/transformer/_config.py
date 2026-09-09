@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from emperor.layers import (
         LayerNormPositionOptions,
         LayerStackConfig,
+        NormalizationOptions,
         RecurrentCompositionConfig,
         ResidualConfig,
     )
@@ -46,6 +47,9 @@ class TransformerEncoderLayerConfig(ConfigBase):
     )
     feed_forward_config: "FeedForwardConfig | None" = optional_field(
         "Feed-forward configuration for the encoder sub-block."
+    )
+    normalization: "NormalizationOptions | None" = optional_field(
+        "Feature normalization used in every encoder sub-block. Defaults to RMS_NORM."
     )
 
     def _registry_owner(self) -> type:
@@ -84,6 +88,9 @@ class TransformerDecoderLayerConfig(ConfigBase):
     )
     feed_forward_config: "FeedForwardConfig | None" = optional_field(
         "Feed-forward configuration for the decoder sub-block."
+    )
+    normalization: "NormalizationOptions | None" = optional_field(
+        "Feature normalization used in every decoder sub-block. Defaults to RMS_NORM."
     )
 
     def _registry_owner(self) -> type:

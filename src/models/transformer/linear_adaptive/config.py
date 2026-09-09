@@ -61,6 +61,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
     WeightedBlendResidualConfig,  # noqa: F401
     WeightedResidualConfig,  # noqa: F401
@@ -105,6 +106,7 @@ ATTN_STACK_DROPOUT_PROBABILITY: float = 0.0
 ATTN_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
+ATTN_STACK_NORMALIZATION: NormalizationOptions = NormalizationOptions.RMS_NORM
 ATTN_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 ATTN_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG: bool = False
 
@@ -117,6 +119,7 @@ ATTN_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 ATTN_GATE_STACK_INDEPENDENT_FLAG: bool = False
 ATTN_GATE_STACK_HIDDEN_DIM: int | None = None
 ATTN_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+ATTN_GATE_STACK_NORMALIZATION: NormalizationOptions | None = None
 ATTN_GATE_STACK_NUM_LAYERS: int | None = None
 ATTN_GATE_STACK_ACTIVATION: ActivationOptions | None = ActivationOptions.TANH
 ATTN_GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -141,6 +144,7 @@ ATTN_HALTING_STACK_HIDDEN_DIM: int | None = None
 ATTN_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
     LayerNormPositionOptions.DISABLED
 )
+ATTN_HALTING_STACK_NORMALIZATION: NormalizationOptions | None = None
 ATTN_HALTING_STACK_NUM_LAYERS: int | None = None
 ATTN_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
 ATTN_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -163,6 +167,7 @@ ATTN_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS: int | None = None
 ATTN_MEMORY_STACK_INDEPENDENT_FLAG: bool = False
 ATTN_MEMORY_STACK_HIDDEN_DIM: int | None = None
 ATTN_MEMORY_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+ATTN_MEMORY_STACK_NORMALIZATION: NormalizationOptions | None = None
 ATTN_MEMORY_STACK_NUM_LAYERS: int | None = None
 ATTN_MEMORY_STACK_ACTIVATION: ActivationOptions | None = None
 ATTN_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -178,6 +183,7 @@ ATTN_RECURRENT_MAX_STEPS: int = 2
 ATTN_RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
+ATTN_RECURRENT_NORMALIZATION: NormalizationOptions = NormalizationOptions.LAYER_NORM
 
 #### Attention Projection Recurrent Gate Options
 ATTN_RECURRENT_STACK_GATE_FLAG: bool = False
@@ -188,6 +194,7 @@ ATTN_RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIG
 ATTN_RECURRENT_GATE_STACK_INDEPENDENT_FLAG: bool = False
 ATTN_RECURRENT_GATE_STACK_HIDDEN_DIM: int | None = None
 ATTN_RECURRENT_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+ATTN_RECURRENT_GATE_STACK_NORMALIZATION: NormalizationOptions | None = None
 ATTN_RECURRENT_GATE_STACK_NUM_LAYERS: int | None = None
 ATTN_RECURRENT_GATE_STACK_ACTIVATION: ActivationOptions | None = None
 ATTN_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -210,6 +217,7 @@ ATTN_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
 ATTN_RECURRENT_HALTING_STACK_INDEPENDENT_FLAG: bool = False
 ATTN_RECURRENT_HALTING_STACK_HIDDEN_DIM: int | None = None
 ATTN_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+ATTN_RECURRENT_HALTING_STACK_NORMALIZATION: NormalizationOptions | None = None
 ATTN_RECURRENT_HALTING_STACK_NUM_LAYERS: int | None = None
 ATTN_RECURRENT_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
 ATTN_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = (
@@ -233,6 +241,7 @@ FF_STACK_DROPOUT_PROBABILITY: float = DROPOUT_PROBABILITY
 FF_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
+FF_STACK_NORMALIZATION: NormalizationOptions = NormalizationOptions.RMS_NORM
 FF_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions.DEFAULT
 FF_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG: bool = False
 
@@ -245,6 +254,7 @@ FF_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMOID
 FF_GATE_STACK_INDEPENDENT_FLAG: bool = False
 FF_GATE_STACK_HIDDEN_DIM: int | None = None
 FF_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+FF_GATE_STACK_NORMALIZATION: NormalizationOptions | None = None
 FF_GATE_STACK_NUM_LAYERS: int | None = None
 FF_GATE_STACK_ACTIVATION: ActivationOptions | None = ActivationOptions.TANH
 FF_GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -269,6 +279,7 @@ FF_HALTING_STACK_HIDDEN_DIM: int | None = None
 FF_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = (
     LayerNormPositionOptions.DISABLED
 )
+FF_HALTING_STACK_NORMALIZATION: NormalizationOptions | None = None
 FF_HALTING_STACK_NUM_LAYERS: int | None = None
 FF_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
 FF_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -291,6 +302,7 @@ FF_MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS: int | None = None
 FF_MEMORY_STACK_INDEPENDENT_FLAG: bool = False
 FF_MEMORY_STACK_HIDDEN_DIM: int | None = None
 FF_MEMORY_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+FF_MEMORY_STACK_NORMALIZATION: NormalizationOptions | None = None
 FF_MEMORY_STACK_NUM_LAYERS: int | None = None
 FF_MEMORY_STACK_ACTIVATION: ActivationOptions | None = None
 FF_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -306,6 +318,7 @@ FF_RECURRENT_MAX_STEPS: int = 2
 FF_RECURRENT_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
+FF_RECURRENT_NORMALIZATION: NormalizationOptions = NormalizationOptions.LAYER_NORM
 
 ### Feed-Forward Recurrent Gate Options
 FF_RECURRENT_STACK_GATE_FLAG: bool = False
@@ -316,6 +329,7 @@ FF_RECURRENT_GATE_ACTIVATION: ActivationOptions | None = ActivationOptions.SIGMO
 FF_RECURRENT_GATE_STACK_INDEPENDENT_FLAG: bool = False
 FF_RECURRENT_GATE_STACK_HIDDEN_DIM: int | None = None
 FF_RECURRENT_GATE_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+FF_RECURRENT_GATE_STACK_NORMALIZATION: NormalizationOptions | None = None
 FF_RECURRENT_GATE_STACK_NUM_LAYERS: int | None = None
 FF_RECURRENT_GATE_STACK_ACTIVATION: ActivationOptions | None = None
 FF_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -338,6 +352,7 @@ FF_RECURRENT_HALTING_HIDDEN_STATE_MODE: HaltingHiddenStateModeOptions = (
 FF_RECURRENT_HALTING_STACK_INDEPENDENT_FLAG: bool = False
 FF_RECURRENT_HALTING_STACK_HIDDEN_DIM: int | None = None
 FF_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+FF_RECURRENT_HALTING_STACK_NORMALIZATION: NormalizationOptions | None = None
 FF_RECURRENT_HALTING_STACK_NUM_LAYERS: int | None = None
 FF_RECURRENT_HALTING_STACK_ACTIVATION: ActivationOptions | None = None
 FF_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = (
@@ -353,7 +368,11 @@ FF_RECURRENT_HALTING_STACK_BIAS_FLAG: bool | None = None
 ENCODER_NUM_LAYERS = 3
 DECODER_NUM_LAYERS = 3
 ENCODER_LAYER_NORM_POSITION = LayerNormPositionOptions.BEFORE
+ENCODER_NORMALIZATION: NormalizationOptions = NormalizationOptions.RMS_NORM
+ENCODER_OUTPUT_NORMALIZATION: NormalizationOptions = NormalizationOptions.LAYER_NORM
+DECODER_OUTPUT_NORMALIZATION: NormalizationOptions = NormalizationOptions.LAYER_NORM
 DECODER_LAYER_NORM_POSITION = LayerNormPositionOptions.BEFORE
+DECODER_NORMALIZATION: NormalizationOptions = NormalizationOptions.RMS_NORM
 ENCODER_ATTN_NUM_HEADS = ATTN_NUM_HEADS
 DECODER_SELF_ATTN_NUM_HEADS = ATTN_NUM_HEADS
 DECODER_CROSS_ATTN_NUM_HEADS = ATTN_NUM_HEADS
@@ -391,6 +410,7 @@ STACK_RESIDUAL_MODEL_FLAG: bool = False
 RESIDUAL_STACK_INDEPENDENT_FLAG: bool = False
 RESIDUAL_STACK_HIDDEN_DIM: int | None = None
 RESIDUAL_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions | None = None
+RESIDUAL_STACK_NORMALIZATION: NormalizationOptions | None = None
 RESIDUAL_STACK_NUM_LAYERS: int | None = None
 RESIDUAL_STACK_ACTIVATION: ActivationOptions | None = None
 RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
@@ -469,6 +489,9 @@ ADAPTIVE_GENERATOR_STACK_ACTIVATION: ActivationOptions = ActivationOptions.RELU
 ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: LayerNormPositionOptions = (
     LayerNormPositionOptions.DISABLED
 )
+ADAPTIVE_GENERATOR_STACK_NORMALIZATION: NormalizationOptions = (
+    NormalizationOptions.RMS_NORM
+)
 ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION: type[ResidualConfig] | None = None
 ADAPTIVE_GENERATOR_STACK_RESIDUAL_MODEL_FLAG: bool = False
 ADAPTIVE_GENERATOR_STACK_DROPOUT_PROBABILITY: float = 0.0
@@ -484,6 +507,7 @@ _COMPONENT_GENERATOR_DEFAULTS = {
     "NUM_LAYERS": None,
     "ACTIVATION": None,
     "LAYER_NORM_POSITION": None,
+    "NORMALIZATION": None,
     "RESIDUAL_CONNECTION_OPTION": None,
     "RESIDUAL_MODEL_FLAG": False,
     "DROPOUT_PROBABILITY": None,
