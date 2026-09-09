@@ -21,6 +21,9 @@ class TestSamplerPublicInterface(unittest.TestCase):
                 "SamplerConfig",
                 "RouterModel",
                 "SamplerModel",
+                "TokenSamplerConfig",
+                "TokenSamplerModel",
+                "TokenSamplingResult",
                 "SamplerMonitorCallback",
             ),
         )
