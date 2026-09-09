@@ -305,23 +305,23 @@ _ORDERING_WITH_ATTENTION_SETTINGS_BY_PACKAGE = {
         6,
     ),
     "transformer/linear": (
-        "31bfb26a220d0a5f6b90fa52b60b7710d3389d25561538464f0b6a1c351ab363",
-        830,
+        "0657e605bfab291e6de5cb2c21f79df72596ce65fca6067db555543a57e7698e",
+        920,
         12,
     ),
     "transformer/linear_adaptive": (
-        "b9d4d18c9815752eddbcbf3f2d57b7942789b9daaadba5f2666780955e07d4fd",
-        3182,
+        "36cf44988b972744c002920dfdf4a06e3447d6a0c5291eac63b7c4bf882d2b32",
+        3572,
         20,
     ),
     "transformer/expert_linear": (
-        "24b9abef1ccd48dee9844a91f43822ea635a683c8527e71a17c78c58f688d31d",
-        980,
+        "878f5a2dd11f60fd0573a0c05398f5c5e10e2324c068300510f3477f88798269",
+        1094,
         10,
     ),
     "transformer/expert_linear_adaptive": (
-        "ca7b7c8e9a65306d7e138b63d8e0083d1e48fbacc2071743eabec9d20c26ae20",
-        3556,
+        "ebc99ed2b9ea536c67bc97a75d0170ca8a30eb97cb44baad9e7b771b229ba994",
+        3990,
         30,
     ),
     "vit/linear": (

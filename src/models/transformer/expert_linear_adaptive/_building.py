@@ -105,6 +105,8 @@ def _generator_stack(stack_options, residual_stack_options):
                 stack_options.residual_connection_option,
                 stack_options.residual_model_flag,
                 residual_stack_options,
+                residual_block_size=stack_options.residual_block_size,
+                residual_rms_norm_epsilon=stack_options.residual_rms_norm_epsilon,
             ),
             dropout_probability=stack_options.dropout_probability,
             layer_norm_position=stack_options.layer_norm_position,
@@ -268,6 +270,8 @@ def _residual_stack(runtime: RuntimeOptions) -> ResidualStackOptions:
             residual_connection_option=(
                 runtime.residual_stack_residual_connection_option
             ),
+            residual_block_size=runtime.residual_stack_residual_block_size,
+            residual_rms_norm_epsilon=runtime.residual_stack_residual_rms_norm_epsilon,
             residual_model_flag=runtime.residual_stack_residual_model_flag,
             dropout_probability=runtime.residual_stack_dropout_probability,
             last_layer_bias_option=(runtime.residual_stack_last_layer_bias_option),
@@ -303,6 +307,8 @@ def _adaptive_stack(
         last_layer_bias_option = stack_options.last_layer_bias_option
         residual_connection_option = stack_options.residual_connection_option
         residual_model_flag = stack_options.residual_model_flag
+        residual_block_size = stack_options.residual_block_size
+        residual_rms_norm_epsilon = stack_options.residual_rms_norm_epsilon
         layer_norm_position = stack_options.layer_norm_position
         normalization = stack_options.normalization
     else:
@@ -310,6 +316,8 @@ def _adaptive_stack(
         last_layer_bias_option = LastLayerBiasOptions.DEFAULT
         residual_connection_option = None
         residual_model_flag = False
+        residual_block_size = None
+        residual_rms_norm_epsilon = None
         layer_norm_position = LayerNormPositionOptions.DISABLED
         normalization = NormalizationOptions.RMS_NORM
     return LayerStackConfig(
@@ -323,6 +331,8 @@ def _adaptive_stack(
                 residual_connection_option,
                 residual_model_flag,
                 residual_stack_options,
+                residual_block_size=residual_block_size,
+                residual_rms_norm_epsilon=residual_rms_norm_epsilon,
             ),
             dropout_probability=dropout_probability,
             layer_norm_position=layer_norm_position,
@@ -548,6 +558,8 @@ def _expert_feed_forward(
                 stack_options.residual_connection_option,
                 stack_options.residual_model_flag,
                 _residual_stack(runtime),
+                residual_block_size=stack_options.residual_block_size,
+                residual_rms_norm_epsilon=stack_options.residual_rms_norm_epsilon,
             ),
             dropout_probability=stack_options.dropout_probability,
             layer_norm_position=stack_options.layer_norm_position,
@@ -621,6 +633,8 @@ def _controlled_stack(
             options.recurrent_residual_connection_option,
             options.recurrent_residual_model_flag,
             _residual_stack(runtime),
+            residual_block_size=options.recurrent_residual_block_size,
+            residual_rms_norm_epsilon=options.recurrent_residual_rms_norm_epsilon,
         ),
         halting_config=_halting(
             runtime.model_dim,
@@ -665,6 +679,8 @@ def _encoder(runtime: RuntimeOptions):
             options.stack_residual_connection_option,
             options.stack_residual_model_flag,
             _residual_stack(runtime),
+            residual_block_size=options.stack_residual_block_size,
+            residual_rms_norm_epsilon=options.stack_residual_rms_norm_epsilon,
         ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
@@ -726,6 +742,8 @@ def _decoder(runtime: RuntimeOptions):
             options.stack_residual_connection_option,
             options.stack_residual_model_flag,
             _residual_stack(runtime),
+            residual_block_size=options.stack_residual_block_size,
+            residual_rms_norm_epsilon=options.stack_residual_rms_norm_epsilon,
         ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
