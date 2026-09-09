@@ -40,8 +40,8 @@ class AttentionResidual(ResidualConnectionAbstract):
         self.model_config: LayerStackConfig | LinearLayerConfig | None = (
             self.cfg.model_config
         )
-        self.block_size = 1 if self.cfg.block_size is None else self.cfg.block_size
-        self.rms_norm_epsilon = 1e-6 if self.cfg.rms_norm_epsilon is None else float(self.cfg.rms_norm_epsilon)
+        self.block_size: int = self.cfg.block_size
+        self.rms_norm_epsilon: float = self.cfg.rms_norm_epsilon
 
         self.query: nn.Parameter | None = None
         self.query_model: LayerStack | LinearAbstract | None = None

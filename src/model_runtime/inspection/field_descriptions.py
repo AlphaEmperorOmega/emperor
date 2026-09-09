@@ -320,16 +320,16 @@ _DESCRIPTION_RULES = {
         "coefficients from concatenated current and previous outputs."
     ),
     "residual_block_size": _DescriptionRule(
-        "Used when the paired residual selector uses AttentionResidualConfig. "
+        "Required when the paired residual selector uses AttentionResidualConfig. "
         "Number of consecutive raw outputs combined into one depth source. "
         "Suggested starting value: 1 for full attention; larger integers enable "
-        "block attention. Supply explicitly to select the routing settings.",
+        "block attention. Supply explicitly; no numeric default is applied.",
         adds_caveat=False,
     ),
     "residual_rms_norm_epsilon": _DescriptionRule(
-        "Used when the paired residual selector uses AttentionResidualConfig. "
+        "Required when the paired residual selector uses AttentionResidualConfig. "
         "Finite positive float used to RMS-normalize routing keys. Suggested "
-        "starting value: 1e-6. Supply explicitly to select the routing settings.",
+        "starting value: 1e-6. Supply explicitly; no numeric default is applied.",
         adds_caveat=False,
     ),
     "bias": _DescriptionRule(

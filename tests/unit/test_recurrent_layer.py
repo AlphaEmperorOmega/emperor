@@ -1100,10 +1100,15 @@ class TestRecurrentLayer(unittest.TestCase):
                 if residual_connection_option is None
                 else residual_connection_option(
                     **(
+                        {"block_size": 1, "rms_norm_epsilon": 1e-6}
+                        if residual_connection_option is AttentionResidualConfig
+                        else {}
+                    ),
+                    **(
                         {}
                         if residual_model_config is None
                         else {"model_config": residual_model_config}
-                    )
+                    ),
                 )
             ),
             halting_config=halting_config,

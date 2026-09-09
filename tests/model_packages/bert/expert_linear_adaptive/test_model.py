@@ -580,16 +580,27 @@ class TestBertExpertLinearAdaptiveModel(unittest.TestCase):
             ):
                 test_overrides.pop(preset_field, None)
             test_overrides.update({"input_dim": 32, "output_dim": 32})
-        return ExperimentPresets().get_config(
+        configuration = ExperimentPresets().get_config(
             preset,
             dataset_options.DATASET_OPTIONS_BY_TASK[
                 dataset_options.DEFAULT_EXPERIMENT_TASK
             ][0],
             config_overrides={
+                **(
+                    {
+                        "recurrent_residual_block_size": 1,
+                        "recurrent_residual_rms_norm_epsilon": 1e-6,
+                    }
+                    if preset
+                    is ExperimentPreset.SINGLE_LAYER_RECURRENT_ATTENTION_RESIDUAL
+                    else {}
+                ),
                 **test_overrides,
                 **(config_overrides or {}),
             },
         )[0]
+
+        return configuration
 
     def _test_overrides(self) -> dict:
         return {
