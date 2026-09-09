@@ -4,7 +4,7 @@ import torch.nn as nn
 from torch import Tensor
 
 from emperor.experiments.classifier import ClassifierExperiment
-from emperor.layers import Layer
+from emperor.layers import Layer, LayerConfig, LayerNormPositionOptions
 from models.vit.expert_linear_adaptive.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:
@@ -45,8 +45,13 @@ class Model(ClassifierExperiment):
     def __build_encoder_model(self) -> nn.Module:
         return self.experiment_config.encoder_config.build()
 
-    def __build_encoder_layer_norm(self) -> nn.LayerNorm:
-        return nn.LayerNorm(self.cfg.hidden_dim)
+    def __build_encoder_layer_norm(self) -> nn.Module:
+        return LayerConfig(
+            input_dim=self.cfg.hidden_dim,
+            output_dim=self.cfg.hidden_dim,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            normalization=self.experiment_config.encoder_output_normalization,
+        ).build_normalization()
 
     def __build_output_model(self) -> nn.Module:
         return self.experiment_config.output_config.build()
