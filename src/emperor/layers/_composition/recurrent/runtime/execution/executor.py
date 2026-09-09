@@ -340,19 +340,9 @@ class RecurrentExecution(Generic[_StateT]):
             source_result, target_transition_result = (
                 adapter._run_shared_handoff_boundary_transition(
                     source_boundary_state,
-                    run_transition=prepared_transition.run_transition,
-                    transition_input=prepared_transition.transition_input,
-                    previous_evolving_hidden=(
-                        prepared_transition.previous_evolving_hidden
-                    ),
-                    source_halting_update_enabled=(
-                        prepared_transition.halting_update_enabled
-                    ),
+                    prepared_transition,
                     run_provisional_source_branch=provisional_source_continuation,
-                    loss=prepared_transition.loss,
-                    residual_state=prepared_transition.residual_state,
                     target_residual_state=target_residual_state,
-                    residual_schedule=prepared_transition.residual_schedule,
                     transition_index=transition_index,
                 )
             )
@@ -427,13 +417,7 @@ class RecurrentExecution(Generic[_StateT]):
             )
             transition_result = adapter._run_recurrent_transition(
                 recurrent_state,
-                run_transition=prepared_transition.run_transition,
-                transition_input=prepared_transition.transition_input,
-                previous_evolving_hidden=(prepared_transition.previous_evolving_hidden),
-                halting_update_enabled=(prepared_transition.halting_update_enabled),
-                loss=prepared_transition.loss,
-                residual_state=prepared_transition.residual_state,
-                residual_schedule=prepared_transition.residual_schedule,
+                prepared_transition,
                 transition_index=transition_index,
                 observe_transition=observe_transition,
             )
