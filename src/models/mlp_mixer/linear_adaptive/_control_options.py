@@ -28,6 +28,8 @@ class StackOptions:
     )
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_postprocessing_flag: bool
     bias_flag: bool
@@ -44,6 +46,8 @@ class ControllerStackSource:
     normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     last_layer_bias_option: LastLayerBiasOptions | None
     apply_output_postprocessing_flag: bool | None
     bias_flag: bool | None
@@ -81,6 +85,8 @@ class ControllerStackSource:
                 if self.residual_connection_option is None
                 else self.residual_connection_option
             ),
+            residual_block_size=self.residual_block_size,
+            residual_rms_norm_epsilon=self.residual_rms_norm_epsilon,
             residual_model_flag=self.residual_model_flag,
             last_layer_bias_option=(
                 defaults.last_layer_bias_option
@@ -142,6 +148,8 @@ class RecurrentOptions:
     )
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     gate: GateOptions
     halting: HaltingOptions
     memory: MemoryOptions | None
@@ -164,6 +172,8 @@ def submodule_stack_options(runtime: RuntimeOptions) -> StackOptions:
         layer_norm_position=runtime.submodule_stack_layer_norm_position,
         normalization=runtime.submodule_stack_normalization,
         residual_connection_option=runtime.submodule_stack_residual_connection_option,
+        residual_block_size=runtime.submodule_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.submodule_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.submodule_stack_residual_model_flag,
         last_layer_bias_option=runtime.submodule_stack_last_layer_bias_option,
         apply_output_postprocessing_flag=runtime.submodule_stack_apply_output_postprocessing_flag,
@@ -216,6 +226,8 @@ def main_control_options(runtime: RuntimeOptions) -> ControlOptions:
             layer_norm_position=runtime.recurrent_layer_norm_position,
             normalization=runtime.recurrent_normalization,
             residual_connection_option=runtime.recurrent_residual_connection_option,
+            residual_block_size=runtime.recurrent_residual_block_size,
+            residual_rms_norm_epsilon=runtime.recurrent_residual_rms_norm_epsilon,
             residual_model_flag=runtime.recurrent_residual_model_flag,
             gate=GateOptions(
                 enabled=runtime.recurrent_stack_gate_flag,
@@ -276,6 +288,8 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 residual_connection_option=(
                     runtime.token_mixer_gate_stack_residual_connection_option
                 ),
+                residual_block_size=runtime.token_mixer_gate_stack_residual_block_size,
+                residual_rms_norm_epsilon=runtime.token_mixer_gate_stack_residual_rms_norm_epsilon,
                 residual_model_flag=(
                     runtime.token_mixer_gate_stack_residual_model_flag
                 ),
@@ -309,6 +323,8 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 residual_connection_option=(
                     runtime.token_mixer_halting_stack_residual_connection_option
                 ),
+                residual_block_size=runtime.token_mixer_halting_stack_residual_block_size,
+                residual_rms_norm_epsilon=runtime.token_mixer_halting_stack_residual_rms_norm_epsilon,
                 residual_model_flag=(
                     runtime.token_mixer_halting_stack_residual_model_flag
                 ),
@@ -346,6 +362,8 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 residual_connection_option=(
                     runtime.token_mixer_memory_stack_residual_connection_option
                 ),
+                residual_block_size=runtime.token_mixer_memory_stack_residual_block_size,
+                residual_rms_norm_epsilon=runtime.token_mixer_memory_stack_residual_rms_norm_epsilon,
                 residual_model_flag=(
                     runtime.token_mixer_memory_stack_residual_model_flag
                 ),
@@ -374,6 +392,8 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
             residual_connection_option=(
                 runtime.token_mixer_recurrent_residual_connection_option
             ),
+            residual_block_size=runtime.token_mixer_recurrent_residual_block_size,
+            residual_rms_norm_epsilon=runtime.token_mixer_recurrent_residual_rms_norm_epsilon,
             residual_model_flag=runtime.token_mixer_recurrent_residual_model_flag,
             gate=GateOptions(
                 enabled=runtime.token_mixer_recurrent_stack_gate_flag,
@@ -398,6 +418,8 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     residual_connection_option=(
                         runtime.token_mixer_recurrent_gate_stack_residual_connection_option
                     ),
+                    residual_block_size=runtime.token_mixer_recurrent_gate_stack_residual_block_size,
+                    residual_rms_norm_epsilon=runtime.token_mixer_recurrent_gate_stack_residual_rms_norm_epsilon,
                     residual_model_flag=(
                         runtime.token_mixer_recurrent_gate_stack_residual_model_flag
                     ),
@@ -437,6 +459,8 @@ def _token_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     residual_connection_option=(
                         runtime.token_mixer_recurrent_halting_stack_residual_connection_option
                     ),
+                    residual_block_size=runtime.token_mixer_recurrent_halting_stack_residual_block_size,
+                    residual_rms_norm_epsilon=runtime.token_mixer_recurrent_halting_stack_residual_rms_norm_epsilon,
                     residual_model_flag=(
                         runtime.token_mixer_recurrent_halting_stack_residual_model_flag
                     ),
@@ -475,6 +499,8 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 residual_connection_option=(
                     runtime.channel_mixer_gate_stack_residual_connection_option
                 ),
+                residual_block_size=runtime.channel_mixer_gate_stack_residual_block_size,
+                residual_rms_norm_epsilon=runtime.channel_mixer_gate_stack_residual_rms_norm_epsilon,
                 residual_model_flag=(
                     runtime.channel_mixer_gate_stack_residual_model_flag
                 ),
@@ -508,6 +534,8 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 residual_connection_option=(
                     runtime.channel_mixer_halting_stack_residual_connection_option
                 ),
+                residual_block_size=runtime.channel_mixer_halting_stack_residual_block_size,
+                residual_rms_norm_epsilon=runtime.channel_mixer_halting_stack_residual_rms_norm_epsilon,
                 residual_model_flag=(
                     runtime.channel_mixer_halting_stack_residual_model_flag
                 ),
@@ -545,6 +573,8 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                 residual_connection_option=(
                     runtime.channel_mixer_memory_stack_residual_connection_option
                 ),
+                residual_block_size=runtime.channel_mixer_memory_stack_residual_block_size,
+                residual_rms_norm_epsilon=runtime.channel_mixer_memory_stack_residual_rms_norm_epsilon,
                 residual_model_flag=(
                     runtime.channel_mixer_memory_stack_residual_model_flag
                 ),
@@ -573,6 +603,8 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
             residual_connection_option=(
                 runtime.channel_mixer_recurrent_residual_connection_option
             ),
+            residual_block_size=runtime.channel_mixer_recurrent_residual_block_size,
+            residual_rms_norm_epsilon=runtime.channel_mixer_recurrent_residual_rms_norm_epsilon,
             residual_model_flag=(runtime.channel_mixer_recurrent_residual_model_flag),
             gate=GateOptions(
                 enabled=runtime.channel_mixer_recurrent_stack_gate_flag,
@@ -597,6 +629,8 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     residual_connection_option=(
                         runtime.channel_mixer_recurrent_gate_stack_residual_connection_option
                     ),
+                    residual_block_size=runtime.channel_mixer_recurrent_gate_stack_residual_block_size,
+                    residual_rms_norm_epsilon=runtime.channel_mixer_recurrent_gate_stack_residual_rms_norm_epsilon,
                     residual_model_flag=(
                         runtime.channel_mixer_recurrent_gate_stack_residual_model_flag
                     ),
@@ -642,6 +676,8 @@ def _channel_mixer_control_options(runtime: RuntimeOptions) -> ControlOptions:
                     residual_connection_option=(
                         runtime.channel_mixer_recurrent_halting_stack_residual_connection_option
                     ),
+                    residual_block_size=runtime.channel_mixer_recurrent_halting_stack_residual_block_size,
+                    residual_rms_norm_epsilon=runtime.channel_mixer_recurrent_halting_stack_residual_rms_norm_epsilon,
                     residual_model_flag=(
                         runtime.channel_mixer_recurrent_halting_stack_residual_model_flag
                     ),
@@ -669,6 +705,8 @@ def _main_gate_stack(runtime: RuntimeOptions) -> ControllerStackSource:
         layer_norm_position=runtime.gate_stack_layer_norm_position,
         normalization=runtime.gate_stack_normalization,
         residual_connection_option=runtime.gate_stack_residual_connection_option,
+        residual_block_size=runtime.gate_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.gate_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.gate_stack_residual_model_flag,
         last_layer_bias_option=runtime.gate_stack_last_layer_bias_option,
         apply_output_postprocessing_flag=runtime.gate_stack_apply_output_postprocessing_flag,
@@ -686,6 +724,8 @@ def _main_halting_stack(runtime: RuntimeOptions) -> ControllerStackSource:
         layer_norm_position=runtime.halting_stack_layer_norm_position,
         normalization=runtime.halting_stack_normalization,
         residual_connection_option=runtime.halting_stack_residual_connection_option,
+        residual_block_size=runtime.halting_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.halting_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.halting_stack_residual_model_flag,
         last_layer_bias_option=runtime.halting_stack_last_layer_bias_option,
         apply_output_postprocessing_flag=runtime.halting_stack_apply_output_postprocessing_flag,
@@ -703,6 +743,8 @@ def _main_memory_stack(runtime: RuntimeOptions) -> ControllerStackSource:
         layer_norm_position=runtime.memory_stack_layer_norm_position,
         normalization=runtime.memory_stack_normalization,
         residual_connection_option=runtime.memory_stack_residual_connection_option,
+        residual_block_size=runtime.memory_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.memory_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.memory_stack_residual_model_flag,
         last_layer_bias_option=runtime.memory_stack_last_layer_bias_option,
         apply_output_postprocessing_flag=runtime.memory_stack_apply_output_postprocessing_flag,
@@ -722,6 +764,8 @@ def _main_recurrent_gate_stack(runtime: RuntimeOptions) -> ControllerStackSource
         residual_connection_option=(
             runtime.recurrent_gate_stack_residual_connection_option
         ),
+        residual_block_size=runtime.recurrent_gate_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.recurrent_gate_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.recurrent_gate_stack_residual_model_flag,
         last_layer_bias_option=runtime.recurrent_gate_stack_last_layer_bias_option,
         apply_output_postprocessing_flag=(
@@ -743,6 +787,8 @@ def _main_recurrent_halting_stack(runtime: RuntimeOptions) -> ControllerStackSou
         residual_connection_option=(
             runtime.recurrent_halting_stack_residual_connection_option
         ),
+        residual_block_size=runtime.recurrent_halting_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.recurrent_halting_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.recurrent_halting_stack_residual_model_flag,
         last_layer_bias_option=(runtime.recurrent_halting_stack_last_layer_bias_option),
         apply_output_postprocessing_flag=(

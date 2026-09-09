@@ -37,6 +37,8 @@ class GeneratorStackSource:
     normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     last_layer_bias_option: LastLayerBiasOptions | None
     apply_output_postprocessing_flag: bool | None
     bias_flag: bool | None
@@ -74,6 +76,8 @@ class GeneratorStackSource:
                 if self.residual_connection_option is None
                 else self.residual_connection_option
             ),
+            residual_block_size=self.residual_block_size,
+            residual_rms_norm_epsilon=self.residual_rms_norm_epsilon,
             residual_model_flag=self.residual_model_flag,
             last_layer_bias_option=(
                 defaults.last_layer_bias_option
@@ -156,6 +160,8 @@ def adaptive_options(runtime: RuntimeOptions) -> AdaptiveOptions:
             residual_connection_option=(
                 runtime.adaptive_generator_stack_residual_connection_option
             ),
+            residual_block_size=runtime.adaptive_generator_stack_residual_block_size,
+            residual_rms_norm_epsilon=runtime.adaptive_generator_stack_residual_rms_norm_epsilon,
             residual_model_flag=(runtime.adaptive_generator_stack_residual_model_flag),
             last_layer_bias_option=(
                 runtime.adaptive_generator_stack_last_layer_bias_option
@@ -218,6 +224,8 @@ def _weight_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         residual_connection_option=(
             runtime.weight_generator_stack_residual_connection_option
         ),
+        residual_block_size=runtime.weight_generator_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.weight_generator_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.weight_generator_stack_residual_model_flag,
         last_layer_bias_option=runtime.weight_generator_stack_last_layer_bias_option,
         apply_output_postprocessing_flag=(
@@ -239,6 +247,8 @@ def _bias_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         residual_connection_option=(
             runtime.bias_generator_stack_residual_connection_option
         ),
+        residual_block_size=runtime.bias_generator_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.bias_generator_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.bias_generator_stack_residual_model_flag,
         last_layer_bias_option=runtime.bias_generator_stack_last_layer_bias_option,
         apply_output_postprocessing_flag=(
@@ -260,6 +270,8 @@ def _diagonal_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         residual_connection_option=(
             runtime.diagonal_generator_stack_residual_connection_option
         ),
+        residual_block_size=runtime.diagonal_generator_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.diagonal_generator_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.diagonal_generator_stack_residual_model_flag,
         last_layer_bias_option=(
             runtime.diagonal_generator_stack_last_layer_bias_option
@@ -283,6 +295,8 @@ def _mask_generator_stack(runtime: RuntimeOptions) -> GeneratorStackSource:
         residual_connection_option=(
             runtime.mask_generator_stack_residual_connection_option
         ),
+        residual_block_size=runtime.mask_generator_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.mask_generator_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.mask_generator_stack_residual_model_flag,
         last_layer_bias_option=runtime.mask_generator_stack_last_layer_bias_option,
         apply_output_postprocessing_flag=(

@@ -17,6 +17,8 @@ _CONTROLLER_STACK_FIELDS = (
     "num_layers",
     "activation",
     "residual_connection_option",
+    "residual_block_size",
+    "residual_rms_norm_epsilon",
     "residual_model_flag",
     "dropout_probability",
     "last_layer_bias_option",
