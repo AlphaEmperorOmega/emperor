@@ -51,6 +51,10 @@ def _controller_stack_from_config(
         residual_connection_option=getattr(
             config_module, f"{prefix}_RESIDUAL_CONNECTION_OPTION"
         ),
+        residual_block_size=getattr(config_module, f"{prefix}_RESIDUAL_BLOCK_SIZE"),
+        residual_rms_norm_epsilon=getattr(
+            config_module, f"{prefix}_RESIDUAL_RMS_NORM_EPSILON"
+        ),
         residual_model_flag=getattr(config_module, f"{prefix}_RESIDUAL_MODEL_FLAG"),
         dropout_probability=getattr(config_module, f"{prefix}_DROPOUT_PROBABILITY"),
         bias_flag=getattr(config_module, f"{prefix}_BIAS_FLAG"),
@@ -186,6 +190,12 @@ def attention_options_from_config(
                     f"{prefix}_STACK_RESIDUAL_CONNECTION_OPTION",
                 )
             ),
+            residual_block_size=getattr(
+                config_module, f"{prefix}_STACK_RESIDUAL_BLOCK_SIZE"
+            ),
+            residual_rms_norm_epsilon=getattr(
+                config_module, f"{prefix}_STACK_RESIDUAL_RMS_NORM_EPSILON"
+            ),
             residual_model_flag=getattr(
                 config_module,
                 f"{prefix}_STACK_RESIDUAL_MODEL_FLAG",
@@ -239,6 +249,12 @@ def feed_forward_options_from_config(
                     f"{prefix}_STACK_RESIDUAL_CONNECTION_OPTION",
                 )
             ),
+            residual_block_size=getattr(
+                config_module, f"{prefix}_STACK_RESIDUAL_BLOCK_SIZE"
+            ),
+            residual_rms_norm_epsilon=getattr(
+                config_module, f"{prefix}_STACK_RESIDUAL_RMS_NORM_EPSILON"
+            ),
             residual_model_flag=getattr(
                 config_module,
                 f"{prefix}_STACK_RESIDUAL_MODEL_FLAG",
@@ -268,6 +284,8 @@ _STACK_OPTION_FIELDS = (
     "layer_norm_position",
     "normalization",
     "residual_connection_option",
+    "residual_block_size",
+    "residual_rms_norm_epsilon",
     "residual_model_flag",
     "dropout_probability",
     "bias_flag",
@@ -584,10 +602,14 @@ def runtime_from_config() -> RuntimeOptions:
             config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
         ),
         stack_residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+        stack_residual_block_size=config.STACK_RESIDUAL_BLOCK_SIZE,
+        stack_residual_rms_norm_epsilon=config.STACK_RESIDUAL_RMS_NORM_EPSILON,
         stack_residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
         recurrent_residual_connection_option=(
             config.RECURRENT_RESIDUAL_CONNECTION_OPTION
         ),
+        recurrent_residual_block_size=config.RECURRENT_RESIDUAL_BLOCK_SIZE,
+        recurrent_residual_rms_norm_epsilon=config.RECURRENT_RESIDUAL_RMS_NORM_EPSILON,
         recurrent_residual_model_flag=config.RECURRENT_RESIDUAL_MODEL_FLAG,
     )
     experts = ExpertOptions(
@@ -632,6 +654,8 @@ def runtime_from_config() -> RuntimeOptions:
         residual_stack_residual_connection_option=(
             config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        residual_stack_residual_block_size=config.RESIDUAL_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_stack_residual_rms_norm_epsilon=config.RESIDUAL_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_stack_residual_model_flag=(config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG),
         residual_stack_dropout_probability=(config.RESIDUAL_STACK_DROPOUT_PROBABILITY),
         residual_stack_last_layer_bias_option=(
