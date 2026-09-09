@@ -20,6 +20,9 @@ EXPECTED_EXPORTS = (
     "SamplerConfig",
     "RouterModel",
     "SamplerModel",
+    "TokenSamplerConfig",
+    "TokenSamplerModel",
+    "TokenSamplingResult",
     "SamplerMonitorCallback",
 )
 
@@ -28,6 +31,9 @@ EXPECTED_OWNERS = {
     "SamplerConfig": "emperor.sampler._config",
     "RouterModel": "emperor.sampler._router",
     "SamplerModel": "emperor.sampler._sampler",
+    "TokenSamplerConfig": "emperor.sampler._token_config",
+    "TokenSamplerModel": "emperor.sampler._token_sampler",
+    "TokenSamplingResult": "emperor.sampler._token_sampler",
     "SamplerMonitorCallback": "emperor.sampler._monitoring",
 }
 
@@ -91,6 +97,8 @@ private_modules = (
     "emperor.sampler._config",
     "emperor.sampler._router",
     "emperor.sampler._sampler",
+    "emperor.sampler._token_config",
+    "emperor.sampler._token_sampler",
     "emperor.sampler._monitoring",
 )
 before = {name: name in sys.modules for name in private_modules}
