@@ -66,6 +66,9 @@ def _residual(
     runtime: RuntimeOptions,
     option,
     model_flag,
+    *,
+    residual_block_size: int | None = None,
+    residual_rms_norm_epsilon: float | None = None,
 ):
     return build_residual_config(
         option,
@@ -81,6 +84,8 @@ def _residual(
                 residual_connection_option=(
                     runtime.residual_stack_residual_connection_option
                 ),
+                residual_block_size=runtime.residual_stack_residual_block_size,
+                residual_rms_norm_epsilon=runtime.residual_stack_residual_rms_norm_epsilon,
                 residual_model_flag=(runtime.residual_stack_residual_model_flag),
                 dropout_probability=(runtime.residual_stack_dropout_probability),
                 last_layer_bias_option=(runtime.residual_stack_last_layer_bias_option),
@@ -91,6 +96,8 @@ def _residual(
             ),
             submodule_stack_options(runtime),
         ),
+        residual_block_size=residual_block_size,
+        residual_rms_norm_epsilon=residual_rms_norm_epsilon,
     )
 
 
@@ -119,6 +126,8 @@ def _affine_stack(
     normalization=NormalizationOptions.RMS_NORM,
     residual_connection_option,
     residual_model_flag,
+    residual_block_size: int | None = None,
+    residual_rms_norm_epsilon: float | None = None,
     last_layer_bias_option,
     apply_output_postprocessing_flag: bool,
     bias_flag: bool,
@@ -157,6 +166,8 @@ def _affine_stack(
                 runtime,
                 residual_connection_option,
                 residual_model_flag,
+                residual_block_size=residual_block_size,
+                residual_rms_norm_epsilon=residual_rms_norm_epsilon,
             ),
             dropout_probability=dropout_probability,
             layer_norm_position=layer_norm_position,
@@ -182,6 +193,8 @@ def _affine_stack(
         layer_norm_position=layer_norm_position,
         normalization=normalization,
         residual_connection_option=residual_connection_option,
+        residual_block_size=residual_block_size,
+        residual_rms_norm_epsilon=residual_rms_norm_epsilon,
         residual_model_flag=residual_model_flag,
         last_layer_bias_option=last_layer_bias_option,
         apply_output_postprocessing_flag=apply_output_postprocessing_flag,
@@ -209,6 +222,8 @@ def patch_config(runtime: RuntimeOptions) -> LinearPatchEmbeddingConfig:
         layer_norm_position=LayerNormPositionOptions.DISABLED,
         normalization=NormalizationOptions.RMS_NORM,
         residual_connection_option=None,
+        residual_block_size=None,
+        residual_rms_norm_epsilon=None,
         residual_model_flag=False,
         last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
         apply_output_postprocessing_flag=False,
@@ -239,6 +254,8 @@ def _router_stack(runtime: RuntimeOptions) -> LayerStackConfig:
         layer_norm_position=runtime.router_stack_layer_norm_position,
         normalization=runtime.router_stack_normalization,
         residual_connection_option=runtime.router_stack_residual_connection_option,
+        residual_block_size=runtime.router_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.router_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.router_stack_residual_model_flag,
         last_layer_bias_option=runtime.router_stack_last_layer_bias_option,
         apply_output_postprocessing_flag=runtime.router_stack_apply_output_postprocessing_flag,
@@ -285,6 +302,8 @@ def _expert_stack(
         layer_norm_position=runtime.expert_stack_layer_norm_position,
         normalization=runtime.expert_stack_normalization,
         residual_connection_option=(runtime.expert_stack_residual_connection_option),
+        residual_block_size=runtime.expert_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.expert_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.expert_stack_residual_model_flag,
         last_layer_bias_option=runtime.expert_stack_last_layer_bias_option,
         apply_output_postprocessing_flag=(
@@ -301,6 +320,8 @@ def _expert_stack(
         layer_norm_position=runtime.expert_stack_layer_norm_position,
         normalization=runtime.expert_stack_normalization,
         residual_connection_option=runtime.expert_stack_residual_connection_option,
+        residual_block_size=runtime.expert_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.expert_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.expert_stack_residual_model_flag,
         last_layer_bias_option=runtime.expert_stack_last_layer_bias_option,
         apply_output_postprocessing_flag=(
@@ -333,6 +354,8 @@ def _mixture_model_config(
     normalization=NormalizationOptions.RMS_NORM,
     residual_connection_option,
     residual_model_flag,
+    residual_block_size: int | None = None,
+    residual_rms_norm_epsilon: float | None = None,
     last_layer_bias_option,
     apply_output_postprocessing_flag: bool,
     mirrored: bool,
@@ -390,6 +413,8 @@ def _mixture_model_config(
                 runtime,
                 residual_connection_option,
                 residual_model_flag,
+                residual_block_size=residual_block_size,
+                residual_rms_norm_epsilon=residual_rms_norm_epsilon,
             ),
             dropout_probability=dropout_probability,
             layer_norm_position=layer_norm_position,
@@ -420,6 +445,8 @@ def _mixture_model_config(
         layer_norm_position=layer_norm_position,
         normalization=normalization,
         residual_connection_option=residual_connection_option,
+        residual_block_size=residual_block_size,
+        residual_rms_norm_epsilon=residual_rms_norm_epsilon,
         residual_model_flag=residual_model_flag,
         last_layer_bias_option=last_layer_bias_option,
         apply_output_postprocessing_flag=apply_output_postprocessing_flag,
@@ -449,6 +476,8 @@ def _token_mixing_model(runtime: RuntimeOptions, tokens: int):
         residual_connection_option=(
             runtime.token_mixer_stack_residual_connection_option
         ),
+        residual_block_size=runtime.token_mixer_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.token_mixer_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.token_mixer_stack_residual_model_flag,
         last_layer_bias_option=(runtime.token_mixer_stack_last_layer_bias_option),
         apply_output_postprocessing_flag=(
@@ -473,6 +502,8 @@ def _channel_mixing_model(runtime: RuntimeOptions):
         residual_connection_option=(
             runtime.channel_mixer_stack_residual_connection_option
         ),
+        residual_block_size=runtime.channel_mixer_stack_residual_block_size,
+        residual_rms_norm_epsilon=runtime.channel_mixer_stack_residual_rms_norm_epsilon,
         residual_model_flag=runtime.channel_mixer_stack_residual_model_flag,
         last_layer_bias_option=(runtime.channel_mixer_stack_last_layer_bias_option),
         apply_output_postprocessing_flag=(
@@ -502,6 +533,8 @@ def _controller_stack_config(
         layer_norm_position=options.layer_norm_position,
         normalization=options.normalization,
         residual_connection_option=options.residual_connection_option,
+        residual_block_size=options.residual_block_size,
+        residual_rms_norm_epsilon=options.residual_rms_norm_epsilon,
         residual_model_flag=options.residual_model_flag,
         last_layer_bias_option=(
             options.last_layer_bias_option
@@ -648,6 +681,8 @@ def _configure_controls(
             runtime,
             recurrent.residual_connection_option,
             recurrent.residual_model_flag,
+            residual_block_size=recurrent.residual_block_size,
+            residual_rms_norm_epsilon=recurrent.residual_rms_norm_epsilon,
         ),
         halting_config=_configured_halting(
             runtime,
@@ -674,6 +709,8 @@ def encoder_config(runtime: RuntimeOptions, tokens: int):
             runtime,
             runtime.mixer_residual_connection_option,
             runtime.mixer_residual_model_flag,
+            residual_block_size=runtime.mixer_residual_block_size,
+            residual_rms_norm_epsilon=runtime.mixer_residual_rms_norm_epsilon,
         ),
         attention_config=MixerAttentionConfig(
             embedding_dim=runtime.hidden_dim,
@@ -693,6 +730,8 @@ def encoder_config(runtime: RuntimeOptions, tokens: int):
             runtime,
             runtime.stack_residual_connection_option,
             runtime.stack_residual_model_flag,
+            residual_block_size=runtime.stack_residual_block_size,
+            residual_rms_norm_epsilon=runtime.stack_residual_rms_norm_epsilon,
         ),
         dropout_probability=0.0,
         layer_norm_position=LayerNormPositionOptions.DISABLED,
