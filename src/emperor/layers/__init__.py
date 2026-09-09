@@ -2,6 +2,7 @@
 
 from emperor.layers._composition.recurrent.config import (
     HierarchicalReasoningModelRecurrentConfig,
+    InnerThinkingRecurrentConfig,
     RecurrentCompositionConfig,
     RecurrentLayerConfig,
     TinyRecursiveModelRecurrentConfig,
@@ -48,6 +49,7 @@ __all__ = (
     "LayerStackConfig",
     "MirroredLayerStackConfig",
     "HierarchicalReasoningModelRecurrentConfig",
+    "InnerThinkingRecurrentConfig",
     "RecurrentCompositionConfig",
     "RecurrentLayerConfig",
     "TinyRecursiveModelRecurrentConfig",
