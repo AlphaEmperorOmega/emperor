@@ -209,6 +209,8 @@ class MainStackValues:
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float
     last_layer_bias_option: LastLayerBiasOptions
     apply_output_postprocessing_flag: bool
@@ -227,6 +229,8 @@ class SubmoduleStackValues:
     )
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float
     bias_flag: bool
 
@@ -243,6 +247,8 @@ class OptionalStackValues:
     normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float | None
     bias_flag: bool | None
 
@@ -259,6 +265,8 @@ class OptionalStackFields:
     normalization: str = field(kw_only=True)
     residual_connection_option: str
     residual_model_flag: str
+    residual_block_size: str
+    residual_rms_norm_epsilon: str
     dropout_probability: str
     bias_flag: str
 
@@ -385,6 +393,8 @@ _RESIDUAL_STACK_FIELDS = OptionalStackFields(
     layer_norm_position="residual_stack_layer_norm_position",
     normalization="residual_stack_normalization",
     residual_connection_option="residual_stack_residual_connection_option",
+    residual_block_size="residual_stack_residual_block_size",
+    residual_rms_norm_epsilon="residual_stack_residual_rms_norm_epsilon",
     residual_model_flag="residual_stack_residual_model_flag",
     dropout_probability="residual_stack_dropout_probability",
     bias_flag="residual_stack_bias_flag",
@@ -399,6 +409,8 @@ _GATE_STACK_FIELDS = OptionalStackFields(
     layer_norm_position="gate_stack_layer_norm_position",
     normalization="gate_stack_normalization",
     residual_connection_option="gate_stack_residual_connection_option",
+    residual_block_size="gate_stack_residual_block_size",
+    residual_rms_norm_epsilon="gate_stack_residual_rms_norm_epsilon",
     residual_model_flag="gate_stack_residual_model_flag",
     dropout_probability="gate_stack_dropout_probability",
     bias_flag="gate_stack_bias_flag",
@@ -413,6 +425,8 @@ _HALTING_STACK_FIELDS = OptionalStackFields(
     layer_norm_position="halting_stack_layer_norm_position",
     normalization="halting_stack_normalization",
     residual_connection_option="halting_stack_residual_connection_option",
+    residual_block_size="halting_stack_residual_block_size",
+    residual_rms_norm_epsilon="halting_stack_residual_rms_norm_epsilon",
     residual_model_flag="halting_stack_residual_model_flag",
     dropout_probability="halting_stack_dropout_probability",
     bias_flag="halting_stack_bias_flag",
@@ -427,6 +441,8 @@ _MEMORY_STACK_FIELDS = OptionalStackFields(
     layer_norm_position="memory_stack_layer_norm_position",
     normalization="memory_stack_normalization",
     residual_connection_option="memory_stack_residual_connection_option",
+    residual_block_size="memory_stack_residual_block_size",
+    residual_rms_norm_epsilon="memory_stack_residual_rms_norm_epsilon",
     residual_model_flag="memory_stack_residual_model_flag",
     dropout_probability="memory_stack_dropout_probability",
     bias_flag="memory_stack_bias_flag",
@@ -441,6 +457,8 @@ _RECURRENT_GATE_STACK_FIELDS = OptionalStackFields(
     layer_norm_position="recurrent_gate_stack_layer_norm_position",
     normalization="recurrent_gate_stack_normalization",
     residual_connection_option="recurrent_gate_stack_residual_connection_option",
+    residual_block_size="recurrent_gate_stack_residual_block_size",
+    residual_rms_norm_epsilon="recurrent_gate_stack_residual_rms_norm_epsilon",
     residual_model_flag="recurrent_gate_stack_residual_model_flag",
     dropout_probability="recurrent_gate_stack_dropout_probability",
     bias_flag="recurrent_gate_stack_bias_flag",
@@ -455,6 +473,8 @@ _RECURRENT_HALTING_STACK_FIELDS = OptionalStackFields(
     layer_norm_position="recurrent_halting_stack_layer_norm_position",
     normalization="recurrent_halting_stack_normalization",
     residual_connection_option="recurrent_halting_stack_residual_connection_option",
+    residual_block_size="recurrent_halting_stack_residual_block_size",
+    residual_rms_norm_epsilon="recurrent_halting_stack_residual_rms_norm_epsilon",
     residual_model_flag="recurrent_halting_stack_residual_model_flag",
     dropout_probability="recurrent_halting_stack_dropout_probability",
     bias_flag="recurrent_halting_stack_bias_flag",
@@ -475,6 +495,8 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         num_layers=config.STACK_NUM_LAYERS,
         activation=config.STACK_ACTIVATION,
         residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_block_size=config.STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config.STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.STACK_DROPOUT_PROBABILITY,
         last_layer_bias_option=config.STACK_LAST_LAYER_BIAS_OPTION,
@@ -489,6 +511,8 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
         normalization=config.SUBMODULE_STACK_NORMALIZATION,
         residual_connection_option=config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_block_size=config.SUBMODULE_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.SUBMODULE_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config.SUBMODULE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.SUBMODULE_STACK_DROPOUT_PROBABILITY,
         bias_flag=config.SUBMODULE_STACK_BIAS_FLAG,
@@ -503,6 +527,8 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         layer_norm_position=config.RESIDUAL_STACK_LAYER_NORM_POSITION,
         normalization=config.RESIDUAL_STACK_NORMALIZATION,
         residual_connection_option=config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_block_size=config.RESIDUAL_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.RESIDUAL_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.RESIDUAL_STACK_DROPOUT_PROBABILITY,
         bias_flag=config.RESIDUAL_STACK_BIAS_FLAG,
@@ -517,6 +543,8 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         layer_norm_position=config.GATE_STACK_LAYER_NORM_POSITION,
         normalization=config.GATE_STACK_NORMALIZATION,
         residual_connection_option=config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_block_size=config.GATE_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config.GATE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.GATE_STACK_DROPOUT_PROBABILITY,
         bias_flag=config.GATE_STACK_BIAS_FLAG,
@@ -531,6 +559,8 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         layer_norm_position=config.HALTING_STACK_LAYER_NORM_POSITION,
         normalization=config.HALTING_STACK_NORMALIZATION,
         residual_connection_option=config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_block_size=config.HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config.HALTING_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.HALTING_STACK_DROPOUT_PROBABILITY,
         bias_flag=config.HALTING_STACK_BIAS_FLAG,
@@ -545,6 +575,8 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         layer_norm_position=config.MEMORY_STACK_LAYER_NORM_POSITION,
         normalization=config.MEMORY_STACK_NORMALIZATION,
         residual_connection_option=config.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_block_size=config.MEMORY_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.MEMORY_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config.MEMORY_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.MEMORY_STACK_DROPOUT_PROBABILITY,
         bias_flag=config.MEMORY_STACK_BIAS_FLAG,
@@ -563,6 +595,8 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         residual_connection_option=(
             config.RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        residual_block_size=config.RECURRENT_GATE_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.RECURRENT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config.RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
         bias_flag=config.RECURRENT_GATE_STACK_BIAS_FLAG,
@@ -581,6 +615,8 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
         residual_connection_option=(
             config.RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
+        residual_block_size=config.RECURRENT_HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.RECURRENT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config.RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
         bias_flag=config.RECURRENT_HALTING_STACK_BIAS_FLAG,
@@ -685,6 +721,12 @@ def read_main_stack_values(
             "stack_residual_connection_option",
             defaults.residual_connection_option,
         ),
+        residual_block_size=reader.optional_integer(
+            "stack_residual_block_size", defaults.residual_block_size
+        ),
+        residual_rms_norm_epsilon=reader.optional_floating(
+            "stack_residual_rms_norm_epsilon", defaults.residual_rms_norm_epsilon
+        ),
         residual_model_flag=reader.boolean(
             "stack_residual_model_flag", defaults.residual_model_flag
         ),
@@ -748,6 +790,13 @@ def read_submodule_stack_values(
             "submodule_stack_residual_connection_option",
             defaults.residual_connection_option,
         ),
+        residual_block_size=reader.optional_integer(
+            "submodule_stack_residual_block_size", defaults.residual_block_size
+        ),
+        residual_rms_norm_epsilon=reader.optional_floating(
+            "submodule_stack_residual_rms_norm_epsilon",
+            defaults.residual_rms_norm_epsilon,
+        ),
         residual_model_flag=reader.boolean(
             "submodule_stack_residual_model_flag", defaults.residual_model_flag
         ),
@@ -800,6 +849,12 @@ def read_residual_stack_values(
             residual_connection_option=reader.optional_residual(
                 fields.residual_connection_option,
                 defaults.residual_connection_option,
+            ),
+            residual_block_size=reader.optional_integer(
+                fields.residual_block_size, defaults.residual_block_size
+            ),
+            residual_rms_norm_epsilon=reader.optional_floating(
+                fields.residual_rms_norm_epsilon, defaults.residual_rms_norm_epsilon
             ),
             residual_model_flag=reader.boolean(
                 fields.residual_model_flag, defaults.residual_model_flag
@@ -857,6 +912,12 @@ def _read_optional_stack(
             residual_connection_option=reader.optional_residual(
                 fields.residual_connection_option,
                 defaults.residual_connection_option,
+            ),
+            residual_block_size=reader.optional_integer(
+                fields.residual_block_size, defaults.residual_block_size
+            ),
+            residual_rms_norm_epsilon=reader.optional_floating(
+                fields.residual_rms_norm_epsilon, defaults.residual_rms_norm_epsilon
             ),
             residual_model_flag=reader.boolean(
                 fields.residual_model_flag, defaults.residual_model_flag

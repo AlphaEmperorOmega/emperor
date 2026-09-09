@@ -41,6 +41,8 @@ class HiddenModelConfigFactory:
                     runtime.stack.residual_connection_option,
                     runtime.stack.residual_model_flag,
                     runtime.residual_stack,
+                    residual_block_size=runtime.stack.residual_block_size,
+                    residual_rms_norm_epsilon=runtime.stack.residual_rms_norm_epsilon,
                     selector_field="STACK_RESIDUAL_CONNECTION_OPTION",
                     model_flag_field="STACK_RESIDUAL_MODEL_FLAG",
                 ),

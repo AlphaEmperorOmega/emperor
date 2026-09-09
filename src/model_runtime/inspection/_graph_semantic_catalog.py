@@ -66,8 +66,9 @@ DEFAULT_RESIDUAL_OPTION_DESCRIPTION = (
     "Residual connection behavior. Enabled options require input_dim == output_dim."
 )
 DEFAULT_RESIDUAL_MODEL_DESCRIPTION = (
-    "Optional model that generates data-dependent coefficients for weighted residual "
-    "modes. When omitted, weighted modes use a learned scalar parameter."
+    "Optional model that generates input-dependent attention queries or weighted "
+    "residual coefficients. When omitted, attention uses a learned query vector "
+    "and weighted modes use a learned scalar parameter."
 )
 
 

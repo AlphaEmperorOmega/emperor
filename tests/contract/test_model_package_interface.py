@@ -188,9 +188,169 @@ _ORDERING_DIGEST_BY_PACKAGE = {
 }
 
 
+_ORDERING_WITH_ATTENTION_SETTINGS_BY_PACKAGE = {
+    "bert/linear": (
+        "89c8f59c481e0d53b728dc8166ec28181968576ac0c6950d072c22f50ebac32f",
+        373,
+        9,
+    ),
+    "bert/linear_adaptive": (
+        "da3c671e971812e57cb20fd55f9b451d7760a2bd04fe966e0529033a5fd903e6",
+        834,
+        124,
+    ),
+    "bert/expert_linear": (
+        "dba8ac6613a87ad2cd9c4294d657968c59d9966089eab4261d34fc9ad956efbf",
+        500,
+        10,
+    ),
+    "bert/expert_linear_adaptive": (
+        "9015739bebf335008ad7d31360221e7376f63396700359f110efef1942310440",
+        915,
+        40,
+    ),
+    "experts/linear": (
+        "7a63485a775991bde435a97fe7ace7ded5023c31a437edeba1e69ef71032ee65",
+        287,
+        7,
+    ),
+    "experts/linear_adaptive": (
+        "e78713ab982fd82f450e8a0e833fc8f25af991d96db52019d11f1d766cbc3cf5",
+        880,
+        37,
+    ),
+    "gpt/linear": (
+        "0bc262594db8cc2ef56d01b34e50708bf72628459cd75c063a155cb358ce9802",
+        364,
+        8,
+    ),
+    "gpt/linear_adaptive": (
+        "81b8421ea7c7f7f9bae9825ddbda3a758cd67fe438345a948964a01aeaa8a9bf",
+        825,
+        123,
+    ),
+    "gpt/expert_linear": (
+        "045d8df1941df9c8f3454b89f7bbd6de6f9989d6e037e371d7d664b1f98f66d2",
+        491,
+        9,
+    ),
+    "gpt/expert_linear_adaptive": (
+        "6559e3d67f67ac0385820d590d1c453575f0a688dfe8e3b4bfa7297f5d919a9e",
+        908,
+        39,
+    ),
+    "linears/linear": (
+        "c525e3226785d9b331406a013ec97b4fd09cc93a53b74e3b464d2bf9640618ff",
+        176,
+        7,
+    ),
+    "linears/linear_adaptive": (
+        "9997be086f46c9e63555a52592f6c179b2a5591f58ad6cf33662d8925d64f295",
+        573,
+        33,
+    ),
+    "mlp_mixer/linear": (
+        "e18cf34ba92c58f0c8a4d6b86dfebea16f1faacd4f737432bf061fd30b038b60",
+        379,
+        9,
+    ),
+    "mlp_mixer/linear_adaptive": (
+        "f71a8301d9910f035d1c6f6bdafbac850122780d7893f52cc8e318555fd3365c",
+        550,
+        10,
+    ),
+    "mlp_mixer/expert_linear": (
+        "58a7842502c265f746fcf8e0b5661931e2a7242d0185f33398cb166f35390df8",
+        504,
+        11,
+    ),
+    "mlp_mixer/expert_linear_adaptive": (
+        "aba748e4f80a6af0b9e75d064aeff5b094bd9277bcd50ce6fe0f40f514110c9a",
+        675,
+        12,
+    ),
+    "neuron/linear": (
+        "6f98de2ee92999f4ef5907beacd91aae487a1e89ae350fdfeaa8c600f8b183f5",
+        220,
+        10,
+    ),
+    "neuron/linear_adaptive": (
+        "583faece6a7290b937849ffd9a11ace0b5495954c461a2f40406290d5813f7c8",
+        577,
+        36,
+    ),
+    "neuron/expert_linear": (
+        "ab457987d08c5f5a284c94eab7a0481916a60e8a1bdcb045ae5bf03a1de00af7",
+        347,
+        10,
+    ),
+    "neuron/expert_linear_adaptive": (
+        "cbd39b8ba892d7900885c2088af942234c0ee61b1b0ba5820bbaf9f4ef452ac6",
+        940,
+        40,
+    ),
+    "parametric/parametric_generator": (
+        "4b9e4fd713db817400c090d1fa07ced411cb574cf1582b288cb564e3c9ee7214",
+        72,
+        7,
+    ),
+    "parametric/parametric_matrix": (
+        "fd56b87316fae8fa511c3cb3fbe4aedea7577382d81724472588ec37977ec7c8",
+        66,
+        7,
+    ),
+    "parametric/parametric_vector": (
+        "4efd1de70bed3b66f5d45ab559b65adcaf3ddeb078c7ed84304a94b906c3fa97",
+        67,
+        6,
+    ),
+    "transformer/linear": (
+        "31bfb26a220d0a5f6b90fa52b60b7710d3389d25561538464f0b6a1c351ab363",
+        830,
+        12,
+    ),
+    "transformer/linear_adaptive": (
+        "b9d4d18c9815752eddbcbf3f2d57b7942789b9daaadba5f2666780955e07d4fd",
+        3182,
+        20,
+    ),
+    "transformer/expert_linear": (
+        "24b9abef1ccd48dee9844a91f43822ea635a683c8527e71a17c78c58f688d31d",
+        980,
+        10,
+    ),
+    "transformer/expert_linear_adaptive": (
+        "ca7b7c8e9a65306d7e138b63d8e0083d1e48fbacc2071743eabec9d20c26ae20",
+        3556,
+        30,
+    ),
+    "vit/linear": (
+        "5dba382f1c7bf26fabe6bdde50b442049296161386ee87d8cd6f9e1af9bcb4a4",
+        364,
+        8,
+    ),
+    "vit/linear_adaptive": (
+        "8e04dc711a7acc7524b594d78d971c010d851027346bff5aaec4f62c7eefdd52",
+        825,
+        122,
+    ),
+    "vit/expert_linear": (
+        "e795ab20898c060695a8e676172d26a86de5ef0da29fffd25562374bf00438ec",
+        491,
+        8,
+    ),
+    "vit/expert_linear_adaptive": (
+        "c14ecc4b8a2fa4967facee1005c743a63825457c7179ebff5b50d12f250cb940",
+        909,
+        38,
+    ),
+}
+
+
 class TestModelPackageInterface(unittest.TestCase):
     def test_every_catalog_package_preserves_runtime_parameter_and_axis_order(self):
         actual = {}
+        actual_with_attention_settings = {}
         for package in discover_model_packages():
             runtime_defaults = package.runtime_defaults_spec
             parameter_keys = list(runtime_defaults.ordered_configuration_keys())
@@ -207,17 +367,32 @@ class TestModelPackageInterface(unittest.TestCase):
             search = plan.search
             assert search is not None
             axis_keys = [axis.key for axis in search.axes or ()]
-            payload = json.dumps(
-                {"parameters": parameter_keys, "axes": axis_keys},
-                separators=(",", ":"),
-            )
-            actual[package.catalog_key] = (
-                hashlib.sha256(payload.encode()).hexdigest(),
-                len(parameter_keys),
-                len(axis_keys),
-            )
+            existing_parameter_keys = [
+                key
+                for key in parameter_keys
+                if not key.endswith(
+                    ("RESIDUAL_BLOCK_SIZE", "RESIDUAL_RMS_NORM_EPSILON")
+                )
+            ]
+            for keys, signatures in (
+                (existing_parameter_keys, actual),
+                (parameter_keys, actual_with_attention_settings),
+            ):
+                payload = json.dumps(
+                    {"parameters": keys, "axes": axis_keys},
+                    separators=(",", ":"),
+                )
+                signatures[package.catalog_key] = (
+                    hashlib.sha256(payload.encode()).hexdigest(),
+                    len(keys),
+                    len(axis_keys),
+                )
 
         self.assertEqual(actual, _ORDERING_DIGEST_BY_PACKAGE)
+        self.assertEqual(
+            actual_with_attention_settings,
+            _ORDERING_WITH_ATTENTION_SETTINGS_BY_PACKAGE,
+        )
 
     def test_runtime_defaults_interpretation_is_authoritative_and_cached(self):
         package = model_package("linears/linear")

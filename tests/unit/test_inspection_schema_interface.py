@@ -723,10 +723,10 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
                 "bool",
                 False,
                 False,
-                "Uses the Residual Stack Options as a data-dependent coefficient "
-                "model for the main layer stack. This is supported only when the "
-                "paired residual selector uses a weighted or weighted-blend "
-                "residual.",
+                "Uses the Residual Stack Options as a data-dependent query or coefficient "
+                "model for the main layer stack. Attention residuals generate queries "
+                "from the current output; weighted and weighted-blend residuals "
+                "generate mixing coefficients from concatenated current and previous outputs.",
             ),
             (
                 "STACK_BIAS_FLAG",
@@ -1126,7 +1126,7 @@ class InspectionSchemaInterfaceTests(unittest.TestCase):
         self.assertIs(residual_model_flag.default, False)
         self.assertFalse(residual_model_flag.nullable)
         self.assertIn(
-            "Residual Stack Options as a data-dependent coefficient model",
+            "Residual Stack Options as a data-dependent query or coefficient model",
             residual_model_flag.description,
         )
         self.assertTupleEqual(residual_model_flag.applicable_when, ())
