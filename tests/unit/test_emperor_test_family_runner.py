@@ -189,6 +189,7 @@ class EmperorTestFamilyRunnerTests(unittest.TestCase):
             (
                 "src/emperor/neuron/_cluster/__init__.py",
                 "src/emperor/neuron/_monitoring/__init__.py",
+                "src/emperor/neuron/_validation/__init__.py",
             ),
         )
         public_initializer = "src/emperor/neuron/__init__.py"
