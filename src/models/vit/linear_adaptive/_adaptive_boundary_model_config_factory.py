@@ -22,6 +22,7 @@ from emperor.layers import (
     GateConfig,
     LayerConfig,
     LayerNormPositionOptions,
+    NormalizationOptions,
 )
 from models.vit.linear_adaptive import _config_defaults as config_defaults
 from models.vit.linear_adaptive._adaptive_generator_stack_config_factory import (
@@ -202,6 +203,7 @@ class BoundaryModelConfigFactory:
             options=self.input_boundary_options,
             activation=self.stack_options.activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
@@ -212,6 +214,7 @@ class BoundaryModelConfigFactory:
             options=self.output_boundary_options,
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             dropout_probability=0.0,
             gate_config=None,
             halting_config=None,
@@ -225,11 +228,14 @@ class BoundaryModelConfigFactory:
         dropout_probability: float,
         gate_config: GateConfig | None,
         halting_config: "HaltingConfig | None",
+        *,
+        normalization: NormalizationOptions = NormalizationOptions.RMS_NORM,
     ) -> LayerConfig:
         layer_model_config = self.__build_boundary_layer_model_config(options)
         return LayerConfig(
             activation=activation,
             layer_norm_position=layer_norm_position,
+            normalization=normalization,
             residual_config=None,
             dropout_probability=dropout_probability,
             gate_config=gate_config,

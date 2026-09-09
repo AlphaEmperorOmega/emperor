@@ -15,6 +15,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerNormPositionOptions,
     LayerStackConfig,
+    NormalizationOptions,
     RecurrentLayerConfig,
     ResidualConfig,
 )
@@ -166,6 +167,7 @@ class VitCoreConfigFactory:
         layer_config = TransformerEncoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_config=residual_config,
             dropout_probability=0.0,
             gate_config=(
@@ -208,6 +210,7 @@ class VitCoreConfigFactory:
         return TransformerEncoderLayerConfig(
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             residual_config=AdditiveResidualConfig(),
             attention_config=attention_config,
@@ -287,6 +290,7 @@ class VitCoreConfigFactory:
             residual_model_flag=options.residual_model_flag,
             residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
             apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
@@ -367,6 +371,7 @@ class VitCoreConfigFactory:
             residual_model_flag=options.residual_model_flag,
             residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
             apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
@@ -424,6 +429,8 @@ class VitCoreConfigFactory:
 
     def _stack_residual_model_flag(self) -> bool:
         return self.encoder_stack_options.residual_model_flag
+
+
 
     def _stack_last_layer_bias_option(self) -> LastLayerBiasOptions:
         return self.encoder_stack_options.last_layer_bias_option

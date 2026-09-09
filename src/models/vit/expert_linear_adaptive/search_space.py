@@ -1,5 +1,6 @@
-# ruff: noqa: F405
+from emperor.layers import NormalizationOptions
 
+# ruff: noqa: F405
 from .config import *  # noqa: F401,F403
 
 SEARCH_SPACE_LEARNING_RATE: list = [1e-4, 1e-3, 1e-2]
@@ -9,6 +10,7 @@ SEARCH_SPACE_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
 ]
+SEARCH_SPACE_NORMALIZATION: list = list(NormalizationOptions)
 SEARCH_SPACE_IMAGE_PATCH_SIZE: list = [4, 2, 1]
 SEARCH_SPACE_ATTN_NUM_HEADS: list = [1, 2, 4]
 
@@ -121,8 +123,12 @@ SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION: list = [
     LayerNormPositionOptions.BEFORE,
     LayerNormPositionOptions.AFTER,
 ]
+SEARCH_SPACE_ADAPTIVE_GENERATOR_STACK_NORMALIZATION: list = list(NormalizationOptions)
 
 SEARCH_SPACE_ROUTER_WEIGHT_OPTION: list = SEARCH_SPACE_WEIGHT_OPTION
 SEARCH_SPACE_ROUTER_BIAS_OPTION: list = SEARCH_SPACE_BIAS_OPTION
 SEARCH_SPACE_ROUTER_DIAGONAL_OPTION: list = SEARCH_SPACE_DIAGONAL_OPTION
 SEARCH_SPACE_ROUTER_ROW_MASK_OPTION: list = SEARCH_SPACE_ROW_MASK_OPTION
+
+# Embedding and output normalization
+SEARCH_SPACE_ENCODER_OUTPUT_NORMALIZATION: list = list(NormalizationOptions)

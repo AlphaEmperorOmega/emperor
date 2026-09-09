@@ -219,6 +219,7 @@ class HiddenModelConfigFactory:
         return LayerConfig(
             activation=self.stack_options.activation,
             layer_norm_position=self.stack_options.layer_norm_position,
+            normalization=self.stack_options.normalization,
             residual_config=build_residual_config(
                 self.stack_options.residual_connection_option,
                 self.stack_options.residual_model_flag,

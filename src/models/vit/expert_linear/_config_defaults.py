@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from types import ModuleType
 
@@ -6,6 +6,7 @@ from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from models.vit.expert_linear.runtime_options import (
@@ -63,6 +64,9 @@ class _ControllerStackRole(Enum):
 class _MainStackDefaults:
     bias_flag: bool
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     num_layers: int
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
@@ -81,6 +85,7 @@ class _MainControllerStackDefaults:
     apply_output_postprocessing_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     dropout_probability: float | None
@@ -114,7 +119,9 @@ def vit_encoder_options(config: ModuleType) -> TransformerEncoderOptions:
         activation=config.STACK_ACTIVATION,
         dropout_probability=config.STACK_DROPOUT_PROBABILITY,
         layer_norm_position=config.LAYER_NORM_POSITION,
+        normalization=config.NORMALIZATION,
         causal_attention_mask_flag=False,
+        output_normalization=config.ENCODER_OUTPUT_NORMALIZATION,
     )
 
 
@@ -143,6 +150,7 @@ def main_layer_stack_options(config: ModuleType) -> MainLayerStackOptions:
     return MainLayerStackOptions(
         bias_flag=defaults.bias_flag,
         layer_norm_position=defaults.layer_norm_position,
+        normalization=defaults.normalization,
         num_layers=defaults.num_layers,
         activation=defaults.activation,
         residual_connection_option=defaults.residual_connection_option,
@@ -157,6 +165,7 @@ def _main_stack_defaults(config: ModuleType) -> _MainStackDefaults:
     return _MainStackDefaults(
         bias_flag=config.STACK_BIAS_FLAG,
         layer_norm_position=config.LAYER_NORM_POSITION,
+        normalization=config.NORMALIZATION,
         num_layers=config.STACK_NUM_LAYERS,
         activation=config.STACK_ACTIVATION,
         residual_connection_option=config.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -181,6 +190,7 @@ def linears_submodule_stack_options(
             ),
             activation=config.SUBMODULE_STACK_ACTIVATION,
             layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
+            normalization=config.SUBMODULE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -196,6 +206,7 @@ def linears_submodule_stack_options(
             apply_output_postprocessing_flag=config.ATTN_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.ATTN_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_STACK_LAYER_NORM_POSITION,
+            normalization=config.ATTN_STACK_NORMALIZATION,
             residual_connection_option=config.ATTN_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.ATTN_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.ATTN_STACK_DROPOUT_PROBABILITY,
@@ -208,6 +219,7 @@ def linears_submodule_stack_options(
         apply_output_postprocessing_flag=config.FF_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.FF_STACK_ACTIVATION,
         layer_norm_position=config.FF_STACK_LAYER_NORM_POSITION,
+        normalization=config.FF_STACK_NORMALIZATION,
         residual_connection_option=config.FF_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config.FF_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.FF_STACK_DROPOUT_PROBABILITY,
@@ -240,6 +252,7 @@ def _main_controller_stack_source(
         apply_output_postprocessing_flag=defaults.apply_output_postprocessing_flag,
         activation=defaults.activation,
         layer_norm_position=defaults.layer_norm_position,
+        normalization=defaults.normalization,
         residual_connection_option=defaults.residual_connection_option,
         residual_model_flag=defaults.residual_model_flag,
         dropout_probability=defaults.dropout_probability,
@@ -260,6 +273,7 @@ def _main_controller_stack_defaults(
             apply_output_postprocessing_flag=config.GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.GATE_STACK_ACTIVATION,
             layer_norm_position=config.GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.GATE_STACK_NORMALIZATION,
             residual_connection_option=config.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.GATE_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.GATE_STACK_DROPOUT_PROBABILITY,
@@ -276,6 +290,7 @@ def _main_controller_stack_defaults(
             ),
             activation=config.HALTING_STACK_ACTIVATION,
             layer_norm_position=config.HALTING_STACK_LAYER_NORM_POSITION,
+            normalization=config.HALTING_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -292,6 +307,7 @@ def _main_controller_stack_defaults(
             apply_output_postprocessing_flag=config.MEMORY_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.MEMORY_STACK_ACTIVATION,
             layer_norm_position=config.MEMORY_STACK_LAYER_NORM_POSITION,
+            normalization=config.MEMORY_STACK_NORMALIZATION,
             residual_connection_option=config.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.MEMORY_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.MEMORY_STACK_DROPOUT_PROBABILITY,
@@ -308,6 +324,7 @@ def _main_controller_stack_defaults(
             ),
             activation=config.RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.RECURRENT_GATE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -325,6 +342,7 @@ def _main_controller_stack_defaults(
         ),
         activation=config.RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+        normalization=config.RECURRENT_HALTING_STACK_NORMALIZATION,
         residual_connection_option=(
             config.RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -349,6 +367,7 @@ def _attention_controller_stack_source(
             ),
             activation=config.ATTN_GATE_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.ATTN_GATE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.ATTN_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -367,6 +386,7 @@ def _attention_controller_stack_source(
             ),
             activation=config.ATTN_HALTING_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_HALTING_STACK_LAYER_NORM_POSITION,
+            normalization=config.ATTN_HALTING_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.ATTN_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -385,6 +405,7 @@ def _attention_controller_stack_source(
             ),
             activation=config.ATTN_MEMORY_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_MEMORY_STACK_LAYER_NORM_POSITION,
+            normalization=config.ATTN_MEMORY_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.ATTN_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -405,6 +426,7 @@ def _attention_controller_stack_source(
             ),
             activation=config.ATTN_RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.ATTN_RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.ATTN_RECURRENT_GATE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.ATTN_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -424,6 +446,7 @@ def _attention_controller_stack_source(
         ),
         activation=config.ATTN_RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config.ATTN_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+        normalization=config.ATTN_RECURRENT_HALTING_STACK_NORMALIZATION,
         residual_connection_option=(
             config.ATTN_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -448,6 +471,7 @@ def _feed_forward_controller_stack_source(
             ),
             activation=config.FF_GATE_STACK_ACTIVATION,
             layer_norm_position=config.FF_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.FF_GATE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.FF_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -466,6 +490,7 @@ def _feed_forward_controller_stack_source(
             ),
             activation=config.FF_HALTING_STACK_ACTIVATION,
             layer_norm_position=config.FF_HALTING_STACK_LAYER_NORM_POSITION,
+            normalization=config.FF_HALTING_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.FF_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -484,6 +509,7 @@ def _feed_forward_controller_stack_source(
             ),
             activation=config.FF_MEMORY_STACK_ACTIVATION,
             layer_norm_position=config.FF_MEMORY_STACK_LAYER_NORM_POSITION,
+            normalization=config.FF_MEMORY_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.FF_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -504,6 +530,7 @@ def _feed_forward_controller_stack_source(
             ),
             activation=config.FF_RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.FF_RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.FF_RECURRENT_GATE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.FF_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -523,6 +550,7 @@ def _feed_forward_controller_stack_source(
         ),
         activation=config.FF_RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config.FF_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+        normalization=config.FF_RECURRENT_HALTING_STACK_NORMALIZATION,
         residual_connection_option=(
             config.FF_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -661,6 +689,7 @@ def linears_recurrent_controller_options(
                 config.RECURRENT_SMOOTH_ITERATION_GROWTH_FLAG
             ),
             recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
+            recurrent_normalization=config.RECURRENT_NORMALIZATION,
             recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.RECURRENT_GATE_OPTION,
             recurrent_gate_activation=config.RECURRENT_GATE_ACTIVATION,
@@ -688,6 +717,7 @@ def linears_recurrent_controller_options(
             recurrent_iteration_increment=1,
             recurrent_forward_calls_before_iteration_increment=1,
             recurrent_layer_norm_position=config.ATTN_RECURRENT_LAYER_NORM_POSITION,
+            recurrent_normalization=config.ATTN_RECURRENT_NORMALIZATION,
             recurrent_stack_gate_flag=config.ATTN_RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.ATTN_RECURRENT_GATE_OPTION,
             recurrent_gate_activation=config.ATTN_RECURRENT_GATE_ACTIVATION,
@@ -714,6 +744,7 @@ def linears_recurrent_controller_options(
         recurrent_iteration_increment=1,
         recurrent_forward_calls_before_iteration_increment=1,
         recurrent_layer_norm_position=config.FF_RECURRENT_LAYER_NORM_POSITION,
+        recurrent_normalization=config.FF_RECURRENT_NORMALIZATION,
         recurrent_stack_gate_flag=config.FF_RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config.FF_RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config.FF_RECURRENT_GATE_ACTIVATION,
@@ -746,6 +777,7 @@ def experts_submodule_stack_options(
             ),
             activation=config.SUBMODULE_STACK_ACTIVATION,
             layer_norm_position=config.SUBMODULE_STACK_LAYER_NORM_POSITION,
+            normalization=config.SUBMODULE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.SUBMODULE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -761,6 +793,7 @@ def experts_submodule_stack_options(
             apply_output_postprocessing_flag=config.EXPERT_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
             activation=config.EXPERT_STACK_ACTIVATION,
             layer_norm_position=config.EXPERT_STACK_LAYER_NORM_POSITION,
+            normalization=config.EXPERT_STACK_NORMALIZATION,
             residual_connection_option=config.EXPERT_STACK_RESIDUAL_CONNECTION_OPTION,
             residual_model_flag=config.EXPERT_STACK_RESIDUAL_MODEL_FLAG,
             dropout_probability=config.EXPERT_STACK_DROPOUT_PROBABILITY,
@@ -773,6 +806,7 @@ def experts_submodule_stack_options(
         apply_output_postprocessing_flag=config.ROUTER_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config.ROUTER_STACK_ACTIVATION,
         layer_norm_position=config.ROUTER_STACK_LAYER_NORM_POSITION,
+        normalization=config.ROUTER_STACK_NORMALIZATION,
         residual_connection_option=config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.ROUTER_STACK_DROPOUT_PROBABILITY,
@@ -788,6 +822,7 @@ def experts_stack_options(
         hidden_dim=hidden_dim,
         bias_flag=defaults.bias_flag,
         layer_norm_position=defaults.layer_norm_position,
+        normalization=defaults.normalization,
         num_layers=defaults.num_layers,
         activation=defaults.activation,
         residual_connection_option=defaults.residual_connection_option,
@@ -805,6 +840,7 @@ def experts_expert_stack_options(
     return resolve_experts_submodule_stack_options(
         defaults,
         layer_norm_position=config.EXPERT_STACK_LAYER_NORM_POSITION,
+        normalization=config.EXPERT_STACK_NORMALIZATION,
         apply_output_postprocessing_flag=config.EXPERT_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
     )
 
@@ -831,6 +867,7 @@ def _main_experts_submodule_stack_source(
         apply_output_postprocessing_flag=defaults.apply_output_postprocessing_flag,
         activation=defaults.activation,
         layer_norm_position=defaults.layer_norm_position,
+        normalization=defaults.normalization,
         residual_connection_option=defaults.residual_connection_option,
         residual_model_flag=defaults.residual_model_flag,
         dropout_probability=defaults.dropout_probability,
@@ -852,6 +889,7 @@ def _expert_submodule_stack_source(
             ),
             activation=config.EXPERT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.EXPERT_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.EXPERT_GATE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.EXPERT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -870,6 +908,7 @@ def _expert_submodule_stack_source(
             ),
             activation=config.EXPERT_HALTING_STACK_ACTIVATION,
             layer_norm_position=config.EXPERT_HALTING_STACK_LAYER_NORM_POSITION,
+            normalization=config.EXPERT_HALTING_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.EXPERT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -888,6 +927,7 @@ def _expert_submodule_stack_source(
             ),
             activation=config.EXPERT_MEMORY_STACK_ACTIVATION,
             layer_norm_position=config.EXPERT_MEMORY_STACK_LAYER_NORM_POSITION,
+            normalization=config.EXPERT_MEMORY_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.EXPERT_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -908,6 +948,7 @@ def _expert_submodule_stack_source(
             ),
             activation=config.EXPERT_RECURRENT_GATE_STACK_ACTIVATION,
             layer_norm_position=config.EXPERT_RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config.EXPERT_RECURRENT_GATE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -931,6 +972,7 @@ def _expert_submodule_stack_source(
         ),
         activation=config.EXPERT_RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config.EXPERT_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+        normalization=config.EXPERT_RECURRENT_HALTING_STACK_NORMALIZATION,
         residual_connection_option=(
             config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -1027,6 +1069,7 @@ def experts_recurrent_controller_options(
             recurrent_iteration_increment=1,
             recurrent_forward_calls_before_iteration_increment=1,
             recurrent_layer_norm_position=config.EXPERT_RECURRENT_LAYER_NORM_POSITION,
+            recurrent_normalization=config.EXPERT_RECURRENT_NORMALIZATION,
             recurrent_stack_gate_flag=config.EXPERT_RECURRENT_STACK_GATE_FLAG,
             recurrent_gate_option=config.EXPERT_RECURRENT_GATE_OPTION,
             recurrent_gate_activation=config.EXPERT_RECURRENT_GATE_ACTIVATION,
@@ -1059,6 +1102,7 @@ def experts_recurrent_controller_options(
             config.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
         ),
         recurrent_layer_norm_position=config.RECURRENT_LAYER_NORM_POSITION,
+        recurrent_normalization=config.RECURRENT_NORMALIZATION,
         recurrent_stack_gate_flag=config.RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config.RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config.RECURRENT_GATE_ACTIVATION,

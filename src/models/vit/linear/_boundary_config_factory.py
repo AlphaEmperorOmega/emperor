@@ -5,6 +5,7 @@ from emperor.layers import (
     ActivationOptions,
     LayerConfig,
     LayerNormPositionOptions,
+    NormalizationOptions,
 )
 from emperor.linears import LinearLayerConfig
 from models.vit.linear import _config_defaults as config_defaults
@@ -34,6 +35,7 @@ class BoundaryConfigFactory:
             output_dim=self.output_dim,
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_config=None,
             dropout_probability=0.0,
             gate_config=None,

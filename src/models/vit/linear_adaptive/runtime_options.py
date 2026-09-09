@@ -26,6 +26,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -46,6 +47,7 @@ class SubmoduleStackSource:
     apply_output_postprocessing_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float | None
@@ -60,6 +62,9 @@ class SubmoduleStackOptions:
     apply_output_postprocessing_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     residual_connection_option: type[ResidualConfig]
     residual_model_flag: bool = field(default=False, kw_only=True)
     residual_stack_options: ResidualStackOptions | None = field(
@@ -92,6 +97,9 @@ def resolve_controller_stack_options(
         if source.layer_norm_position is None
         else source.layer_norm_position
     )
+    normalization = (
+        defaults.normalization if source.normalization is None else source.normalization
+    )
     residual_connection_option = (
         defaults.residual_connection_option
         if source.residual_connection_option is None
@@ -110,6 +118,7 @@ def resolve_controller_stack_options(
         apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         activation=activation,
         layer_norm_position=layer_norm_position,
+        normalization=normalization,
         residual_connection_option=residual_connection_option,
         residual_model_flag=(source.residual_model_flag),
         residual_stack_options=defaults.residual_stack_options,
@@ -122,6 +131,9 @@ def resolve_controller_stack_options(
 class MainLayerStackOptions:
     bias_flag: bool
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     num_layers: int
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
@@ -178,6 +190,9 @@ class RecurrentControllerOptions:
         kw_only=True,
     )
     recurrent_layer_norm_position: LayerNormPositionOptions
+    recurrent_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
     recurrent_gate_activation: ActivationOptions | None
@@ -192,11 +207,17 @@ class RecurrentControllerOptions:
 
 @dataclass(frozen=True)
 class TransformerEncoderOptions:
+    output_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     hidden_dim: int
     num_layers: int
     activation: ActivationOptions
     dropout_probability: float
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     causal_attention_mask_flag: bool = False
 
 
@@ -240,6 +261,7 @@ class AdaptiveGeneratorStackSource:
     independent_flag: bool
     hidden_dim: int | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     num_layers: int | None
     activation: ActivationOptions | None
     residual_connection_option: type[ResidualConfig] | None
@@ -254,6 +276,9 @@ class AdaptiveGeneratorStackSource:
 class AdaptiveGeneratorStackOptions:
     hidden_dim: int
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     num_layers: int
     activation: ActivationOptions
     residual_connection_option: type[ResidualConfig]
