@@ -616,13 +616,14 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
         layer_nodes = [
             node
             for node in graph.nodes
-            if node.configuration is not None
+            if node.type_name == "Layer"
+            and node.configuration is not None
             and {field.key: field.value for field in node.configuration.fields}.get(
                 "residual_model_config"
             )
             == "LayerStackConfig"
         ]
-        self.assertTrue(layer_nodes)
+        self.assertEqual(len(layer_nodes), len(residuals))
         node_ids = {node.id for node in graph.nodes}
         for node in layer_nodes:
             residual_node = f"{node.id}.residual.connection"
