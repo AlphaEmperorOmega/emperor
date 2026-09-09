@@ -100,6 +100,7 @@ _CONTROLLER_STACK_FIELD_MAP = {
     "apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
+    "normalization": "normalization",
     "residual_connection_option": "residual_connection_option",
     "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
@@ -113,6 +114,7 @@ _SUBMODULE_STACK_FIELD_MAP = {
 _ADAPTIVE_GENERATOR_STACK_FIELD_MAP = {
     "hidden_dim": "hidden_dim",
     "layer_norm_position": "layer_norm_position",
+    "normalization": "normalization",
     "num_layers": "num_layers",
     "activation": "activation",
     "residual_connection_option": "residual_connection_option",
@@ -163,6 +165,7 @@ _RESIDUAL_STACK_FLAT_FIELDS = {
     "independent_flag",
     "hidden_dim",
     "layer_norm_position",
+    "normalization",
     "num_layers",
     "activation",
     "residual_connection_option",
@@ -171,6 +174,7 @@ _RESIDUAL_STACK_FLAT_FIELDS = {
     "last_layer_bias_option",
     "apply_output_postprocessing_flag",
     "bias_flag",
+    "encoder_output_normalization",
 }
 
 
@@ -201,6 +205,10 @@ def _attach_residual_stack_options(
             layer_norm_position=kwargs.get(
                 "residual_stack_layer_norm_position",
                 config_module.RESIDUAL_STACK_LAYER_NORM_POSITION,
+            ),
+            normalization=kwargs.get(
+                "residual_stack_normalization",
+                config_module.RESIDUAL_STACK_NORMALIZATION,
             ),
             num_layers=kwargs.get(
                 "residual_stack_num_layers", config_module.RESIDUAL_STACK_NUM_LAYERS
@@ -442,6 +450,7 @@ def _bert_boundary_builder_kwargs(
     embedding_keys = {
         "token_type_vocab_size",
         "embedding_layer_norm_flag",
+        "embedding_normalization",
         "embedding_dropout_probability",
     }
     if _option_requested(kwargs, "embedding_options", embedding_keys):
@@ -460,7 +469,9 @@ def _bert_boundary_builder_kwargs(
         "stack_activation",
         "stack_dropout_probability",
         "layer_norm_position",
+        "normalization",
         "causal_attention_mask_flag",
+        "encoder_output_normalization",
     }
     if _option_requested(kwargs, "encoder_options", encoder_keys):
         provided = cast(TransformerEncoderOptions | None, kwargs.get("encoder_options"))
@@ -526,6 +537,7 @@ def _bert_boundary_builder_kwargs(
         "mlm_activation",
         "mlm_dense_bias_flag",
         "mlm_layer_norm_flag",
+        "mlm_normalization",
         "mlm_decoder_bias_flag",
         "mlm_decoder_weight_tying_flag",
     }
@@ -554,6 +566,7 @@ def _bert_boundary_builder_kwargs(
     stack_keys = {
         "stack_bias_flag",
         "layer_norm_position",
+        "normalization",
         "stack_num_layers",
         "stack_activation",
         "stack_residual_connection_option",
@@ -561,6 +574,7 @@ def _bert_boundary_builder_kwargs(
         "stack_dropout_probability",
         "stack_last_layer_bias_option",
         "stack_apply_output_postprocessing_flag",
+        "encoder_output_normalization",
     }
     if _option_requested(kwargs, "stack_options", stack_keys):
         provided = cast(MainLayerStackOptions | None, kwargs.get("stack_options"))
@@ -628,6 +642,7 @@ def _recurrent_controller_keys(
             f"{flat_prefix}_forward_calls_before_iteration_increment",
             f"{flat_prefix}_smooth_iteration_growth_flag",
             f"{flat_prefix}_layer_norm_position",
+            f"{flat_prefix}_normalization",
             f"{flat_prefix}_stack_gate_flag",
             f"{flat_prefix}_gate_option",
             f"{flat_prefix}_gate_activation",
@@ -1089,6 +1104,11 @@ def _merge_adaptive_generator_stack_source(
             global_default.layer_norm_position,
             role_default.layer_norm_position,
         ),
+        normalization=_role_value(
+            base.normalization,
+            global_default.normalization,
+            role_default.normalization,
+        ),
         num_layers=_role_value(
             base.num_layers, global_default.num_layers, role_default.num_layers
         ),
@@ -1339,6 +1359,7 @@ def _embedding_options_from_kwargs(
             {
                 "token_type_vocab_size": "token_type_vocab_size",
                 "embedding_layer_norm_flag": "layer_norm_flag",
+                "embedding_normalization": "normalization",
                 "embedding_dropout_probability": "dropout_probability",
             },
         ),
@@ -1359,7 +1380,9 @@ def _encoder_options_from_kwargs(
                 "stack_activation": "activation",
                 "stack_dropout_probability": "dropout_probability",
                 "layer_norm_position": "layer_norm_position",
+                "normalization": "normalization",
                 "causal_attention_mask_flag": "causal_attention_mask_flag",
+                "encoder_output_normalization": "output_normalization",
             },
         ),
     )
@@ -1425,6 +1448,7 @@ def _mlm_head_options_from_kwargs(
                 "mlm_activation": "activation",
                 "mlm_dense_bias_flag": "dense_bias_flag",
                 "mlm_layer_norm_flag": "layer_norm_flag",
+                "mlm_normalization": "normalization",
                 "mlm_decoder_bias_flag": "decoder_bias_flag",
                 "mlm_decoder_weight_tying_flag": "decoder_weight_tying_flag",
             },
@@ -1461,6 +1485,7 @@ def _main_stack_options_from_kwargs(
             {
                 "stack_bias_flag": "bias_flag",
                 "layer_norm_position": "layer_norm_position",
+                "normalization": "normalization",
                 "stack_num_layers": "num_layers",
                 "stack_activation": "activation",
                 "stack_residual_connection_option": "residual_connection_option",
@@ -1591,6 +1616,7 @@ def _recurrent_controller_options_from_kwargs(
                 "recurrent_smooth_iteration_growth_flag"
             ),
             f"{prefix}layer_norm_position": "recurrent_layer_norm_position",
+            f"{prefix}normalization": "recurrent_normalization",
             f"{prefix}stack_gate_flag": "recurrent_stack_gate_flag",
             f"{prefix}gate_option": "recurrent_gate_option",
             f"{prefix}gate_activation": "recurrent_gate_activation",

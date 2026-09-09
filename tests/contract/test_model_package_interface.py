@@ -31,24 +31,24 @@ from models.catalog import (
 
 _ORDERING_DIGEST_BY_PACKAGE = {
     "bert/linear": (
-        "7c9569bbd1a6e22bdeddd5a5165a61e4c11f3a502c6d0a036ddc4477376f932c",
-        347,
-        5,
+        "89c8f59c481e0d53b728dc8166ec28181968576ac0c6950d072c22f50ebac32f",
+        373,
+        9,
     ),
     "bert/linear_adaptive": (
-        "70c1c9199bfec35d21411c9e3771240a96c6c1cbd5fb443c409f60d33d40ae61",
-        780,
-        111,
+        "da3c671e971812e57cb20fd55f9b451d7760a2bd04fe966e0529033a5fd903e6",
+        834,
+        124,
     ),
     "bert/expert_linear": (
-        "9893c950d3333e7d69185643552d7a5f2c8e847020001a1f902a8c321d93b01c",
-        466,
-        6,
+        "dba8ac6613a87ad2cd9c4294d657968c59d9966089eab4261d34fc9ad956efbf",
+        500,
+        10,
     ),
     "bert/expert_linear_adaptive": (
-        "6b2f4e51601758bf7e71561705bea5e3b94804b91f2ccca81ea2e9d45527215c",
-        856,
-        35,
+        "9015739bebf335008ad7d31360221e7376f63396700359f110efef1942310440",
+        915,
+        40,
     ),
     "experts/linear": (
         "4c0b454f615e9053c21b21b138062bce9006c54be3ee1ab9976e512cd6b0762b",

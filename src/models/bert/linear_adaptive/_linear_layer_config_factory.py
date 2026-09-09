@@ -14,6 +14,7 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.linears import LinearLayerConfig
@@ -77,6 +78,7 @@ class LinearLayerConfigFactory:
         num_layers: int,
         bias_flag: bool,
         layer_norm_position: LayerNormPositionOptions,
+        normalization: NormalizationOptions = NormalizationOptions.RMS_NORM,
         dropout_probability: float,
         input_dim: int | None = None,
         output_dim: int | None = None,
@@ -88,6 +90,7 @@ class LinearLayerConfigFactory:
             ),
             num_layers=num_layers,
             layer_norm_position=layer_norm_position,
+            normalization=normalization,
             dropout_probability=dropout_probability,
             input_dim=input_dim,
             output_dim=output_dim,
@@ -100,6 +103,7 @@ class LinearLayerConfigFactory:
         num_layers: int,
         bias_flag: bool,
         layer_norm_position: LayerNormPositionOptions,
+        normalization: NormalizationOptions = NormalizationOptions.RMS_NORM,
         dropout_probability: float,
         input_dim: int | None = None,
         output_dim: int | None = None,
@@ -111,6 +115,7 @@ class LinearLayerConfigFactory:
             ),
             num_layers=num_layers,
             layer_norm_position=layer_norm_position,
+            normalization=normalization,
             dropout_probability=dropout_probability,
             input_dim=input_dim,
             output_dim=output_dim,
@@ -123,6 +128,7 @@ class LinearLayerConfigFactory:
         layer_model_config: ConfigBase,
         num_layers: int,
         layer_norm_position: LayerNormPositionOptions,
+        normalization: NormalizationOptions = NormalizationOptions.RMS_NORM,
         dropout_probability: float,
         input_dim: int | None = None,
         hidden_dim: int | None = None,
@@ -139,6 +145,7 @@ class LinearLayerConfigFactory:
                 self.encoder_options.activation if activation is None else activation
             ),
             layer_norm_position=layer_norm_position,
+            normalization=normalization,
             residual_config=build_residual_config(
                 residual_connection_option,
                 residual_model_flag,

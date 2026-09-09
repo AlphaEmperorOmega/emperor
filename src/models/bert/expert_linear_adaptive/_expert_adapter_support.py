@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from types import ModuleType
 
 from emperor.halting import HaltingConfig, HaltingHiddenStateModeOptions
@@ -9,6 +9,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -27,6 +28,7 @@ _SUBMODULE_STACK_FIELD_MAP = {
     "apply_output_postprocessing_flag": "apply_output_postprocessing_flag",
     "activation": "activation",
     "layer_norm_position": "layer_norm_position",
+    "normalization": "normalization",
     "residual_connection_option": "residual_connection_option",
     "residual_model_flag": "residual_model_flag",
     "dropout_probability": "dropout_probability",
@@ -68,6 +70,7 @@ def _router_stack_options_from_config(
         apply_output_postprocessing_flag=config_module.ROUTER_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config_module.ROUTER_STACK_ACTIVATION,
         layer_norm_position=config_module.ROUTER_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.ROUTER_STACK_NORMALIZATION,
         residual_connection_option=config_module.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config_module.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.ROUTER_STACK_DROPOUT_PROBABILITY,
@@ -163,6 +166,7 @@ def _controller_stack_source(
     apply_output_postprocessing_flag: bool | None,
     activation: ActivationOptions | None,
     layer_norm_position: LayerNormPositionOptions | None,
+    normalization: NormalizationOptions | None = None,
     residual_connection_option: type[ResidualConfig] | None,
     residual_model_flag: bool,
     dropout_probability: float | None,
@@ -176,6 +180,7 @@ def _controller_stack_source(
         apply_output_postprocessing_flag=apply_output_postprocessing_flag,
         activation=activation,
         layer_norm_position=layer_norm_position,
+        normalization=normalization,
         residual_connection_option=residual_connection_option,
         residual_model_flag=residual_model_flag,
         dropout_probability=dropout_probability,
@@ -194,6 +199,7 @@ def _gate_stack_source(
         apply_output_postprocessing_flag=config_module.GATE_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG,
         activation=config_module.GATE_STACK_ACTIVATION,
         layer_norm_position=config_module.GATE_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.GATE_STACK_NORMALIZATION,
         residual_connection_option=config_module.GATE_STACK_RESIDUAL_CONNECTION_OPTION,
         residual_model_flag=config_module.GATE_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config_module.GATE_STACK_DROPOUT_PROBABILITY,
@@ -214,6 +220,7 @@ def _halting_stack_source(
         ),
         activation=config_module.HALTING_STACK_ACTIVATION,
         layer_norm_position=config_module.HALTING_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.HALTING_STACK_NORMALIZATION,
         residual_connection_option=(
             config_module.HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -236,6 +243,7 @@ def _memory_stack_source(
         ),
         activation=config_module.MEMORY_STACK_ACTIVATION,
         layer_norm_position=config_module.MEMORY_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.MEMORY_STACK_NORMALIZATION,
         residual_connection_option=(
             config_module.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -260,6 +268,7 @@ def _recurrent_gate_stack_source(
         ),
         activation=config_module.RECURRENT_GATE_STACK_ACTIVATION,
         layer_norm_position=config_module.RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.RECURRENT_GATE_STACK_NORMALIZATION,
         residual_connection_option=(
             config_module.RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -284,6 +293,7 @@ def _recurrent_halting_stack_source(
         ),
         activation=config_module.RECURRENT_HALTING_STACK_ACTIVATION,
         layer_norm_position=config_module.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.RECURRENT_HALTING_STACK_NORMALIZATION,
         residual_connection_option=(
             config_module.RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -397,6 +407,7 @@ def _recurrent_controller_options_from_kwargs(
             config_module.RECURRENT_FORWARD_CALLS_BEFORE_ITERATION_INCREMENT
         ),
         recurrent_layer_norm_position=config_module.RECURRENT_LAYER_NORM_POSITION,
+        recurrent_normalization=config_module.RECURRENT_NORMALIZATION,
         recurrent_stack_gate_flag=config_module.RECURRENT_STACK_GATE_FLAG,
         recurrent_gate_option=config_module.RECURRENT_GATE_OPTION,
         recurrent_gate_activation=config_module.RECURRENT_GATE_ACTIVATION,
@@ -421,6 +432,7 @@ def _recurrent_controller_options_from_kwargs(
                 "recurrent_forward_calls_before_iteration_increment"
             ),
             "recurrent_layer_norm_position": "recurrent_layer_norm_position",
+            "recurrent_normalization": "recurrent_normalization",
             "recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
             "recurrent_gate_option": "recurrent_gate_option",
             "recurrent_gate_activation": "recurrent_gate_activation",
@@ -485,6 +497,9 @@ class _RecurrentControllerDefaults:
     recurrent_flag: bool
     recurrent_max_steps: int
     recurrent_layer_norm_position: LayerNormPositionOptions
+    recurrent_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
     recurrent_gate_activation: ActivationOptions | None
@@ -534,6 +549,7 @@ def _recurrent_controller_options(
         recurrent_flag=defaults.recurrent_flag,
         recurrent_max_steps=defaults.recurrent_max_steps,
         recurrent_layer_norm_position=defaults.recurrent_layer_norm_position,
+        recurrent_normalization=defaults.recurrent_normalization,
         recurrent_stack_gate_flag=defaults.recurrent_stack_gate_flag,
         recurrent_gate_option=defaults.recurrent_gate_option,
         recurrent_gate_activation=defaults.recurrent_gate_activation,
@@ -629,6 +645,7 @@ def _role_recurrent_controller_options_from_kwargs(
             f"{role_prefix}_recurrent_layer_norm_position": (
                 "recurrent_layer_norm_position"
             ),
+            f"{role_prefix}_recurrent_normalization": ("recurrent_normalization"),
             f"{role_prefix}_recurrent_stack_gate_flag": "recurrent_stack_gate_flag",
             f"{role_prefix}_recurrent_gate_option": "recurrent_gate_option",
             f"{role_prefix}_recurrent_gate_activation": "recurrent_gate_activation",
@@ -672,6 +689,7 @@ def _expert_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             ),
             activation=config_module.EXPERT_GATE_STACK_ACTIVATION,
             layer_norm_position=config_module.EXPERT_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config_module.EXPERT_GATE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config_module.EXPERT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -693,6 +711,7 @@ def _expert_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             layer_norm_position=(
                 config_module.EXPERT_HALTING_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config_module.EXPERT_HALTING_STACK_NORMALIZATION),
             residual_connection_option=(
                 config_module.EXPERT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -720,6 +739,7 @@ def _expert_memory_stack_source(
         ),
         activation=config_module.EXPERT_MEMORY_STACK_ACTIVATION,
         layer_norm_position=config_module.EXPERT_MEMORY_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.EXPERT_MEMORY_STACK_NORMALIZATION,
         residual_connection_option=(
             config_module.EXPERT_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -749,6 +769,7 @@ def _expert_recurrent_stack_sources(
             layer_norm_position=(
                 config_module.EXPERT_RECURRENT_GATE_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config_module.EXPERT_RECURRENT_GATE_STACK_NORMALIZATION),
             residual_connection_option=(
                 config_module.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -776,6 +797,7 @@ def _expert_recurrent_stack_sources(
             layer_norm_position=(
                 config_module.EXPERT_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config_module.EXPERT_RECURRENT_HALTING_STACK_NORMALIZATION),
             residual_connection_option=(
                 config_module.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -804,6 +826,7 @@ def _router_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             ),
             activation=config_module.ROUTER_GATE_STACK_ACTIVATION,
             layer_norm_position=config_module.ROUTER_GATE_STACK_LAYER_NORM_POSITION,
+            normalization=config_module.ROUTER_GATE_STACK_NORMALIZATION,
             residual_connection_option=(
                 config_module.ROUTER_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -825,6 +848,7 @@ def _router_layer_stack_sources(config_module: ModuleType) -> _LayerStackSources
             layer_norm_position=(
                 config_module.ROUTER_HALTING_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config_module.ROUTER_HALTING_STACK_NORMALIZATION),
             residual_connection_option=(
                 config_module.ROUTER_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -852,6 +876,7 @@ def _router_memory_stack_source(
         ),
         activation=config_module.ROUTER_MEMORY_STACK_ACTIVATION,
         layer_norm_position=config_module.ROUTER_MEMORY_STACK_LAYER_NORM_POSITION,
+        normalization=config_module.ROUTER_MEMORY_STACK_NORMALIZATION,
         residual_connection_option=(
             config_module.ROUTER_MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
         ),
@@ -881,6 +906,7 @@ def _router_recurrent_stack_sources(
             layer_norm_position=(
                 config_module.ROUTER_RECURRENT_GATE_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config_module.ROUTER_RECURRENT_GATE_STACK_NORMALIZATION),
             residual_connection_option=(
                 config_module.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -908,6 +934,7 @@ def _router_recurrent_stack_sources(
             layer_norm_position=(
                 config_module.ROUTER_RECURRENT_HALTING_STACK_LAYER_NORM_POSITION
             ),
+            normalization=(config_module.ROUTER_RECURRENT_HALTING_STACK_NORMALIZATION),
             residual_connection_option=(
                 config_module.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_CONNECTION_OPTION
             ),
@@ -997,6 +1024,7 @@ def _expert_recurrent_controller_options_from_kwargs(
                 recurrent_layer_norm_position=(
                     config_module.EXPERT_RECURRENT_LAYER_NORM_POSITION
                 ),
+                recurrent_normalization=(config_module.EXPERT_RECURRENT_NORMALIZATION),
                 recurrent_stack_gate_flag=(
                     config_module.EXPERT_RECURRENT_STACK_GATE_FLAG
                 ),
@@ -1106,6 +1134,7 @@ def _router_recurrent_controller_options_from_kwargs(
                 recurrent_layer_norm_position=(
                     config_module.ROUTER_RECURRENT_LAYER_NORM_POSITION
                 ),
+                recurrent_normalization=(config_module.ROUTER_RECURRENT_NORMALIZATION),
                 recurrent_stack_gate_flag=(
                     config_module.ROUTER_RECURRENT_STACK_GATE_FLAG
                 ),

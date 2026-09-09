@@ -16,6 +16,7 @@ from emperor.layers import (
     LayerConfig,
     LayerNormPositionOptions,
     LayerStackConfig,
+    NormalizationOptions,
     RecurrentLayerConfig,
     ResidualConfig,
 )
@@ -56,6 +57,7 @@ from models.bert.expert_linear_adaptive.runtime_options import (
     TransformerPositionalEmbeddingOptions,
 )
 
+from . import config
 from ._residual import build_residual_config
 
 if TYPE_CHECKING:
@@ -116,6 +118,7 @@ class BertBackendConfigBuilder:
         self.stack_activation = encoder_options.activation
         self.stack_dropout_probability = encoder_options.dropout_probability
         self.layer_norm_position = encoder_options.layer_norm_position
+        self.normalization = encoder_options.normalization
         self.causal_attention_mask_flag = encoder_options.causal_attention_mask_flag
         self.positional_embedding_options = positional_embedding_options
         self.positional_embedding_option = positional_embedding_options.option
@@ -172,6 +175,11 @@ class BertBackendConfigBuilder:
                 positional_embedding_config=positional_embedding_config,
                 boundary_config=boundary_config,
                 encoder_config=encoder_config,
+                encoder_output_normalization=(
+                    self.encoder_options.output_normalization
+                    if self.encoder_options is not None
+                    else config.ENCODER_OUTPUT_NORMALIZATION
+                ),
             ),
         )
 
@@ -216,6 +224,7 @@ class BertBackendConfigBuilder:
         layer_config = TransformerEncoderBlockLayerConfig(
             activation=ActivationOptions.DISABLED,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_config=None,
             dropout_probability=0.0,
             gate_config=gate_factory.build_gate_config(),
@@ -254,6 +263,7 @@ class BertBackendConfigBuilder:
         return TransformerEncoderLayerConfig(
             embedding_dim=self.hidden_dim,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             residual_config=AdditiveResidualConfig(),
             attention_config=attention_config,
@@ -315,6 +325,7 @@ class BertBackendConfigBuilder:
             residual_model_flag=options.residual_model_flag,
             residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
             apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
@@ -379,6 +390,7 @@ class BertBackendConfigBuilder:
             residual_model_flag=options.residual_model_flag,
             residual_stack_options=options.residual_stack_options,
             layer_norm_position=options.layer_norm_position,
+            normalization=options.normalization,
             dropout_probability=options.dropout_probability,
             last_layer_bias_option=options.last_layer_bias_option,
             apply_output_postprocessing_flag=options.apply_output_postprocessing_flag,
@@ -440,6 +452,7 @@ class BertBackendConfigBuilder:
         num_layers: int,
         bias_flag: bool,
         layer_norm_position: LayerNormPositionOptions,
+        normalization: NormalizationOptions = NormalizationOptions.RMS_NORM,
         dropout_probability: float,
         input_dim: int | None = None,
         hidden_dim: int | None = None,
@@ -457,6 +470,7 @@ class BertBackendConfigBuilder:
                 self.encoder_options.activation if activation is None else activation
             ),
             layer_norm_position=layer_norm_position,
+            normalization=normalization,
             residual_config=build_residual_config(
                 residual_connection_option,
                 residual_model_flag,
@@ -497,6 +511,7 @@ class BertBackendConfigBuilder:
             hidden_dim=self.hidden_dim,
             bias_flag=True,
             layer_norm_position=self.encoder_options.layer_norm_position,
+            normalization=self.encoder_options.normalization,
             num_layers=self.encoder_options.num_layers,
             activation=self.encoder_options.activation,
             residual_connection_option=None,
@@ -524,6 +539,7 @@ class BertBackendConfigBuilder:
             apply_output_postprocessing_flag=True,
             activation=self.encoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_connection_option=None,
             residual_model_flag=False,
             residual_stack_options=self.submodule_stack_options.residual_stack_options,
@@ -541,6 +557,7 @@ class BertBackendConfigBuilder:
             apply_output_postprocessing_flag=True,
             activation=self.encoder_options.activation,
             layer_norm_position=LayerNormPositionOptions.BEFORE,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_connection_option=None,
             residual_model_flag=False,
             residual_stack_options=self.submodule_stack_options.residual_stack_options,

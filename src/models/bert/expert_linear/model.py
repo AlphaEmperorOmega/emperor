@@ -6,7 +6,7 @@ from torch import Tensor
 
 from emperor.attention import AttentionLayerState
 from emperor.experiments.bert_pretraining import BertPretrainingExperiment
-from emperor.layers import ActivationOptions, LayerNormPositionOptions
+from emperor.layers import ActivationOptions, LayerConfig, LayerNormPositionOptions
 from models.bert.expert_linear._boundary_config_factory import BertBoundaryConfig
 from models.bert.expert_linear.experiment_config import ExperimentConfig
 
@@ -114,7 +114,12 @@ class Model(BertPretrainingExperiment):
     def __build_embedding_layer_norm(self) -> nn.Module:
         if not self.boundary_config.embedding_options.layer_norm_flag:
             return nn.Identity()
-        return nn.LayerNorm(self.cfg.hidden_dim)
+        return LayerConfig(
+            input_dim=self.cfg.hidden_dim,
+            output_dim=self.cfg.hidden_dim,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            normalization=self.boundary_config.embedding_options.normalization,
+        ).build_normalization()
 
     def __build_embedding_dropout(self) -> nn.Dropout:
         return nn.Dropout(self.boundary_config.embedding_options.dropout_probability)
@@ -127,7 +132,12 @@ class Model(BertPretrainingExperiment):
         stack_config = getattr(encoder_config, "block_config", encoder_config)
         layer_config = stack_config.layer_config.layer_model_config
         if layer_config.layer_norm_position == LayerNormPositionOptions.BEFORE:
-            return nn.LayerNorm(self.cfg.hidden_dim)
+            return LayerConfig(
+                input_dim=self.cfg.hidden_dim,
+                output_dim=self.cfg.hidden_dim,
+                layer_norm_position=LayerNormPositionOptions.BEFORE,
+                normalization=self.experiment_config.encoder_output_normalization,
+            ).build_normalization()
         return nn.Identity()
 
     def __build_mlm_dense(self) -> nn.Linear:
@@ -145,7 +155,12 @@ class Model(BertPretrainingExperiment):
     def __build_mlm_layer_norm(self) -> nn.Module:
         if not self.boundary_config.mlm_head_options.layer_norm_flag:
             return nn.Identity()
-        return nn.LayerNorm(self.cfg.hidden_dim)
+        return LayerConfig(
+            input_dim=self.cfg.hidden_dim,
+            output_dim=self.cfg.hidden_dim,
+            layer_norm_position=LayerNormPositionOptions.BEFORE,
+            normalization=self.boundary_config.mlm_head_options.normalization,
+        ).build_normalization()
 
     def __build_mlm_decoder(self) -> nn.Linear:
         return nn.Linear(self.cfg.hidden_dim, self.cfg.output_dim, bias=False)
