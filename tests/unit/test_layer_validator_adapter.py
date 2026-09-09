@@ -377,7 +377,7 @@ class TestLayerResidualDelegateValidatorAdapter(unittest.TestCase):
                 return connection
 
             @staticmethod
-            def validate_forward_local_state_lifecycle_requirement(connection):
+            def validate_state_lifecycle(connection):
                 raise RuntimeError("substituted lifecycle validator was called")
 
         class TrackingLayerResidualDelegate(LayerResidualDelegate):

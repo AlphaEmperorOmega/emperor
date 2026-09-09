@@ -10,26 +10,17 @@ from emperor.layers._composition.recurrent.validation.common import (
     _GRADIENT_WINDOW_FIELDS,
     _RECURRENT_SHARED_OPTIONAL_FIELDS,
     _RecurrentCompositionValidator,
-    _validate_recurrent_controller_config,
     _validate_recurrent_iteration_controls,
     _validate_smooth_iteration_growth_controls,
 )
-from emperor.layers._composition.residual.base import ResidualRuntimeRequirement
 from emperor.layers._validation.common import (
     _validate_halting_required_update_count,
 )
 
 if TYPE_CHECKING:
+    from emperor.layers._composition.recurrent.config import RecurrentLayerConfig
     from emperor.layers._composition.recurrent.variants.standard import RecurrentLayer
     from emperor.layers._state import LayerState
-
-
-_SUPPORTED_RESIDUAL_REQUIREMENTS = frozenset(
-    {
-        ResidualRuntimeRequirement.FORWARD_LOCAL_STATE,
-        ResidualRuntimeRequirement.DEPTH_SPECIFIC_CONNECTIONS,
-    }
-)
 
 
 class RecurrentLayerValidator(_RecurrentCompositionValidator):
@@ -42,9 +33,18 @@ class RecurrentLayerValidator(_RecurrentCompositionValidator):
 
     @classmethod
     def validate(cls, model: RecurrentLayer) -> None:
+        cfg = model.cfg
+        cls.__validate_config_fields(cfg)
+        cls.__validate_iteration_controls(cfg)
+        cls.__validate_stable_dimensions(cfg.input_dim, cfg.output_dim)
+        cls.__validate_block_config(cfg.block_config)
+        cls.__validate_controllers(cfg)
+        cls.__validate_runtime_owner(model, cfg)
+
+    @classmethod
+    def __validate_config_fields(cls, cfg: RecurrentLayerConfig) -> None:
         from emperor.layers._composition.recurrent.config import RecurrentLayerConfig
 
-        cfg = model.cfg
         if not isinstance(cfg, RecurrentLayerConfig):
             raise TypeError(
                 "RecurrentLayer cfg must be a RecurrentLayerConfig, "
@@ -68,6 +68,9 @@ class RecurrentLayerValidator(_RecurrentCompositionValidator):
             output_dim=cfg.output_dim,
             max_steps=cfg.max_steps,
         )
+
+    @classmethod
+    def __validate_iteration_controls(cls, cfg: RecurrentLayerConfig) -> None:
         _validate_recurrent_iteration_controls(
             cfg,
             maximum_iterations=cfg.max_steps,
@@ -78,21 +81,25 @@ class RecurrentLayerValidator(_RecurrentCompositionValidator):
             cfg,
             transitions_per_iteration=1,
         )
-        cls.__validate_stable_dimensions(
-            cfg.input_dim,
-            cfg.output_dim,
-        )
-        cls.__validate_block_config(cfg.block_config)
-        _validate_recurrent_controller_config(
-            cfg,
-            supported_residual_requirements=_SUPPORTED_RESIDUAL_REQUIREMENTS,
-        )
+
+    @classmethod
+    def __validate_controllers(cls, cfg: RecurrentLayerConfig) -> None:
+        cls._validate_recurrent_controller_config(cfg)
         if cfg.gradient_transition_count is not None and cfg.halting_config is not None:
             _validate_halting_required_update_count(
                 cfg.halting_config,
                 required_update_count=cfg.gradient_transition_count,
                 owner_name=type(cfg).__name__,
             )
+
+    @staticmethod
+    def _validate_residual_execution(config: RecurrentLayerConfig) -> None:
+        """This owner supplies residual history and a connection at each depth."""
+
+    @staticmethod
+    def __validate_runtime_owner(
+        model: RecurrentLayer, cfg: RecurrentLayerConfig
+    ) -> None:
         expected_owner = cfg.registry_owner()
         if not isinstance(model, expected_owner):
             raise TypeError(

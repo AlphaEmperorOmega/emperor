@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from enum import Enum
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from torch import Tensor
 
@@ -15,22 +13,6 @@ from emperor.nn import Module
 
 if TYPE_CHECKING:
     from emperor.layers._state import LayerState
-
-
-class ResidualRuntimeRequirement(Enum):
-    """Execution requirements declared by a residual connection."""
-
-    FORWARD_LOCAL_STATE = "forward-local residual state"
-    DEPTH_SPECIFIC_CONNECTIONS = "depth-specific residual connections"
-
-
-@dataclass(frozen=True, slots=True)
-class ResidualStackRequirements:
-    """Stack construction constraints declared by a residual variant."""
-
-    requires_uniform_dimensions: bool = False
-    requires_output_postprocessing: bool = False
-    allows_halting: bool = True
 
 
 class ResidualState(ABC):
@@ -56,11 +38,6 @@ class ResidualConnectionAbstract(Module, ABC):
     """Stable runtime Interface implemented by every residual variant."""
 
     VALIDATOR = ResidualConnectionValidator
-    supports_pairwise_diagnostics: ClassVar[bool] = False
-    RUNTIME_REQUIREMENTS: ClassVar[frozenset[ResidualRuntimeRequirement]] = frozenset()
-    STACK_REQUIREMENTS: ClassVar[ResidualStackRequirements] = (
-        ResidualStackRequirements()
-    )
 
     def __init__(
         self,
@@ -71,16 +48,12 @@ class ResidualConnectionAbstract(Module, ABC):
         self.cfg: ResidualConfig = self._override_config(cfg, overrides)
         self.VALIDATOR.validate(self)
         self.residual_dim: int | None = self.cfg.residual_dim
-
-    @property
-    def residual_state_lifecycle(self) -> ResidualStateLifecycle | None:
-        return None
+        self.residual_state_lifecycle: ResidualStateLifecycle | None = None
 
     def new_state(self, initial_source: Tensor) -> ResidualState | None:
-        lifecycle = self.residual_state_lifecycle
-        if lifecycle is None:
+        if self.residual_state_lifecycle is None:
             return None
-        return lifecycle.create_state(initial_source)
+        return self.residual_state_lifecycle.create_state(initial_source)
 
     def apply_to_layer_state(
         self,
@@ -88,11 +61,12 @@ class ResidualConnectionAbstract(Module, ABC):
         previous: Tensor,
     ) -> LayerState:
         """Apply this connection using residual context carried by a LayerState."""
-        state.hidden = self(
+        applied_residual = self(
             state.hidden,
             previous,
             residual_state=state.residual_state,
         )
+        state.hidden = applied_residual
         return state
 
     @abstractmethod

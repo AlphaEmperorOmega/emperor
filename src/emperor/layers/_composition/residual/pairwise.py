@@ -21,13 +21,7 @@ if TYPE_CHECKING:
     from emperor.linears import LinearAbstract, LinearLayerConfig
 
 
-class PairwiseResidualAbstract(ResidualConnectionAbstract):
-    """Residual Implementation that supports pairwise diagnostics."""
-
-    supports_pairwise_diagnostics = True
-
-
-class WeightedPairwiseResidualAbstract(PairwiseResidualAbstract):
+class WeightedPairwiseResidualAbstract(ResidualConnectionAbstract):
     """Shared learned-coefficient mechanics for weighted pairwise variants."""
 
     def __init__(

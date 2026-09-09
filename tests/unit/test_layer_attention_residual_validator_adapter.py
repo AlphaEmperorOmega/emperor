@@ -5,7 +5,7 @@ import torch
 from emperor.layers import LayerState
 from emperor.layers._composition.residual.config import AttentionResidualConfig
 from emperor.layers._composition.residual.validation import (
-    ResidualConnectionValidator,
+    AttentionResidualValidator,
 )
 from emperor.layers._composition.residual.variants.attention import (
     AttentionResidual,
@@ -15,56 +15,56 @@ from emperor.layers._composition.residual.variants.attention import (
 
 class TestAttentionResidualValidatorAdapter(unittest.TestCase):
     def test_component_and_state_expose_validator_adapter(self):
-        self.assertIs(AttentionResidual.VALIDATOR, ResidualConnectionValidator)
-        self.assertIs(AttentionResidualState.VALIDATOR, ResidualConnectionValidator)
+        self.assertIs(AttentionResidual.VALIDATOR, AttentionResidualValidator)
+        self.assertIs(AttentionResidualState.VALIDATOR, AttentionResidualValidator)
 
-    def test_successful_validations_preserve_checked_state_identity(self):
-        residual = AttentionResidual(AttentionResidualConfig(residual_dim=2))
-        initial_source = torch.ones(1, 2)
-        current = torch.full((1, 2), 2.0)
+    def test_successful_validations_return_none_without_changing_state(self):
+        residual = AttentionResidual(
+            AttentionResidualConfig(block_size=2, rms_norm_epsilon=1e-6, residual_dim=3)
+        )
+        initial_source = torch.ones(1, 3)
+        current = torch.full((1, 3), 2.0)
         state = residual.new_state(initial_source)
+        state.append(current)
+        original_sources = state.sources
         validator = residual.VALIDATOR
 
         check_only_results = (
-            validator.validate_positive_integer(2, name="residual_dim"),
+            validator.validate_positive_integer(3, name="residual_dim"),
             validator.validate_finite_positive_number(
                 1e-6,
                 name="rms_norm_epsilon",
             ),
-            validator.validate_source(initial_source, residual_dim=2),
+            validator.validate_source(initial_source, residual_dim=3),
+            validator.validate_created_attention_state(residual, state),
+            validator.validate_attention_state(residual, state),
+            validator.validate_attention_forward_inputs(residual, current, state),
         )
 
-        self.assertTupleEqual(check_only_results, (None, None, None))
-        self.assertIs(
-            validator.validate_created_attention_state(state, block_size=1),
-            state,
-        )
-        self.assertIs(
-            validator.validate_attention_state(state, block_size=1),
-            state,
-        )
-        self.assertIs(
-            validator.validate_attention_forward_inputs(
-                current,
-                state,
-                residual_dim=2,
-                block_size=1,
-            ),
-            state,
-        )
+        self.assertTupleEqual(check_only_results, (None,) * 6)
+        self.assertIs(state.initial_source, initial_source)
+        self.assertEqual(state.block_size, 2)
+        self.assertEqual(len(state.sources), len(original_sources))
+        for source, original_source in zip(
+            state.sources, original_sources, strict=True
+        ):
+            self.assertIs(source, original_source)
 
     def test_created_state_validation_preserves_missing_state_error_contract(self):
+        residual = AttentionResidualConfig(
+            block_size=1, rms_norm_epsilon=1e-6, residual_dim=2
+        ).build()
         with self.assertRaisesRegex(
             RuntimeError,
             "^AttentionResidual failed to create forward-local residual state\\.$",
         ):
-            ResidualConnectionValidator.validate_created_attention_state(
+            AttentionResidualValidator.validate_created_attention_state(
+                residual,
                 None,
-                block_size=1,
             )
 
     def test_construction_dispatches_through_substituted_validator(self):
-        class RejectingValidator(ResidualConnectionValidator):
+        class RejectingValidator(AttentionResidualValidator):
             @staticmethod
             def validate_positive_integer(value, *, name):
                 raise RuntimeError("substituted construction validator was called")
@@ -76,10 +76,16 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
             RuntimeError,
             "substituted construction validator was called",
         ):
-            RejectingAttentionResidual(AttentionResidualConfig(residual_dim=2))
+            RejectingAttentionResidual(
+                AttentionResidualConfig(
+                    block_size=1, rms_norm_epsilon=1e-6, residual_dim=2
+                )
+            )
+
+
 
     def test_state_construction_dispatches_through_substituted_validator(self):
-        class RejectingValidator(ResidualConnectionValidator):
+        class RejectingValidator(AttentionResidualValidator):
             @staticmethod
             def validate_positive_integer(value, *, name):
                 raise RuntimeError("substituted state validator was called")
@@ -94,7 +100,7 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
             RejectingState(torch.ones(1, 2), block_size=1)
 
     def test_lifecycle_state_creation_uses_the_residual_validator_adapter(self):
-        class RejectingValidator(ResidualConnectionValidator):
+        class RejectingValidator(AttentionResidualValidator):
             @staticmethod
             def validate_source(source, *, residual_dim):
                 raise RuntimeError("substituted lifecycle validator was called")
@@ -102,7 +108,9 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
         class RejectingAttentionResidual(AttentionResidual):
             VALIDATOR = RejectingValidator
 
-        residual = RejectingAttentionResidual(AttentionResidualConfig(residual_dim=2))
+        residual = RejectingAttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=2)
+        )
 
         with self.assertRaisesRegex(
             RuntimeError,
@@ -111,15 +119,20 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
             residual.new_state(torch.ones(1, 2))
 
     def test_state_application_dispatches_created_state_validation(self):
-        class RejectingValidator(ResidualConnectionValidator):
+        validated_connections = []
+
+        class RejectingValidator(AttentionResidualValidator):
             @classmethod
-            def validate_created_attention_state(cls, state, *, block_size):
+            def validate_created_attention_state(cls, connection, state):
+                validated_connections.append(connection)
                 raise RuntimeError("substituted created-state validator was called")
 
         class RejectingAttentionResidual(AttentionResidual):
             VALIDATOR = RejectingValidator
 
-        residual = RejectingAttentionResidual(AttentionResidualConfig(residual_dim=2))
+        residual = RejectingAttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=2)
+        )
         layer_state = LayerState(hidden=torch.ones(1, 2))
 
         with self.assertRaisesRegex(
@@ -129,24 +142,29 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
             residual.apply_to_layer_state(layer_state, torch.ones(1, 2))
 
         self.assertIsNone(layer_state.residual_state)
+        self.assertEqual(len(validated_connections), 1)
+        self.assertIs(validated_connections[0], residual)
 
     def test_forward_dispatches_through_substituted_validator_before_mutation(self):
-        class RejectingValidator(ResidualConnectionValidator):
+        validated_connections = []
+
+        class RejectingValidator(AttentionResidualValidator):
             @classmethod
             def validate_attention_forward_inputs(
                 cls,
+                connection,
                 current,
                 state,
-                *,
-                residual_dim,
-                block_size,
             ):
+                validated_connections.append(connection)
                 raise RuntimeError("substituted forward validator was called")
 
         class RejectingAttentionResidual(AttentionResidual):
             VALIDATOR = RejectingValidator
 
-        residual = RejectingAttentionResidual(AttentionResidualConfig(residual_dim=2))
+        residual = RejectingAttentionResidual(
+            AttentionResidualConfig(block_size=1, rms_norm_epsilon=1e-6, residual_dim=2)
+        )
         state = residual.new_state(torch.ones(1, 2))
 
         with self.assertRaisesRegex(
@@ -160,6 +178,9 @@ class TestAttentionResidualValidatorAdapter(unittest.TestCase):
             )
 
         self.assertEqual(len(state.sources), 1)
+        self.assertEqual(len(validated_connections), 1)
+        self.assertIs(validated_connections[0], residual)
+
 
 
 if __name__ == "__main__":

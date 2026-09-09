@@ -431,11 +431,22 @@ class LayerControllerMonitorCallback(Callback):
         layer: Module,
         pl_module: LightningModule,
     ) -> None:
+        from emperor.layers._composition.residual.variants.additive import (
+            AdditiveResidual,
+        )
+        from emperor.layers._composition.residual.variants.weighted import (
+            WeightedResidual,
+        )
+        from emperor.layers._composition.residual.variants.weighted_blend import (
+            WeightedBlendResidual,
+        )
+
         residual = getattr(layer, "residual", None)
         residual_connection = getattr(residual, "connection", None)
-        if residual_connection is None:
-            return
-        if not residual_connection.supports_pairwise_diagnostics:
+        if not isinstance(
+            residual_connection,
+            (AdditiveResidual, WeightedResidual, WeightedBlendResidual),
+        ):
             return
         self._hooks.append(
             residual_connection.register_forward_hook(

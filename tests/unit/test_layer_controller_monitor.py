@@ -17,6 +17,8 @@ from emperor.layers import (
     LayerStackConfig,
     LayerState,
     ResidualConfig,
+    WeightedBlendResidualConfig,
+    WeightedResidualConfig,
 )
 from emperor.layers._monitoring.diagnostics import _LayerGateTrackingContext
 from emperor.linears import LinearLayerConfig
@@ -135,7 +137,13 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
                 input_dim=4,
                 output_dim=4,
                 activation=activation,
-                residual_config=residual_option(),
+                residual_config=residual_option(
+                    **(
+                        {"block_size": 1, "rms_norm_epsilon": 1e-6}
+                        if residual_option is AttentionResidualConfig
+                        else {}
+                    )
+                ),
                 dropout_probability=0.25,
                 layer_norm_position=LayerNormPositionOptions.BEFORE,
                 gate_config=(
@@ -180,31 +188,44 @@ class TestLayerControllerMonitorCallback(unittest.TestCase):
     def test_monitoring_hooks_delegate_modules_without_an_observation_interface(
         self,
     ):
-        layer = self.layer(with_gate=False)
-        layer.eval()
-        module = CaptureLightningModule(layer=layer)
-        callback = LayerControllerMonitorCallback(log_every_n_steps=1)
-        original_activation = getattr(layer.postprocessing, ACTIVATION_METHOD_NAME)
-        self.assertFalse(hasattr(layer, "_install_controller_observation"))
+        for residual_option in (
+            AdditiveResidualConfig,
+            WeightedResidualConfig,
+            WeightedBlendResidualConfig,
+        ):
+            with self.subTest(residual=residual_option.__name__):
+                layer = self.layer(with_gate=False, residual_option=residual_option)
+                layer.eval()
+                module = CaptureLightningModule(layer=layer)
+                callback = LayerControllerMonitorCallback(log_every_n_steps=1)
+                original_activation = getattr(
+                    layer.postprocessing, ACTIVATION_METHOD_NAME
+                )
+                self.assertFalse(hasattr(layer, "_install_controller_observation"))
 
-        callback.on_fit_start(TrainerStub(), module)
-        hidden = torch.randn(3, 4, requires_grad=True)
-        result = layer(LayerState(hidden=hidden))
-        result.hidden.sum().backward()
+                hidden = torch.tensor([[1.0, -2.0, 3.0, 0.5]], requires_grad=True)
+                expected = layer(LayerState(hidden=hidden)).hidden
+                expected_gradient = torch.autograd.grad(expected.sum(), hidden)[0]
 
-        self.assertIn("layer/activation/zero_fraction", module.logged_tags)
-        self.assertIn("layer/residual/contribution_ratio", module.logged_tags)
-        self.assertIsNotNone(hidden.grad)
+                callback.on_fit_start(TrainerStub(), module)
+                result = layer(LayerState(hidden=hidden))
+                result.hidden.sum().backward()
 
-        callback.on_fit_end(TrainerStub(), module)
-        self.assertTrue(
-            same_bound_method(
-                getattr(layer.postprocessing, ACTIVATION_METHOD_NAME),
-                original_activation,
-            )
-        )
-        self.assertEqual(callback._wrapped_methods, [])
-        self.assertEqual(layer.residual.connection._forward_hooks, {})
+                torch.testing.assert_close(result.hidden, expected)
+                torch.testing.assert_close(hidden.grad, expected_gradient)
+                self.assertIn("layer/activation/zero_fraction", module.logged_tags)
+                self.assertIn("layer/residual/contribution_ratio", module.logged_tags)
+                self.assertIn("layer/residual/input_ratio", module.logged_tags)
+
+                callback.on_fit_end(TrainerStub(), module)
+                self.assertTrue(
+                    same_bound_method(
+                        getattr(layer.postprocessing, ACTIVATION_METHOD_NAME),
+                        original_activation,
+                    )
+                )
+                self.assertEqual(callback._wrapped_methods, [])
+                self.assertEqual(layer.residual.connection._forward_hooks, {})
 
     def test_discovers_only_layer_modules(self):
         module = CaptureLightningModule(layer=self.layer(), other=torch.nn.Linear(4, 4))

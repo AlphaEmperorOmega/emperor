@@ -42,7 +42,7 @@ class LayerResidualDelegate(Module):
         )
         if connection is None:
             return None
-        self.VALIDATOR.validate_forward_local_state_lifecycle_requirement(connection)
+        self.VALIDATOR.validate_state_lifecycle(connection)
         return connection
 
     def apply_residual(

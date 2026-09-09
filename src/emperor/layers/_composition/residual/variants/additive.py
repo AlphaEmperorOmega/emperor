@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from torch import Tensor
 
-from emperor.layers._composition.residual.base import ResidualState
-from emperor.layers._composition.residual.config import AdditiveResidualConfig
-from emperor.layers._composition.residual.pairwise import (
-    PairwiseResidualAbstract,
+from emperor.layers._composition.residual.base import (
+    ResidualConnectionAbstract,
+    ResidualState,
 )
+from emperor.layers._composition.residual.config import AdditiveResidualConfig
 
 
-class AdditiveResidual(PairwiseResidualAbstract):
+class AdditiveResidual(ResidualConnectionAbstract):
     def __init__(
         self,
         cfg: AdditiveResidualConfig,
