@@ -336,14 +336,15 @@ class TestMixerAttention(unittest.TestCase):
             (
                 "",
                 "mixing_model",
+                "mixing_model.shared_controllers",
                 "mixing_model.layers",
                 "mixing_model.layers.0",
-                "mixing_model.layers.0.model",
                 "mixing_model.layers.0.postprocessing",
                 "mixing_model.layers.0.halting",
                 "mixing_model.layers.0.memory",
                 "mixing_model.layers.0.residual",
                 "mixing_model.layers.0.normalization",
+                "mixing_model.layers.0.model",
             ),
         )
         expected_state_topology = (
