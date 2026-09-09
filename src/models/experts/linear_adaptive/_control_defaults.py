@@ -46,6 +46,12 @@ class ControlDefaultValues:
         config.RESIDUAL_STACK_RESIDUAL_CONNECTION_OPTION
     )
     residual_stack_residual_model_flag: bool = config.RESIDUAL_STACK_RESIDUAL_MODEL_FLAG
+    residual_stack_residual_block_size: int | None = (
+        config.RESIDUAL_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    residual_stack_residual_rms_norm_epsilon: float | None = (
+        config.RESIDUAL_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     residual_stack_dropout_probability: float | None = (
         config.RESIDUAL_STACK_DROPOUT_PROBABILITY
     )
@@ -76,6 +82,12 @@ class ControlDefaultValues:
     )
     expert_gate_stack_residual_model_flag: bool = (
         config.EXPERT_GATE_STACK_RESIDUAL_MODEL_FLAG
+    )
+    expert_gate_stack_residual_block_size: int | None = (
+        config.EXPERT_GATE_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    expert_gate_stack_residual_rms_norm_epsilon: float | None = (
+        config.EXPERT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON
     )
     expert_gate_stack_dropout_probability: float | None = (
         config.EXPERT_GATE_STACK_DROPOUT_PROBABILITY
@@ -113,6 +125,12 @@ class ControlDefaultValues:
     )
     expert_halting_stack_residual_model_flag: bool = (
         config.EXPERT_HALTING_STACK_RESIDUAL_MODEL_FLAG
+    )
+    expert_halting_stack_residual_block_size: int | None = (
+        config.EXPERT_HALTING_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    expert_halting_stack_residual_rms_norm_epsilon: float | None = (
+        config.EXPERT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON
     )
     expert_halting_stack_dropout_probability: float | None = (
         config.EXPERT_HALTING_STACK_DROPOUT_PROBABILITY
@@ -154,6 +172,12 @@ class ControlDefaultValues:
     )
     expert_memory_stack_residual_model_flag: bool = (
         config.EXPERT_MEMORY_STACK_RESIDUAL_MODEL_FLAG
+    )
+    expert_memory_stack_residual_block_size: int | None = (
+        config.EXPERT_MEMORY_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    expert_memory_stack_residual_rms_norm_epsilon: float | None = (
+        config.EXPERT_MEMORY_STACK_RESIDUAL_RMS_NORM_EPSILON
     )
     expert_memory_stack_dropout_probability: float | None = (
         config.EXPERT_MEMORY_STACK_DROPOUT_PROBABILITY
@@ -204,6 +228,12 @@ class ControlDefaultValues:
     expert_recurrent_gate_stack_residual_model_flag: bool = (
         config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG
     )
+    expert_recurrent_gate_stack_residual_block_size: int | None = (
+        config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    expert_recurrent_gate_stack_residual_rms_norm_epsilon: float | None = (
+        config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     expert_recurrent_gate_stack_dropout_probability: float | None = (
         config.EXPERT_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY
     )
@@ -250,6 +280,12 @@ class ControlDefaultValues:
     expert_recurrent_halting_stack_residual_model_flag: bool = (
         config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG
     )
+    expert_recurrent_halting_stack_residual_block_size: int | None = (
+        config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    expert_recurrent_halting_stack_residual_rms_norm_epsilon: float | None = (
+        config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     expert_recurrent_halting_stack_dropout_probability: float | None = (
         config.EXPERT_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY
     )
@@ -270,6 +306,12 @@ class ControlDefaultValues:
         config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION
     )
     router_stack_residual_model_flag: bool = config.ROUTER_STACK_RESIDUAL_MODEL_FLAG
+    router_stack_residual_block_size: int | None = (
+        config.ROUTER_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    router_stack_residual_rms_norm_epsilon: float | None = (
+        config.ROUTER_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     router_stack_dropout_probability: float = config.ROUTER_STACK_DROPOUT_PROBABILITY
     router_stack_layer_norm_position: LayerNormPositionOptions = (
         config.ROUTER_STACK_LAYER_NORM_POSITION
@@ -304,6 +346,12 @@ class ControlDefaultValues:
     )
     router_gate_stack_residual_model_flag: bool = (
         config.ROUTER_GATE_STACK_RESIDUAL_MODEL_FLAG
+    )
+    router_gate_stack_residual_block_size: int | None = (
+        config.ROUTER_GATE_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    router_gate_stack_residual_rms_norm_epsilon: float | None = (
+        config.ROUTER_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON
     )
     router_gate_stack_dropout_probability: float | None = (
         config.ROUTER_GATE_STACK_DROPOUT_PROBABILITY
@@ -341,6 +389,12 @@ class ControlDefaultValues:
     )
     router_halting_stack_residual_model_flag: bool = (
         config.ROUTER_HALTING_STACK_RESIDUAL_MODEL_FLAG
+    )
+    router_halting_stack_residual_block_size: int | None = (
+        config.ROUTER_HALTING_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    router_halting_stack_residual_rms_norm_epsilon: float | None = (
+        config.ROUTER_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON
     )
     router_halting_stack_dropout_probability: float | None = (
         config.ROUTER_HALTING_STACK_DROPOUT_PROBABILITY
@@ -382,6 +436,12 @@ class ControlDefaultValues:
     )
     router_memory_stack_residual_model_flag: bool = (
         config.ROUTER_MEMORY_STACK_RESIDUAL_MODEL_FLAG
+    )
+    router_memory_stack_residual_block_size: int | None = (
+        config.ROUTER_MEMORY_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    router_memory_stack_residual_rms_norm_epsilon: float | None = (
+        config.ROUTER_MEMORY_STACK_RESIDUAL_RMS_NORM_EPSILON
     )
     router_memory_stack_dropout_probability: float | None = (
         config.ROUTER_MEMORY_STACK_DROPOUT_PROBABILITY
@@ -432,6 +492,12 @@ class ControlDefaultValues:
     router_recurrent_gate_stack_residual_model_flag: bool = (
         config.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG
     )
+    router_recurrent_gate_stack_residual_block_size: int | None = (
+        config.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    router_recurrent_gate_stack_residual_rms_norm_epsilon: float | None = (
+        config.ROUTER_RECURRENT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     router_recurrent_gate_stack_dropout_probability: float | None = (
         config.ROUTER_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY
     )
@@ -478,6 +544,12 @@ class ControlDefaultValues:
     router_recurrent_halting_stack_residual_model_flag: bool = (
         config.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG
     )
+    router_recurrent_halting_stack_residual_block_size: int | None = (
+        config.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    router_recurrent_halting_stack_residual_rms_norm_epsilon: float | None = (
+        config.ROUTER_RECURRENT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     router_recurrent_halting_stack_dropout_probability: float | None = (
         config.ROUTER_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY
     )
@@ -507,6 +579,10 @@ class ControlDefaultValues:
         config.GATE_STACK_RESIDUAL_CONNECTION_OPTION
     )
     gate_stack_residual_model_flag: bool = config.GATE_STACK_RESIDUAL_MODEL_FLAG
+    gate_stack_residual_block_size: int | None = config.GATE_STACK_RESIDUAL_BLOCK_SIZE
+    gate_stack_residual_rms_norm_epsilon: float | None = (
+        config.GATE_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     gate_stack_dropout_probability: float | None = config.GATE_STACK_DROPOUT_PROBABILITY
     gate_stack_last_layer_bias_option: LastLayerBiasOptions | None = (
         config.GATE_STACK_LAST_LAYER_BIAS_OPTION
@@ -536,6 +612,12 @@ class ControlDefaultValues:
         config.HALTING_STACK_RESIDUAL_CONNECTION_OPTION
     )
     halting_stack_residual_model_flag: bool = config.HALTING_STACK_RESIDUAL_MODEL_FLAG
+    halting_stack_residual_block_size: int | None = (
+        config.HALTING_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    halting_stack_residual_rms_norm_epsilon: float | None = (
+        config.HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     halting_stack_dropout_probability: float | None = (
         config.HALTING_STACK_DROPOUT_PROBABILITY
     )
@@ -569,6 +651,12 @@ class ControlDefaultValues:
         config.MEMORY_STACK_RESIDUAL_CONNECTION_OPTION
     )
     memory_stack_residual_model_flag: bool = config.MEMORY_STACK_RESIDUAL_MODEL_FLAG
+    memory_stack_residual_block_size: int | None = (
+        config.MEMORY_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    memory_stack_residual_rms_norm_epsilon: float | None = (
+        config.MEMORY_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     memory_stack_dropout_probability: float | None = (
         config.MEMORY_STACK_DROPOUT_PROBABILITY
     )
@@ -626,6 +714,12 @@ class ControlDefaultValues:
     recurrent_gate_stack_residual_model_flag: bool = (
         config.RECURRENT_GATE_STACK_RESIDUAL_MODEL_FLAG
     )
+    recurrent_gate_stack_residual_block_size: int | None = (
+        config.RECURRENT_GATE_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    recurrent_gate_stack_residual_rms_norm_epsilon: float | None = (
+        config.RECURRENT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON
+    )
     recurrent_gate_stack_dropout_probability: float | None = (
         config.RECURRENT_GATE_STACK_DROPOUT_PROBABILITY
     )
@@ -665,6 +759,12 @@ class ControlDefaultValues:
     )
     recurrent_halting_stack_residual_model_flag: bool = (
         config.RECURRENT_HALTING_STACK_RESIDUAL_MODEL_FLAG
+    )
+    recurrent_halting_stack_residual_block_size: int | None = (
+        config.RECURRENT_HALTING_STACK_RESIDUAL_BLOCK_SIZE
+    )
+    recurrent_halting_stack_residual_rms_norm_epsilon: float | None = (
+        config.RECURRENT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON
     )
     recurrent_halting_stack_dropout_probability: float | None = (
         config.RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY
@@ -758,6 +858,8 @@ class _StackSourceValues:
     normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
+    residual_block_size: int | None = field(default=None, kw_only=True)
+    residual_rms_norm_epsilon: float | None = field(default=None, kw_only=True)
     dropout_probability: float | None
     bias_flag: bool | None
 
@@ -818,6 +920,8 @@ def _stack_source(values: _StackSourceValues) -> ExpertsSubmoduleStackSource:
         layer_norm_position=values.layer_norm_position,
         normalization=values.normalization,
         residual_connection_option=values.residual_connection_option,
+        residual_block_size=values.residual_block_size,
+        residual_rms_norm_epsilon=values.residual_rms_norm_epsilon,
         residual_model_flag=values.residual_model_flag,
         dropout_probability=values.dropout_probability,
         bias_flag=values.bias_flag,
@@ -915,6 +1019,8 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         residual_connection_option=(
                             values.expert_gate_stack_residual_connection_option
                         ),
+                        residual_block_size=values.expert_gate_stack_residual_block_size,
+                        residual_rms_norm_epsilon=values.expert_gate_stack_residual_rms_norm_epsilon,
                         residual_model_flag=values.expert_gate_stack_residual_model_flag,
                         dropout_probability=values.expert_gate_stack_dropout_probability,
                         bias_flag=values.expert_gate_stack_bias_flag,
@@ -942,6 +1048,8 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         residual_connection_option=(
                             values.expert_halting_stack_residual_connection_option
                         ),
+                        residual_block_size=values.expert_halting_stack_residual_block_size,
+                        residual_rms_norm_epsilon=values.expert_halting_stack_residual_rms_norm_epsilon,
                         residual_model_flag=values.expert_halting_stack_residual_model_flag,
                         dropout_probability=values.expert_halting_stack_dropout_probability,
                         bias_flag=values.expert_halting_stack_bias_flag,
@@ -981,6 +1089,8 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         residual_connection_option=(
                             values.expert_memory_stack_residual_connection_option
                         ),
+                        residual_block_size=values.expert_memory_stack_residual_block_size,
+                        residual_rms_norm_epsilon=values.expert_memory_stack_residual_rms_norm_epsilon,
                         residual_model_flag=values.expert_memory_stack_residual_model_flag,
                         dropout_probability=values.expert_memory_stack_dropout_probability,
                         bias_flag=values.expert_memory_stack_bias_flag,
@@ -1025,6 +1135,8 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         residual_connection_option=(
                             values.expert_recurrent_gate_stack_residual_connection_option
                         ),
+                        residual_block_size=values.expert_recurrent_gate_stack_residual_block_size,
+                        residual_rms_norm_epsilon=values.expert_recurrent_gate_stack_residual_rms_norm_epsilon,
                         residual_model_flag=values.expert_recurrent_gate_stack_residual_model_flag,
                         dropout_probability=(
                             values.expert_recurrent_gate_stack_dropout_probability
@@ -1062,6 +1174,8 @@ def _expert_control_defaults(values: ControlDefaultValues) -> _ExpertControlDefa
                         residual_connection_option=(
                             values.expert_recurrent_halting_stack_residual_connection_option
                         ),
+                        residual_block_size=values.expert_recurrent_halting_stack_residual_block_size,
+                        residual_rms_norm_epsilon=values.expert_recurrent_halting_stack_residual_rms_norm_epsilon,
                         residual_model_flag=values.expert_recurrent_halting_stack_residual_model_flag,
                         dropout_probability=(
                             values.expert_recurrent_halting_stack_dropout_probability
@@ -1112,6 +1226,8 @@ def _router_stack_defaults(
         layer_norm_position=values.router_stack_layer_norm_position,
         normalization=values.router_stack_normalization,
         residual_connection_option=values.router_stack_residual_connection_option,
+        residual_block_size=values.router_stack_residual_block_size,
+        residual_rms_norm_epsilon=values.router_stack_residual_rms_norm_epsilon,
         residual_model_flag=values.router_stack_residual_model_flag,
         dropout_probability=values.router_stack_dropout_probability,
         bias_flag=values.router_bias_flag,
@@ -1147,6 +1263,8 @@ def _router_layer_defaults(
                     residual_connection_option=(
                         values.router_gate_stack_residual_connection_option
                     ),
+                    residual_block_size=values.router_gate_stack_residual_block_size,
+                    residual_rms_norm_epsilon=values.router_gate_stack_residual_rms_norm_epsilon,
                     residual_model_flag=values.router_gate_stack_residual_model_flag,
                     dropout_probability=values.router_gate_stack_dropout_probability,
                     bias_flag=values.router_gate_stack_bias_flag,
@@ -1174,6 +1292,8 @@ def _router_layer_defaults(
                     residual_connection_option=(
                         values.router_halting_stack_residual_connection_option
                     ),
+                    residual_block_size=values.router_halting_stack_residual_block_size,
+                    residual_rms_norm_epsilon=values.router_halting_stack_residual_rms_norm_epsilon,
                     residual_model_flag=values.router_halting_stack_residual_model_flag,
                     dropout_probability=values.router_halting_stack_dropout_probability,
                     bias_flag=values.router_halting_stack_bias_flag,
@@ -1219,6 +1339,8 @@ def _router_memory_defaults(
                     residual_connection_option=(
                         values.router_memory_stack_residual_connection_option
                     ),
+                    residual_block_size=values.router_memory_stack_residual_block_size,
+                    residual_rms_norm_epsilon=values.router_memory_stack_residual_rms_norm_epsilon,
                     residual_model_flag=values.router_memory_stack_residual_model_flag,
                     dropout_probability=values.router_memory_stack_dropout_probability,
                     bias_flag=values.router_memory_stack_bias_flag,
@@ -1265,6 +1387,8 @@ def _router_recurrent_defaults(
                     residual_connection_option=(
                         values.router_recurrent_gate_stack_residual_connection_option
                     ),
+                    residual_block_size=values.router_recurrent_gate_stack_residual_block_size,
+                    residual_rms_norm_epsilon=values.router_recurrent_gate_stack_residual_rms_norm_epsilon,
                     residual_model_flag=(
                         values.router_recurrent_gate_stack_residual_model_flag
                     ),
@@ -1302,6 +1426,8 @@ def _router_recurrent_defaults(
                     residual_connection_option=(
                         values.router_recurrent_halting_stack_residual_connection_option
                     ),
+                    residual_block_size=values.router_recurrent_halting_stack_residual_block_size,
+                    residual_rms_norm_epsilon=values.router_recurrent_halting_stack_residual_rms_norm_epsilon,
                     residual_model_flag=(
                         values.router_recurrent_halting_stack_residual_model_flag
                     ),
@@ -1338,6 +1464,8 @@ def _layer_control_defaults(values: ControlDefaultValues) -> _LayerControlDefaul
                 layer_norm_position=values.gate_stack_layer_norm_position,
                 normalization=values.gate_stack_normalization,
                 residual_connection_option=values.gate_stack_residual_connection_option,
+                residual_block_size=values.gate_stack_residual_block_size,
+                residual_rms_norm_epsilon=values.gate_stack_residual_rms_norm_epsilon,
                 residual_model_flag=values.gate_stack_residual_model_flag,
                 dropout_probability=values.gate_stack_dropout_probability,
                 bias_flag=values.gate_stack_bias_flag,
@@ -1361,6 +1489,8 @@ def _layer_control_defaults(values: ControlDefaultValues) -> _LayerControlDefaul
                 residual_connection_option=(
                     values.halting_stack_residual_connection_option
                 ),
+                residual_block_size=values.halting_stack_residual_block_size,
+                residual_rms_norm_epsilon=values.halting_stack_residual_rms_norm_epsilon,
                 residual_model_flag=values.halting_stack_residual_model_flag,
                 dropout_probability=values.halting_stack_dropout_probability,
                 bias_flag=values.halting_stack_bias_flag,
@@ -1391,6 +1521,8 @@ def _layer_control_defaults(values: ControlDefaultValues) -> _LayerControlDefaul
             layer_norm_position=values.memory_stack_layer_norm_position,
             normalization=values.memory_stack_normalization,
             residual_connection_option=(values.memory_stack_residual_connection_option),
+            residual_block_size=values.memory_stack_residual_block_size,
+            residual_rms_norm_epsilon=values.memory_stack_residual_rms_norm_epsilon,
             residual_model_flag=values.memory_stack_residual_model_flag,
             dropout_probability=values.memory_stack_dropout_probability,
             bias_flag=values.memory_stack_bias_flag,
@@ -1446,6 +1578,8 @@ def _recurrent_defaults(
                 residual_connection_option=(
                     values.recurrent_gate_stack_residual_connection_option
                 ),
+                residual_block_size=values.recurrent_gate_stack_residual_block_size,
+                residual_rms_norm_epsilon=values.recurrent_gate_stack_residual_rms_norm_epsilon,
                 residual_model_flag=values.recurrent_gate_stack_residual_model_flag,
                 dropout_probability=values.recurrent_gate_stack_dropout_probability,
                 bias_flag=values.recurrent_gate_stack_bias_flag,
@@ -1475,6 +1609,8 @@ def _recurrent_defaults(
                 residual_connection_option=(
                     values.recurrent_halting_stack_residual_connection_option
                 ),
+                residual_block_size=values.recurrent_halting_stack_residual_block_size,
+                residual_rms_norm_epsilon=values.recurrent_halting_stack_residual_rms_norm_epsilon,
                 residual_model_flag=values.recurrent_halting_stack_residual_model_flag,
                 dropout_probability=(
                     values.recurrent_halting_stack_dropout_probability
@@ -1494,6 +1630,8 @@ def _recurrent_defaults(
             residual_connection_option=(
                 values.residual_stack_residual_connection_option
             ),
+            residual_block_size=values.residual_stack_residual_block_size,
+            residual_rms_norm_epsilon=values.residual_stack_residual_rms_norm_epsilon,
             residual_model_flag=values.residual_stack_residual_model_flag,
             dropout_probability=values.residual_stack_dropout_probability,
             last_layer_bias_option=values.residual_stack_last_layer_bias_option,

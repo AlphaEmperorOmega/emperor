@@ -37,6 +37,8 @@ def router_stack_defaults(config: ModuleType) -> ExpertsSubmoduleStackOptions:
         layer_norm_position=config.ROUTER_STACK_LAYER_NORM_POSITION,
         normalization=config.ROUTER_STACK_NORMALIZATION,
         residual_connection_option=config.ROUTER_STACK_RESIDUAL_CONNECTION_OPTION,
+        residual_block_size=config.ROUTER_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.ROUTER_STACK_RESIDUAL_RMS_NORM_EPSILON,
         residual_model_flag=config.ROUTER_STACK_RESIDUAL_MODEL_FLAG,
         dropout_probability=config.ROUTER_STACK_DROPOUT_PROBABILITY,
         bias_flag=config.ROUTER_BIAS_FLAG,
@@ -177,6 +179,8 @@ def _main_gate_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSource:
         config.GATE_STACK_DROPOUT_PROBABILITY,
         config.GATE_STACK_BIAS_FLAG,
         normalization=config.GATE_STACK_NORMALIZATION,
+        residual_block_size=config.GATE_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
     )
 
 
@@ -194,6 +198,8 @@ def _main_halting_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSourc
         config.HALTING_STACK_DROPOUT_PROBABILITY,
         config.HALTING_STACK_BIAS_FLAG,
         normalization=config.HALTING_STACK_NORMALIZATION,
+        residual_block_size=config.HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
     )
 
 
@@ -211,6 +217,8 @@ def _main_memory_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSource
         config.MEMORY_STACK_DROPOUT_PROBABILITY,
         config.MEMORY_STACK_BIAS_FLAG,
         normalization=config.MEMORY_STACK_NORMALIZATION,
+        residual_block_size=config.MEMORY_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.MEMORY_STACK_RESIDUAL_RMS_NORM_EPSILON,
     )
 
 
@@ -230,6 +238,8 @@ def _main_recurrent_gate_stack_source(
         config.RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
         config.RECURRENT_GATE_STACK_BIAS_FLAG,
         normalization=config.RECURRENT_GATE_STACK_NORMALIZATION,
+        residual_block_size=config.RECURRENT_GATE_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.RECURRENT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
     )
 
 
@@ -249,6 +259,8 @@ def _main_recurrent_halting_stack_source(
         config.RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
         config.RECURRENT_HALTING_STACK_BIAS_FLAG,
         normalization=config.RECURRENT_HALTING_STACK_NORMALIZATION,
+        residual_block_size=config.RECURRENT_HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.RECURRENT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
     )
 
 
@@ -266,6 +278,8 @@ def _expert_gate_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSource
         config.EXPERT_GATE_STACK_DROPOUT_PROBABILITY,
         config.EXPERT_GATE_STACK_BIAS_FLAG,
         normalization=config.EXPERT_GATE_STACK_NORMALIZATION,
+        residual_block_size=config.EXPERT_GATE_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.EXPERT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
     )
 
 
@@ -283,6 +297,8 @@ def _expert_halting_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSou
         config.EXPERT_HALTING_STACK_DROPOUT_PROBABILITY,
         config.EXPERT_HALTING_STACK_BIAS_FLAG,
         normalization=config.EXPERT_HALTING_STACK_NORMALIZATION,
+        residual_block_size=config.EXPERT_HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.EXPERT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
     )
 
 
@@ -300,6 +316,8 @@ def _expert_memory_stack_source(config: ModuleType) -> ExpertsSubmoduleStackSour
         config.EXPERT_MEMORY_STACK_DROPOUT_PROBABILITY,
         config.EXPERT_MEMORY_STACK_BIAS_FLAG,
         normalization=config.EXPERT_MEMORY_STACK_NORMALIZATION,
+        residual_block_size=config.EXPERT_MEMORY_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.EXPERT_MEMORY_STACK_RESIDUAL_RMS_NORM_EPSILON,
     )
 
 
@@ -319,6 +337,8 @@ def _expert_recurrent_gate_stack_source(
         config.EXPERT_RECURRENT_GATE_STACK_DROPOUT_PROBABILITY,
         config.EXPERT_RECURRENT_GATE_STACK_BIAS_FLAG,
         normalization=config.EXPERT_RECURRENT_GATE_STACK_NORMALIZATION,
+        residual_block_size=config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.EXPERT_RECURRENT_GATE_STACK_RESIDUAL_RMS_NORM_EPSILON,
     )
 
 
@@ -338,6 +358,8 @@ def _expert_recurrent_halting_stack_source(
         config.EXPERT_RECURRENT_HALTING_STACK_DROPOUT_PROBABILITY,
         config.EXPERT_RECURRENT_HALTING_STACK_BIAS_FLAG,
         normalization=config.EXPERT_RECURRENT_HALTING_STACK_NORMALIZATION,
+        residual_block_size=config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_BLOCK_SIZE,
+        residual_rms_norm_epsilon=config.EXPERT_RECURRENT_HALTING_STACK_RESIDUAL_RMS_NORM_EPSILON,
     )
 
 
@@ -354,6 +376,8 @@ def _stack_source(
     dropout_probability: float | None,
     bias_flag: bool | None,
     *,
+    residual_block_size: int | None = None,
+    residual_rms_norm_epsilon: float | None = None,
     normalization: NormalizationOptions | None = None,
 ) -> ExpertsSubmoduleStackSource:
     return ExpertsSubmoduleStackSource(
@@ -366,6 +390,8 @@ def _stack_source(
         layer_norm_position=layer_norm_position,
         normalization=normalization,
         residual_connection_option=residual_connection_option,
+        residual_block_size=residual_block_size,
+        residual_rms_norm_epsilon=residual_rms_norm_epsilon,
         residual_model_flag=residual_model_flag,
         dropout_probability=dropout_probability,
         bias_flag=bias_flag,
