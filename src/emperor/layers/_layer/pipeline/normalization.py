@@ -37,6 +37,7 @@ class LayerNormalizationDelegate(Module):
         self.input_dim: int = self.cfg.input_dim
         self.output_dim: int = self.cfg.output_dim
         self.dimension = self.__resolve_dimension(self.input_dim, self.output_dim)
+
         self.module = self.__build_normalization()
 
     def __build_normalization(self) -> nn.Module | None:
