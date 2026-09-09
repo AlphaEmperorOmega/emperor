@@ -30,6 +30,7 @@ from emperor.layers import (
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -346,6 +347,9 @@ class StackValues:
     apply_output_postprocessing_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     dropout_probability: float
@@ -360,6 +364,9 @@ class StackFields:
     apply_output_postprocessing_flag: RuntimeField[bool]
     activation: RuntimeField[ActivationOptions]
     layer_norm_position: RuntimeField[LayerNormPositionOptions]
+    normalization: RuntimeField[NormalizationOptions] = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     residual_connection_option: RuntimeField[type[ResidualConfig] | None]
     residual_model_flag: RuntimeField[bool]
     dropout_probability: RuntimeField[float]
@@ -375,6 +382,7 @@ class OptionalStackValues:
     apply_output_postprocessing_flag: bool | None
     activation: ActivationOptions | None
     layer_norm_position: LayerNormPositionOptions | None
+    normalization: NormalizationOptions | None = field(default=None, kw_only=True)
     residual_connection_option: type[ResidualConfig] | None
     residual_model_flag: bool
     dropout_probability: float | None
@@ -390,6 +398,9 @@ class OptionalStackFields:
     apply_output_postprocessing_flag: RuntimeField[bool | None]
     activation: RuntimeField[ActivationOptions | None]
     layer_norm_position: RuntimeField[LayerNormPositionOptions | None]
+    normalization: RuntimeField[NormalizationOptions | None] = field(
+        default=None, kw_only=True
+    )
     residual_connection_option: RuntimeField[type[ResidualConfig] | None]
     residual_model_flag: RuntimeField[bool]
     dropout_probability: RuntimeField[float | None]
@@ -421,6 +432,9 @@ class ControlValues:
     recurrent_forward_calls_before_iteration_increment: int
     recurrent_smooth_iteration_growth_flag: bool
     recurrent_layer_norm_position: LayerNormPositionOptions
+    recurrent_normalization: NormalizationOptions = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     recurrent_stack_gate_flag: bool
     recurrent_gate_option: LayerGateOptions | None
     recurrent_gate_activation: ActivationOptions | None
@@ -456,6 +470,9 @@ class ControlFields:
     recurrent_forward_calls_before_iteration_increment: RuntimeField[int]
     recurrent_smooth_iteration_growth_flag: RuntimeField[bool]
     recurrent_layer_norm_position: RuntimeField[LayerNormPositionOptions]
+    recurrent_normalization: RuntimeField[NormalizationOptions] = field(
+        default=NormalizationOptions.LAYER_NORM, kw_only=True
+    )
     recurrent_stack_gate_flag: RuntimeField[bool]
     recurrent_gate_option: RuntimeField[LayerGateOptions | None]
     recurrent_gate_activation: RuntimeField[ActivationOptions | None]
@@ -671,6 +688,11 @@ _MAIN_STACK_FIELDS = StackFields(
         config.LAYER_NORM_POSITION,
         LayerNormPositionOptions,
     ),
+    normalization=_enum_field(
+        "normalization",
+        config.NORMALIZATION,
+        NormalizationOptions,
+    ),
     residual_connection_option=_optional_implementation_field(
         "stack_residual_connection_option",
         config.STACK_RESIDUAL_CONNECTION_OPTION,
@@ -709,6 +731,11 @@ _SUBMODULE_STACK_FIELDS = StackFields(
         "submodule_stack_layer_norm_position",
         config.SUBMODULE_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
+    ),
+    normalization=_enum_field(
+        "submodule_stack_normalization",
+        config.SUBMODULE_STACK_NORMALIZATION,
+        NormalizationOptions,
     ),
     residual_connection_option=_optional_implementation_field(
         "submodule_stack_residual_connection_option",
@@ -755,6 +782,11 @@ _ADAPTIVE_GENERATOR_STACK_FIELDS = StackFields(
         config.ADAPTIVE_GENERATOR_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
     ),
+    normalization=_enum_field(
+        "adaptive_generator_stack_normalization",
+        config.ADAPTIVE_GENERATOR_STACK_NORMALIZATION,
+        NormalizationOptions,
+    ),
     residual_connection_option=_optional_implementation_field(
         "adaptive_generator_stack_residual_connection_option",
         config.ADAPTIVE_GENERATOR_STACK_RESIDUAL_CONNECTION_OPTION,
@@ -786,6 +818,11 @@ _RESIDUAL_STACK_FIELDS = OptionalStackFields(
         "residual_stack_layer_norm_position",
         config.RESIDUAL_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
+    ),
+    normalization=_optional_enum_field(
+        "residual_stack_normalization",
+        config.RESIDUAL_STACK_NORMALIZATION,
+        NormalizationOptions,
     ),
     num_layers=_optional_integer_field(
         "residual_stack_num_layers", config.RESIDUAL_STACK_NUM_LAYERS
@@ -833,6 +870,11 @@ _GATE_STACK_FIELDS = OptionalStackFields(
         config.GATE_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
     ),
+    normalization=_optional_enum_field(
+        "gate_stack_normalization",
+        config.GATE_STACK_NORMALIZATION,
+        NormalizationOptions,
+    ),
     num_layers=_optional_integer_field(
         "gate_stack_num_layers", config.GATE_STACK_NUM_LAYERS
     ),
@@ -874,6 +916,11 @@ _HALTING_STACK_FIELDS = OptionalStackFields(
         "halting_stack_layer_norm_position",
         config.HALTING_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
+    ),
+    normalization=_optional_enum_field(
+        "halting_stack_normalization",
+        config.HALTING_STACK_NORMALIZATION,
+        NormalizationOptions,
     ),
     num_layers=_optional_integer_field(
         "halting_stack_num_layers", config.HALTING_STACK_NUM_LAYERS
@@ -921,6 +968,11 @@ _MEMORY_STACK_FIELDS = OptionalStackFields(
         config.MEMORY_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
     ),
+    normalization=_optional_enum_field(
+        "memory_stack_normalization",
+        config.MEMORY_STACK_NORMALIZATION,
+        NormalizationOptions,
+    ),
     num_layers=_optional_integer_field(
         "memory_stack_num_layers", config.MEMORY_STACK_NUM_LAYERS
     ),
@@ -964,6 +1016,11 @@ _RECURRENT_GATE_STACK_FIELDS = OptionalStackFields(
         "recurrent_gate_stack_layer_norm_position",
         config.RECURRENT_GATE_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
+    ),
+    normalization=_optional_enum_field(
+        "recurrent_gate_stack_normalization",
+        config.RECURRENT_GATE_STACK_NORMALIZATION,
+        NormalizationOptions,
     ),
     num_layers=_optional_integer_field(
         "recurrent_gate_stack_num_layers",
@@ -1015,6 +1072,11 @@ _RECURRENT_HALTING_STACK_FIELDS = OptionalStackFields(
         config.RECURRENT_HALTING_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
     ),
+    normalization=_optional_enum_field(
+        "recurrent_halting_stack_normalization",
+        config.RECURRENT_HALTING_STACK_NORMALIZATION,
+        NormalizationOptions,
+    ),
     num_layers=_optional_integer_field(
         "recurrent_halting_stack_num_layers",
         config.RECURRENT_HALTING_STACK_NUM_LAYERS,
@@ -1064,6 +1126,11 @@ _WEIGHT_GENERATOR_STACK_FIELDS = OptionalStackFields(
         "weight_generator_stack_layer_norm_position",
         config.WEIGHT_GENERATOR_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
+    ),
+    normalization=_optional_enum_field(
+        "weight_generator_stack_normalization",
+        config.WEIGHT_GENERATOR_STACK_NORMALIZATION,
+        NormalizationOptions,
     ),
     num_layers=_optional_integer_field(
         "weight_generator_stack_num_layers",
@@ -1115,6 +1182,11 @@ _BIAS_GENERATOR_STACK_FIELDS = OptionalStackFields(
         config.BIAS_GENERATOR_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
     ),
+    normalization=_optional_enum_field(
+        "bias_generator_stack_normalization",
+        config.BIAS_GENERATOR_STACK_NORMALIZATION,
+        NormalizationOptions,
+    ),
     num_layers=_optional_integer_field(
         "bias_generator_stack_num_layers",
         config.BIAS_GENERATOR_STACK_NUM_LAYERS,
@@ -1165,6 +1237,11 @@ _DIAGONAL_GENERATOR_STACK_FIELDS = OptionalStackFields(
         config.DIAGONAL_GENERATOR_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
     ),
+    normalization=_optional_enum_field(
+        "diagonal_generator_stack_normalization",
+        config.DIAGONAL_GENERATOR_STACK_NORMALIZATION,
+        NormalizationOptions,
+    ),
     num_layers=_optional_integer_field(
         "diagonal_generator_stack_num_layers",
         config.DIAGONAL_GENERATOR_STACK_NUM_LAYERS,
@@ -1214,6 +1291,11 @@ _MASK_GENERATOR_STACK_FIELDS = OptionalStackFields(
         "mask_generator_stack_layer_norm_position",
         config.MASK_GENERATOR_STACK_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
+    ),
+    normalization=_optional_enum_field(
+        "mask_generator_stack_normalization",
+        config.MASK_GENERATOR_STACK_NORMALIZATION,
+        NormalizationOptions,
     ),
     num_layers=_optional_integer_field(
         "mask_generator_stack_num_layers",
@@ -1318,6 +1400,11 @@ _CONTROL_FIELDS = ControlFields(
         "recurrent_layer_norm_position",
         config.RECURRENT_LAYER_NORM_POSITION,
         LayerNormPositionOptions,
+    ),
+    recurrent_normalization=_enum_field(
+        "recurrent_normalization",
+        config.RECURRENT_NORMALIZATION,
+        NormalizationOptions,
     ),
     recurrent_stack_gate_flag=_boolean_field(
         "recurrent_stack_gate_flag", config.RECURRENT_STACK_GATE_FLAG
@@ -1622,6 +1709,7 @@ def _read_stack(reader: RuntimeOverrideReader, fields: StackFields) -> StackValu
         ),
         activation=reader.read(fields.activation),
         layer_norm_position=reader.read(fields.layer_norm_position),
+        normalization=reader.read(fields.normalization),
         residual_connection_option=reader.read(fields.residual_connection_option),
         residual_model_flag=reader.read(fields.residual_model_flag),
         dropout_probability=reader.read(fields.dropout_probability),
@@ -1643,6 +1731,7 @@ def _read_optional_stack(
         ),
         activation=reader.read(fields.activation),
         layer_norm_position=reader.read(fields.layer_norm_position),
+        normalization=reader.read(fields.normalization),
         residual_connection_option=reader.read(fields.residual_connection_option),
         residual_model_flag=reader.read(fields.residual_model_flag),
         dropout_probability=reader.read(fields.dropout_probability),
@@ -1684,6 +1773,7 @@ def _read_control(reader: RuntimeOverrideReader) -> ControlValues:
             fields.recurrent_smooth_iteration_growth_flag
         ),
         recurrent_layer_norm_position=reader.read(fields.recurrent_layer_norm_position),
+        recurrent_normalization=reader.read(fields.recurrent_normalization),
         recurrent_stack_gate_flag=reader.read(fields.recurrent_stack_gate_flag),
         recurrent_gate_option=reader.read(fields.recurrent_gate_option),
         recurrent_gate_activation=reader.read(fields.recurrent_gate_activation),
@@ -1789,6 +1879,11 @@ def _generation_stack_fields(prefix: str) -> OptionalStackFields:
             f"{prefix}_layer_norm_position",
             getattr(config, f"{prefix.upper()}_LAYER_NORM_POSITION"),
             LayerNormPositionOptions,
+        ),
+        normalization=_optional_enum_field(
+            f"{prefix}_normalization",
+            getattr(config, f"{prefix.upper()}_NORMALIZATION"),
+            NormalizationOptions,
         ),
         num_layers=_optional_integer_field(
             f"{prefix}_num_layers",

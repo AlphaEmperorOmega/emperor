@@ -36,6 +36,7 @@ class HiddenModelConfigFactory:
             layer_config=LayerConfig(
                 activation=runtime.stack.activation,
                 layer_norm_position=runtime.stack.layer_norm_position,
+                normalization=runtime.stack.normalization,
                 residual_config=build_residual_config(
                     runtime.stack.residual_connection_option,
                     runtime.stack.residual_model_flag,

@@ -20,6 +20,7 @@ from emperor.layers import (
     ActivationOptions,
     LayerConfig,
     LayerNormPositionOptions,
+    NormalizationOptions,
 )
 from models.neuron.expert_linear_adaptive._generation import (
     BiasGenerationOptions,
@@ -119,6 +120,7 @@ class BoundaryModelConfigFactory:
         return LayerConfig(
             activation=activation,
             layer_norm_position=LayerNormPositionOptions.DISABLED,
+            normalization=NormalizationOptions.RMS_NORM,
             residual_config=None,
             dropout_probability=0.0,
             gate_config=None,

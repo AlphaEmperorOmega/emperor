@@ -34,6 +34,7 @@ class AdaptiveGeneratorStackConfigFactory:
             layer_norm_position=self.__resolve(
                 source.layer_norm_position, defaults.layer_norm_position
             ),
+            normalization=self.__resolve(source.normalization, defaults.normalization),
             num_layers=self.__resolve(source.num_layers, defaults.num_layers),
             activation=self.__resolve(source.activation, defaults.activation),
             residual_connection_option=self.__resolve(
@@ -73,6 +74,7 @@ class AdaptiveGeneratorStackConfigFactory:
             layer_config=LayerConfig(
                 activation=options.activation,
                 layer_norm_position=options.layer_norm_position,
+                normalization=options.normalization,
                 residual_config=build_residual_config(
                     options.residual_connection_option,
                     options.residual_model_flag,

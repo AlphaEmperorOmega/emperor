@@ -9,6 +9,7 @@ from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from emperor.neuron import (
@@ -61,6 +62,9 @@ class NeuronSubmoduleStackOptions:
     apply_output_postprocessing_flag: bool
     activation: ActivationOptions
     layer_norm_position: LayerNormPositionOptions
+    normalization: NormalizationOptions = field(
+        default=NormalizationOptions.RMS_NORM, kw_only=True
+    )
     residual_connection_option: type[ResidualConfig]
     residual_model_flag: bool = field(default=False, kw_only=True)
     dropout_probability: float

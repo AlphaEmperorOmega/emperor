@@ -1,6 +1,5 @@
 # ruff: noqa: E501
-
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import cast
 
 import models.neuron.expert_linear_adaptive.config as config
@@ -13,6 +12,7 @@ from emperor.layers import (
     ActivationOptions,
     LastLayerBiasOptions,
     LayerNormPositionOptions,
+    NormalizationOptions,
     ResidualConfig,
 )
 from models.neuron.expert_linear_adaptive._hidden._adaptive_defaults import (
@@ -43,6 +43,9 @@ class CoreDefaultValues:
     output_dim: int = config.OUTPUT_DIM
     stack_bias_flag: bool = config.STACK_BIAS_FLAG
     layer_norm_position: LayerNormPositionOptions = config.LAYER_NORM_POSITION
+    normalization: NormalizationOptions = field(
+        default=config.NORMALIZATION, kw_only=True
+    )
     stack_num_layers: int = config.STACK_NUM_LAYERS
     stack_activation: ActivationOptions = config.STACK_ACTIVATION
     stack_residual_connection_option: type[ResidualConfig] | None = (
@@ -71,6 +74,9 @@ class CoreDefaultValues:
     submodule_stack_layer_norm_position: LayerNormPositionOptions = (
         config.SUBMODULE_STACK_LAYER_NORM_POSITION
     )
+    submodule_stack_normalization: NormalizationOptions = field(
+        default=(config.SUBMODULE_STACK_NORMALIZATION), kw_only=True
+    )
     submodule_stack_last_layer_bias_option: LastLayerBiasOptions = (
         config.SUBMODULE_STACK_LAST_LAYER_BIAS_OPTION
     )
@@ -98,6 +104,9 @@ class CoreDefaultValues:
     expert_stack_dropout_probability: float | None = None
     expert_stack_layer_norm_position: LayerNormPositionOptions | None = (
         config.EXPERT_STACK_LAYER_NORM_POSITION
+    )
+    expert_stack_normalization: NormalizationOptions | None = field(
+        default=(config.EXPERT_STACK_NORMALIZATION), kw_only=True
     )
     expert_stack_last_layer_bias_option: LastLayerBiasOptions | None = None
     expert_stack_apply_output_postprocessing_flag: bool | None = (
@@ -157,6 +166,7 @@ def resolve_core_defaults(values: CoreDefaultValues) -> CoreDefaults:
         hidden_dim=values.hidden_dim,
         bias_flag=values.stack_bias_flag,
         layer_norm_position=values.layer_norm_position,
+        normalization=values.normalization,
         num_layers=values.stack_num_layers,
         activation=values.stack_activation,
         residual_connection_option=values.stack_residual_connection_option,
@@ -172,6 +182,7 @@ def resolve_core_defaults(values: CoreDefaultValues) -> CoreDefaults:
         apply_output_postprocessing_flag=values.submodule_stack_apply_output_postprocessing_flag,
         activation=values.submodule_stack_activation,
         layer_norm_position=values.submodule_stack_layer_norm_position,
+        normalization=values.submodule_stack_normalization,
         residual_connection_option=(values.submodule_stack_residual_connection_option),
         residual_model_flag=values.submodule_stack_residual_model_flag,
         dropout_probability=values.submodule_stack_dropout_probability,
@@ -202,6 +213,7 @@ def resolve_core_defaults(values: CoreDefaultValues) -> CoreDefaults:
             apply_output_postprocessing_flag=values.expert_stack_apply_output_postprocessing_flag,
             activation=values.expert_stack_activation,
             layer_norm_position=values.expert_stack_layer_norm_position,
+            normalization=values.expert_stack_normalization,
             residual_connection_option=values.expert_stack_residual_connection_option,
             residual_model_flag=values.expert_stack_residual_model_flag,
             dropout_probability=values.expert_stack_dropout_probability,
