@@ -4844,12 +4844,12 @@ class TestRecurrentLayer(unittest.TestCase):
             (
                 WeightedResidualConfig,
                 data_dependent_model_config,
-                torch.full_like(hidden, 1.0),
+                None,
             ),
             (
                 WeightedBlendResidualConfig,
                 data_dependent_model_config,
-                torch.full_like(hidden, 2.8),
+                None,
             ),
         ]
 
@@ -4867,6 +4867,17 @@ class TestRecurrentLayer(unittest.TestCase):
                         residual_model_config=residual_model_config,
                     )
                 )
+
+                if residual_model_config is not None:
+                    current = hidden + 2.0
+                    raw_coefficients = model.residual_connection.model(
+                        torch.cat((current, hidden), dim=-1)
+                    )
+                    if option is WeightedResidualConfig:
+                        expected = hidden + torch.tanh(raw_coefficients) * current
+                    else:
+                        blend = torch.sigmoid(raw_coefficients)
+                        expected = blend * current + (1.0 - blend) * hidden
 
                 result = model(LayerState(hidden=hidden.clone()))
 

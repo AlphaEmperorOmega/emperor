@@ -38,7 +38,7 @@ class WeightedResidualConfig(ResidualConfig):
         "Optional data-dependent coefficient model. When provided, the model "
         "receives concatenated current and previous values and produces one raw "
         "mixing coefficient per feature. When omitted, a learned scalar parameter "
-        "is used."
+        "is used. The coefficient model retains its own parameter initialization."
     )
 
     def _registry_owner(self) -> type:
@@ -55,7 +55,7 @@ class WeightedBlendResidualConfig(ResidualConfig):
         "Optional data-dependent coefficient model. When provided, the model "
         "receives concatenated current and previous values and produces one raw "
         "blend coefficient per feature. When omitted, a learned scalar parameter "
-        "is used."
+        "is used. The coefficient model retains its own parameter initialization."
     )
 
     def _registry_owner(self) -> type:

@@ -44,8 +44,8 @@ class WeightedPairwiseResidualAbstract(PairwiseResidualAbstract):
         self.__initialize_coefficient()
 
     def __initialize_coefficient(self) -> None:
-        initial_raw_coefficient = self._initial_raw_mix_coefficient()
         if self.model_config is None:
+            initial_raw_coefficient = self._initial_raw_mix_coefficient()
             self.raw_weight = nn.Parameter(initial_raw_coefficient)
             return
 
@@ -57,26 +57,6 @@ class WeightedPairwiseResidualAbstract(PairwiseResidualAbstract):
                 input_dim=coefficient_dim * 2,
                 output_dim=coefficient_dim,
             ),
-        )
-        affine_output = self.__coefficient_affine_output()
-        nn.init.zeros_(affine_output.weight_params)
-        bias_params = cast(Tensor, affine_output.bias_params)
-        nn.init.constant_(bias_params, initial_raw_coefficient.item())
-
-    def __coefficient_affine_output(self) -> LinearAbstract:
-        from emperor.layers import LayerStack
-        from emperor.linears import LinearAbstract
-
-        coefficient_model = self.model
-        if isinstance(coefficient_model, LinearAbstract):
-            return coefficient_model
-        if isinstance(coefficient_model, LayerStack):
-            output_model = coefficient_model[-1].model
-            if isinstance(output_model, LinearAbstract):
-                return output_model
-        raise TypeError(
-            "weighted residual coefficient model must end in LinearAbstract, got "
-            f"{type(coefficient_model).__name__}."
         )
 
     @staticmethod

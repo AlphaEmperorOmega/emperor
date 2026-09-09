@@ -604,9 +604,8 @@ class TestResidualModelFlagCatalogContract(unittest.TestCase):
             coefficient_output = residual.model[-1].model
             self.assertIsInstance(coefficient_output, LinearLayer)
             self.assertIsNotNone(coefficient_output.bias_params)
-            torch.testing.assert_close(
-                coefficient_output.weight_params,
-                torch.zeros_like(coefficient_output.weight_params),
+            self.assertGreater(
+                torch.count_nonzero(coefficient_output.weight_params).item(), 0
             )
 
         output = model(torch.randn(2, 1, 28, 28))
