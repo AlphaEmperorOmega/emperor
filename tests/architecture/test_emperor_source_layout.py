@@ -8,7 +8,7 @@ SOURCE_ROOT = REPOSITORY_ROOT / "src"
 EMPEROR_SOURCE = SOURCE_ROOT / "emperor"
 LAYERS_SOURCE = EMPEROR_SOURCE / "layers"
 
-_LAYER_CONFIG_INITIALIZER_OWNERS = {
+_LAYER_CONFIG_CONSTRUCTOR_OWNERS = {
     ("_composition/gate/core.py", "LayerGate"),
     ("_composition/recurrent/base.py", "RecurrentCompositionAbstract"),
     (
@@ -16,6 +16,7 @@ _LAYER_CONFIG_INITIALIZER_OWNERS = {
         "RecurrentIterationSchedule",
     ),
     ("_composition/recurrent/variants/standard.py", "RecurrentLayer"),
+    ("_composition/recurrent/variants/inner_thinking.py", "InnerThinkingRecurrent"),
     (
         "_composition/recurrent/variants/tiny_recursive_model.py",
         "TinyRecursiveModelRecurrent",
@@ -26,7 +27,7 @@ _LAYER_CONFIG_INITIALIZER_OWNERS = {
     ),
     ("_composition/residual/base.py", "ResidualConnectionAbstract"),
     ("_composition/residual/pairwise.py", "WeightedPairwiseResidualAbstract"),
-    ("_composition/residual/variants/attention.py", "AttentionResidual"),
+    ("_composition/residual/variants/attention/core.py", "AttentionResidual"),
     ("_layer/core.py", "Layer"),
     ("_layer/pipeline/halting.py", "LayerHaltingDelegate"),
     ("_layer/pipeline/memory.py", "LayerMemoryDelegate"),
@@ -66,127 +67,74 @@ def parsed_source_files():
 
 
 class EmperorSourceLayoutTests(unittest.TestCase):
-    def test_layer_config_consumers_use_private_initialization_convention(self):
-        owners: dict[tuple[str, str], ast.ClassDef] = {}
-        direct_config_reads = []
+    def test_layer_source_contains_no_config_initializer_helpers(self):
+        helper_references = []
+        for path in sorted(LAYERS_SOURCE.rglob("*.py")):
+            for line_number, line in enumerate(
+                path.read_text(encoding="utf-8").splitlines(), start=1
+            ):
+                if re.search(r"initialize_?from_?config", line, re.IGNORECASE):
+                    helper_references.append(
+                        (path.relative_to(LAYERS_SOURCE).as_posix(), line_number, line)
+                    )
+        self.assertEqual(helper_references, [])
 
+    def test_layer_config_consumers_initialize_in_constructor(self):
+        owners: dict[tuple[str, str], ast.ClassDef] = {}
         for path in sorted(LAYERS_SOURCE.rglob("*.py")):
             relative_path = path.relative_to(LAYERS_SOURCE).as_posix()
             syntax_tree = ast.parse(
-                path.read_text(encoding="utf-8"),
-                filename=str(path),
+                path.read_text(encoding="utf-8"), filename=str(path)
             )
             for class_definition in (
-                node for node in syntax_tree.body if isinstance(node, ast.ClassDef)
+                node for node in ast.walk(syntax_tree) if isinstance(node, ast.ClassDef)
             ):
-                owner = (relative_path, class_definition.name)
-                owners[owner] = class_definition
-                initializer = next(
-                    (
-                        node
-                        for node in class_definition.body
-                        if isinstance(node, ast.FunctionDef) and node.name == "__init__"
-                    ),
-                    None,
-                )
-                if initializer is None:
-                    continue
+                owners[(relative_path, class_definition.name)] = class_definition
 
-                constructor_arguments = (
-                    *initializer.args.posonlyargs,
-                    *initializer.args.args,
-                    *initializer.args.kwonlyargs,
-                )
-                config_parameter_names = {
-                    argument.arg
-                    for argument in constructor_arguments
-                    if argument.annotation is not None
-                    and "Config" in ast.unparse(argument.annotation)
-                }
-                if not config_parameter_names:
-                    continue
-
-                for node in ast.walk(initializer):
-                    if not isinstance(node, ast.Attribute):
-                        continue
-                    reads_config_parameter = (
-                        isinstance(node.value, ast.Name)
-                        and node.value.id in config_parameter_names
-                    )
-                    reads_bound_config_field = (
-                        isinstance(node.value, ast.Attribute)
-                        and isinstance(node.value.value, ast.Name)
-                        and node.value.value.id == "self"
-                        and node.value.attr in {"cfg", "config", "stack_config"}
-                    )
-                    if reads_config_parameter or reads_bound_config_field:
-                        direct_config_reads.append(
-                            (
-                                relative_path,
-                                class_definition.name,
-                                node.lineno,
-                                ast.unparse(node),
-                            )
-                        )
-
-        self.assertEqual(direct_config_reads, [])
-
-        for owner in sorted(_LAYER_CONFIG_INITIALIZER_OWNERS):
+        self.assertTrue(_LAYER_CONFIG_CONSTRUCTOR_OWNERS.issubset(owners))
+        for owner, class_definition in sorted(owners.items()):
             with self.subTest(owner=owner):
-                class_definition = owners[owner]
                 methods = {
                     node.name: node
                     for node in class_definition.body
-                    if isinstance(node, ast.FunctionDef)
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
                 }
-                self.assertIn("__initialize_from_config", methods)
-                config_initializer = methods["__initialize_from_config"]
-                self.assertEqual(
-                    [argument.arg for argument in config_initializer.args.args],
-                    ["self"],
-                )
-                self.assertEqual(config_initializer.args.posonlyargs, [])
-                self.assertEqual(config_initializer.args.kwonlyargs, [])
-                self.assertIsNone(config_initializer.args.vararg)
-                self.assertIsNone(config_initializer.args.kwarg)
-                config_reads_outside_initializer = [
-                    (
-                        method.name,
-                        node.lineno,
-                        ast.unparse(node),
-                    )
+                config_reads_by_method = {
+                    method.name: [
+                        node
+                        for node in ast.walk(method)
+                        if isinstance(node, ast.Attribute)
+                        and isinstance(node.ctx, ast.Load)
+                        and isinstance(node.value, ast.Attribute)
+                        and isinstance(node.value.value, ast.Name)
+                        and node.value.value.id == "self"
+                        and node.value.attr == "cfg"
+                    ]
                     for method in methods.values()
-                    if method.name != "__initialize_from_config"
-                    for node in ast.walk(method)
-                    if isinstance(node, ast.Attribute)
-                    and isinstance(node.value, ast.Attribute)
-                    and isinstance(node.value.value, ast.Name)
-                    and node.value.value.id == "self"
-                    and node.value.attr == "cfg"
+                }
+                config_reads_outside_constructor = [
+                    (method_name, node.lineno, ast.unparse(node))
+                    for method_name, config_reads in config_reads_by_method.items()
+                    if method_name != "__init__"
+                    for node in config_reads
                 ]
-                self.assertEqual(config_reads_outside_initializer, [])
-                initializer = methods["__init__"]
-                self_calls = [
-                    node
-                    for node in ast.walk(initializer)
-                    if isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Attribute)
-                    and isinstance(node.func.value, ast.Name)
-                    and node.func.value.id == "self"
-                ]
-                config_initializer_calls = [
-                    node
-                    for node in self_calls
-                    if node.func.attr == "__initialize_from_config"
-                ]
-                self.assertEqual(len(config_initializer_calls), 1)
-                config_initializer_call = config_initializer_calls[0]
+                self.assertEqual(config_reads_outside_constructor, [])
+                config_reads = config_reads_by_method.get("__init__", [])
+                if owner in _LAYER_CONFIG_CONSTRUCTOR_OWNERS:
+                    self.assertTrue(config_reads)
+                if not config_reads:
+                    continue
 
+                initializer = methods["__init__"]
+                first_config_read_line = min(node.lineno for node in config_reads)
+                last_config_read_line = max(node.end_lineno for node in config_reads)
+                constructor_calls = [
+                    node for node in ast.walk(initializer) if isinstance(node, ast.Call)
+                ]
                 validator_calls = [
                     node
-                    for node in ast.walk(initializer)
-                    if isinstance(node, ast.Call)
-                    and isinstance(node.func, ast.Attribute)
+                    for node in constructor_calls
+                    if isinstance(node.func, ast.Attribute)
                     and isinstance(node.func.value, ast.Attribute)
                     and isinstance(node.func.value.value, ast.Name)
                     and node.func.value.value.id == "self"
@@ -194,9 +142,20 @@ class EmperorSourceLayoutTests(unittest.TestCase):
                     and node.func.attr.startswith("validate")
                 ]
                 for validator_call in validator_calls:
+                    self.assertLess(validator_call.end_lineno, first_config_read_line)
+
+                super_initializer_calls = [
+                    node
+                    for node in constructor_calls
+                    if isinstance(node.func, ast.Attribute)
+                    and node.func.attr == "__init__"
+                    and isinstance(node.func.value, ast.Call)
+                    and isinstance(node.func.value.func, ast.Name)
+                    and node.func.value.func.id == "super"
+                ]
+                for super_initializer_call in super_initializer_calls:
                     self.assertLess(
-                        validator_call.lineno,
-                        config_initializer_call.lineno,
+                        super_initializer_call.end_lineno, first_config_read_line
                     )
 
                 if owner not in _LAYER_DELEGATE_INITIALIZER_OWNERS:
@@ -204,13 +163,15 @@ class EmperorSourceLayoutTests(unittest.TestCase):
                 self.assertIn("__initialize_delegates", methods)
                 delegate_initializer_calls = [
                     node
-                    for node in self_calls
-                    if node.func.attr == "__initialize_delegates"
+                    for node in constructor_calls
+                    if isinstance(node.func, ast.Attribute)
+                    and isinstance(node.func.value, ast.Name)
+                    and node.func.value.id == "self"
+                    and node.func.attr == "__initialize_delegates"
                 ]
                 self.assertEqual(len(delegate_initializer_calls), 1)
                 self.assertLess(
-                    config_initializer_call.lineno,
-                    delegate_initializer_calls[0].lineno,
+                    last_config_read_line, delegate_initializer_calls[0].lineno
                 )
 
     def test_emperor_source_contains_no_symlink_bridge(self):
