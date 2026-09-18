@@ -592,6 +592,14 @@ def _embedding_options_from_kwargs(
         layer_norm_flag=config_module.EMBEDDING_LAYER_NORM_FLAG,
         normalization=config_module.EMBEDDING_NORMALIZATION,
         dropout_probability=config_module.EMBEDDING_DROPOUT_PROBABILITY,
+        contextual_flag=getattr(config_module, "CONTEXTUAL_EMBEDDING_FLAG", False),
+        max_token_bytes=getattr(
+            config_module, "CONTEXTUAL_EMBEDDING_MAX_TOKEN_BYTES", 4
+        ),
+        kernel_dim=getattr(config_module, "CONTEXTUAL_EMBEDDING_KERNEL_DIM", 32),
+        residual_scale_initial_value=getattr(
+            config_module, "CONTEXTUAL_EMBEDDING_RESIDUAL_SCALE_INITIAL_VALUE", 1e-3
+        ),
     )
     updates = _pop_updates(
         kwargs,
@@ -599,6 +607,10 @@ def _embedding_options_from_kwargs(
             "embedding_layer_norm_flag": "layer_norm_flag",
             "embedding_normalization": "normalization",
             "embedding_dropout_probability": "dropout_probability",
+            "contextual_embedding_flag": "contextual_flag",
+            "contextual_embedding_max_token_bytes": "max_token_bytes",
+            "contextual_embedding_kernel_dim": "kernel_dim",
+            "contextual_embedding_residual_scale_initial_value": "residual_scale_initial_value",
         },
     )
     return replace(options, **updates) if updates else options

@@ -39,6 +39,16 @@ class BoundaryConfigFactory:
         )
 
     def _validate(self) -> None:
+        if type(self.embedding_options.contextual_flag) is not bool:
+            raise TypeError("contextual_embedding_flag must be bool.")
+        if (
+            self.embedding_options.contextual_flag
+            and self.lm_head_options.weight_tying_flag
+        ):
+            raise ValueError(
+                "Contextual embedding requires lm_head_weight_tying_flag=False; "
+                "there is no token lookup weight to tie."
+            )
         for name, value in {
             "input_dim": self.input_dim,
             "hidden_dim": self.hidden_dim,
