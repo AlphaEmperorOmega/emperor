@@ -151,6 +151,12 @@ EMBEDDING_LAYER_NORM_FLAG: bool = False
 EMBEDDING_NORMALIZATION: NormalizationOptions = NormalizationOptions.LAYER_NORM
 EMBEDDING_DROPOUT_PROBABILITY: float = STACK_DROPOUT_PROBABILITY
 
+# Contextual embedding requires configured adaptive experts and an untied LM head.
+CONTEXTUAL_EMBEDDING_FLAG: bool = False
+CONTEXTUAL_EMBEDDING_MAX_TOKEN_BYTES: int = 4
+CONTEXTUAL_EMBEDDING_KERNEL_DIM: int = 32
+CONTEXTUAL_EMBEDDING_RESIDUAL_SCALE_INITIAL_VALUE: float = 1e-3
+
 #########################################################################
 # LANGUAGE-MODELING HEAD
 LM_HEAD_BIAS_FLAG: bool = False
