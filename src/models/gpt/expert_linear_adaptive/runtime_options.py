@@ -570,6 +570,10 @@ class GptEmbeddingOptions:
         default=NormalizationOptions.LAYER_NORM, kw_only=True
     )
     dropout_probability: float
+    contextual_flag: bool = field(default=False, kw_only=True)
+    max_token_bytes: int = field(default=4, kw_only=True)
+    kernel_dim: int = field(default=32, kw_only=True)
+    residual_scale_initial_value: float = field(default=1e-3, kw_only=True)
 
 
 @dataclass(frozen=True, slots=True)

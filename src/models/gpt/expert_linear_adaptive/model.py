@@ -1,13 +1,16 @@
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 import torch
 import torch.nn as nn
 from torch import Tensor
 
+from emperor.embedding.contextual import ByteContextualEmbeddingConfig
 from emperor.experiments.language_model import LanguageModelExperiment
 from emperor.layers import LayerConfig, LayerNormPositionOptions
 from emperor.transformer import TransformerDecoderLayerState
 from models.gpt.expert_linear_adaptive._boundary_config_factory import GptBoundaryConfig
+from models.gpt.expert_linear_adaptive._token_text import TokenTextAdapter
 from models.gpt.expert_linear_adaptive.experiment_config import ExperimentConfig
 
 if TYPE_CHECKING:
@@ -30,10 +33,16 @@ class Model(LanguageModelExperiment):
     ) -> None:
         experiment_config = self.__validate_experiment_config(config)
         boundary_config = self.__validate_boundary_config(experiment_config)
+        self.__validate_contextual_embedding(config, experiment_config, boundary_config)
         self.__validate_tied_vocabulary_sizes(config, boundary_config)
         super().__init__(config)
         self.experiment_config: ExperimentConfig = experiment_config
         self.boundary_config: GptBoundaryConfig = boundary_config
+        self.token_text_adapter = (
+            TokenTextAdapter(config.input_dim)
+            if boundary_config.embedding_options.contextual_flag
+            else None
+        )
         self.token_embedding = self.__build_token_embedding()
         self.positional_embedding = self.__build_positional_embedding()
         self.embedding_layer_norm = self.__build_embedding_layer_norm()
@@ -76,10 +85,51 @@ class Model(LanguageModelExperiment):
                 "GPT LM head weight tying requires input_dim to equal output_dim."
             )
 
-    def __build_token_embedding(self) -> nn.Embedding:
+    @staticmethod
+    def __validate_contextual_embedding(
+        config: "ModelConfig",
+        experiment_config: ExperimentConfig,
+        boundary_config: GptBoundaryConfig,
+    ) -> None:
+        contextual = experiment_config.contextual_embedding_config
+        if boundary_config.embedding_options.contextual_flag:
+            if not isinstance(contextual, ByteContextualEmbeddingConfig):
+                raise TypeError(
+                    "Contextual embedding requires ByteContextualEmbeddingConfig."
+                )
+            if contextual.hidden_dim != config.hidden_dim:
+                raise ValueError(
+                    "Contextual embedding hidden_dim must equal GPT hidden_dim."
+                )
+            if boundary_config.lm_head_options.weight_tying_flag:
+                raise ValueError(
+                    "Contextual embedding requires lm_head_weight_tying_flag=False."
+                )
+        elif contextual is not None:
+            raise ValueError(
+                "contextual_embedding_config requires contextual_embedding_flag=True."
+            )
+
+    def set_token_vocabulary(self, token_texts: Sequence[str]) -> None:
+        """Bind exact vocabulary spellings in token-ID order for standalone inference."""
+        if self.token_text_adapter is None:
+            raise ValueError(
+                "Token text vocabulary is only used with contextual embedding."
+            )
+        self.token_text_adapter.bind(token_texts)
+
+    def setup(self, stage: str) -> None:
+        if self.token_text_adapter is not None:
+            self.token_text_adapter.bind_datamodule(self.trainer.datamodule)
+
+    def __build_token_embedding(self) -> nn.Module:
+        if self.boundary_config.embedding_options.contextual_flag:
+            return self.experiment_config.contextual_embedding_config.build()
         return nn.Embedding(self.cfg.input_dim, self.cfg.hidden_dim)
 
     def __build_positional_embedding(self) -> nn.Module:
+        if self.boundary_config.embedding_options.contextual_flag:
+            return nn.Identity()
         return self.experiment_config.positional_embedding_config.build()
 
     def __build_embedding_layer_norm(self) -> nn.Module:
@@ -124,17 +174,31 @@ class Model(LanguageModelExperiment):
         attention_mask: Tensor | None = None,
     ) -> tuple[Tensor, Tensor]:
         input_ids, attention_mask = self.__prepare_inputs(input_ids, attention_mask)
-        hidden = self.__build_input_embeddings(input_ids)
+        hidden, embedding_loss = self.__build_input_embeddings(
+            input_ids, attention_mask
+        )
         sequence_output, auxiliary_loss = self.__run_decoder(hidden, attention_mask)
         logits = self.lm_head(sequence_output)
-        return logits, auxiliary_loss.reshape(())
+        return logits, (auxiliary_loss + embedding_loss).reshape(())
 
-    def __build_input_embeddings(self, input_ids: Tensor) -> Tensor:
-        token_embedding = self.token_embedding(input_ids)
-        positional_embedding = self.positional_embedding(input_ids)
-        hidden = token_embedding + positional_embedding
+    def __build_input_embeddings(
+        self, input_ids: Tensor, attention_mask: Tensor
+    ) -> tuple[Tensor, Tensor]:
+        if self.token_text_adapter is not None:
+            state = self.token_embedding(
+                self.token_text_adapter(input_ids), attention_mask=attention_mask != 0
+            )
+            hidden, loss = state.hidden, state.loss
+        else:
+            hidden = self.token_embedding(input_ids) + self.positional_embedding(
+                input_ids
+            )
+            loss = hidden.new_zeros(())
         hidden = self.embedding_layer_norm(hidden)
-        return self.embedding_dropout(hidden)
+        hidden = self.embedding_dropout(hidden)
+        if self.token_text_adapter is not None:
+            hidden = hidden * (attention_mask != 0).unsqueeze(-1)
+        return hidden, loss
 
     def __run_decoder(
         self,

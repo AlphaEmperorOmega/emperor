@@ -1,3 +1,6 @@
+import copy
+from typing import TYPE_CHECKING
+
 import torch
 
 import models.gpt.expert_linear_adaptive.config as config
@@ -8,7 +11,17 @@ from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
     GroupingConfig,
 )
-from emperor.experts import MixtureOfExpertsModelConfig
+from emperor.embedding.contextual import (
+    ByteContextualEmbeddingConfig,
+    CausalPrefixKernelConfig,
+)
+from emperor.embedding.relative import DynamicPositionalBiasConfig
+from emperor.experts import (
+    ExpertWeightingPositionOptions,
+    MixtureOfExpertsConfig,
+    MixtureOfExpertsModelConfig,
+    RoutingInitializationMode,
+)
 from models.gpt.expert_linear_adaptive._base_config_builder import (
     GptBackendConfigBuilder,
 )
@@ -23,8 +36,62 @@ from models.gpt.expert_linear_adaptive.runtime_options import (
     RuntimeOptions,
 )
 
+if TYPE_CHECKING:
+    from emperor.config import ModelConfig
+
 
 class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilder):
+    def build(self) -> "ModelConfig":
+        model_config = super().build()
+        if self.embedding_options.contextual_flag:
+            model_config.experiment_config.contextual_embedding_config = (
+                self._build_contextual_embedding_config()
+            )
+        return model_config
+
+    def _build_contextual_embedding_config(self) -> ByteContextualEmbeddingConfig:
+        options = self.embedding_options
+        kernel_dim = options.kernel_dim
+        return ByteContextualEmbeddingConfig(
+            max_token_bytes=options.max_token_bytes,
+            hidden_dim=self.hidden_dim,
+            byte_moe_config=self._build_embedding_moe_config(
+                options.max_token_bytes * 9
+            ),
+            positional_embedding_config=self._build_positional_embedding_config(),
+            prefix_kernel_config=CausalPrefixKernelConfig(
+                hidden_dim=self.hidden_dim,
+                kernel_dim=kernel_dim,
+                relative_position_config=DynamicPositionalBiasConfig(
+                    num_heads=1,
+                    embedding_dim=kernel_dim,
+                    max_positions=max(1, self.sequence_length - 1),
+                ),
+            ),
+            context_moe_config=self._build_embedding_moe_config(self.hidden_dim * 2),
+            residual_scale_initial_value=options.residual_scale_initial_value,
+        )
+
+    def _build_embedding_moe_config(self, input_dim: int) -> MixtureOfExpertsConfig:
+        # Copy the transformer's expert and router architecture, not their weights.
+        model_config = self._build_expert_model_config(
+            use_feed_forward_stack_options=False
+        )
+        mixture = copy.deepcopy(
+            model_config.stack_config.layer_config.layer_model_config
+        )
+        mixture.input_dim = input_dim
+        mixture.output_dim = self.hidden_dim
+        # These are the contextual component's causal/batch-isolation constraints.
+        mixture.capacity_factor = 0.0
+        mixture.routing_initialization_mode = RoutingInitializationMode.LAYER
+        mixture.compute_expert_mixture_flag = True
+        mixture.weighted_parameters_flag = True
+        mixture.weighting_position_option = ExpertWeightingPositionOptions.AFTER_EXPERTS
+        mixture.sampler_config.normalize_probabilities_flag = True
+        mixture.sampler_config.router_config.input_dim = input_dim
+        return mixture
+
     def __init__(self, runtime: RuntimeOptions) -> None:
         options = runtime._construction_options(config)
         defaults = DEFAULT_RUNTIME._construction_options(config)
