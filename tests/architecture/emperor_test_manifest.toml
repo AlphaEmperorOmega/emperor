@@ -96,13 +96,14 @@ focused_tests = [
   "tests/unit/test_byte_contextual_embedding.py",
   "tests/unit/test_embedding_behavior.py",
   "tests/unit/test_embedding_regressions.py",
+  "tests/unit/test_hierarchical_byte_embedding.py",
   "tests/unit/test_relative_positional_embedding_validator.py",
   "tests/unit/test_transformer_absolute_positional_embedding.py",
   "tests/unit/test_transformer_relative_positional_embedding.py",
 ]
-integration_tests = []
+integration_tests = ["tests/integration/test_hierarchical_embedding_composition.py"]
 mutation_scope = ["src/emperor/embedding/*"]
-environment = ["cpu", "float32", "float64", "meta-device"]
+environment = ["cpu", "float32", "float64", "bfloat16-autocast", "meta-device", "cuda-conditional"]
 coverage_evidence = "tests/architecture/emperor_behavioral/evidence/embedding-coverage.toml"
 mutation_evidence = "tests/architecture/emperor_behavioral/evidence/embedding-mutation.toml"
 review_evidence = ""
@@ -123,6 +124,10 @@ modules = [
   "src/emperor/embedding/contextual/_kernel.py",
   "src/emperor/embedding/contextual/_state.py",
   "src/emperor/embedding/contextual/_validation.py",
+  "src/emperor/embedding/hierarchical/__init__.py",
+  "src/emperor/embedding/hierarchical/_component.py",
+  "src/emperor/embedding/hierarchical/_config.py",
+  "src/emperor/embedding/hierarchical/_validation.py",
   "src/emperor/embedding/relative/__init__.py",
   "src/emperor/embedding/relative/_variants/__init__.py",
   "src/emperor/embedding/relative/_variants/bias.py",

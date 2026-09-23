@@ -1,9 +1,9 @@
 family = "embedding"
 result = "pass"
 command = "python tools/emperor_test_family.py coverage embedding"
-environment = "CPU, Python 3.13, float32, float64, partial masks, adaptive experts, meta-device propagation"
-focused_tests = 124
+environment = "CPU, Python 3.13, PyTorch 2.12.0+cpu, float32, float64, dense bfloat16 autocast, partial masks, adaptive experts, mixture attention, fixed recurrence, meta-device propagation; CUDA test skipped because unavailable"
+focused_tests = 143
 statements = 100
 branches = 100
-statement_count = 805
-branch_count = 250
+statement_count = 1040
+branch_count = 372

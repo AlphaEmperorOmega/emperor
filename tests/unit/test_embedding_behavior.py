@@ -980,14 +980,16 @@ class EmbeddingInterfaceBehaviorTests(unittest.TestCase):
         import emperor.embedding as embedding
         import emperor.embedding.absolute as absolute
         import emperor.embedding.contextual as contextual
+        import emperor.embedding.hierarchical as hierarchical
         import emperor.embedding.relative as relative
 
         self.assertEqual(
             embedding.__all__,
-            ("absolute", "contextual", "relative"),
+            ("absolute", "contextual", "hierarchical", "relative"),
         )
         self.assertIs(embedding.absolute, absolute)
         self.assertIs(embedding.contextual, contextual)
+        self.assertIs(embedding.hierarchical, hierarchical)
         self.assertIs(embedding.relative, relative)
         self.assertEqual(
             absolute.__all__,
@@ -1014,7 +1016,8 @@ class EmbeddingInterfaceBehaviorTests(unittest.TestCase):
                 "DynamicPositionalBiasConfig",
             ),
         )
-        for module in (embedding, absolute, contextual, relative):
+        self.assertEqual(hierarchical.__all__, ("HierarchicalByteEmbeddingConfig",))
+        for module in (embedding, absolute, contextual, hierarchical, relative):
             with self.subTest(module=module.__name__):
                 self.assertFalse(hasattr(module, "__getattr__"))
                 self.assertFalse(hasattr(module, "_LAZY_EXPORTS"))
@@ -1034,10 +1037,12 @@ root_eager_modules = sorted(
 root_has_children = {
     "absolute": hasattr(embedding, "absolute"),
     "contextual": hasattr(embedding, "contextual"),
+    "hierarchical": hasattr(embedding, "hierarchical"),
     "relative": hasattr(embedding, "relative"),
 }
 import emperor.embedding.absolute as absolute
 import emperor.embedding.contextual as contextual
+import emperor.embedding.hierarchical as hierarchical
 import emperor.embedding.relative as relative
 
 eager_modules = sorted(
@@ -1049,6 +1054,7 @@ print(json.dumps({
     "root_has_children": root_has_children,
     "absolute_all": absolute.__all__,
     "contextual_all": contextual.__all__,
+    "hierarchical_all": hierarchical.__all__,
     "relative_all": relative.__all__,
     "eager_modules": eager_modules,
     "heavy_modules": {
@@ -1062,6 +1068,8 @@ print(json.dumps({
             "emperor.embedding.contextual._encoding",
             "emperor.embedding.contextual._kernel",
             "emperor.embedding.contextual._validation",
+            "emperor.embedding.hierarchical._component",
+            "emperor.embedding.hierarchical._validation",
             "emperor.embedding.relative._variants.bias",
             "emperor.embedding.relative._validation",
         )
@@ -1088,6 +1096,7 @@ print(json.dumps({
         "ByteContextualEmbeddingValidator": hasattr(
             contextual, "ByteContextualEmbeddingValidator"
         ),
+        "HierarchicalByteEmbedding": hasattr(hierarchical, "HierarchicalByteEmbedding"),
         "DynamicPositionalBias": hasattr(
             relative, "DynamicPositionalBias"
         ),
@@ -1121,19 +1130,22 @@ print(json.dumps({
         self.assertEqual(
             json.loads(completed.stdout),
             {
-                "root_all": ["absolute", "contextual", "relative"],
+                "root_all": ["absolute", "contextual", "hierarchical", "relative"],
                 "root_eager_modules": [
                     "emperor.embedding.absolute",
                     "emperor.embedding.absolute._config",
                     "emperor.embedding.contextual",
                     "emperor.embedding.contextual._config",
                     "emperor.embedding.contextual._state",
+                    "emperor.embedding.hierarchical",
+                    "emperor.embedding.hierarchical._config",
                     "emperor.embedding.relative",
                     "emperor.embedding.relative._config",
                 ],
                 "root_has_children": {
                     "absolute": True,
                     "contextual": True,
+                    "hierarchical": True,
                     "relative": True,
                 },
                 "absolute_all": [
@@ -1148,6 +1160,7 @@ print(json.dumps({
                     "CausalPrefixKernelConfig",
                     "ByteContextualEmbeddingState",
                 ],
+                "hierarchical_all": ["HierarchicalByteEmbeddingConfig"],
                 "relative_all": [
                     "RelativePositionalEmbeddingConfig",
                     "DynamicPositionalBiasConfig",
@@ -1158,6 +1171,8 @@ print(json.dumps({
                     "emperor.embedding.contextual",
                     "emperor.embedding.contextual._config",
                     "emperor.embedding.contextual._state",
+                    "emperor.embedding.hierarchical",
+                    "emperor.embedding.hierarchical._config",
                     "emperor.embedding.relative",
                     "emperor.embedding.relative._config",
                 ],
@@ -1170,6 +1185,8 @@ print(json.dumps({
                     "emperor.embedding.contextual._encoding": False,
                     "emperor.embedding.contextual._kernel": False,
                     "emperor.embedding.contextual._validation": False,
+                    "emperor.embedding.hierarchical._component": False,
+                    "emperor.embedding.hierarchical._validation": False,
                     "emperor.embedding.relative._variants.bias": False,
                     "emperor.embedding.relative._validation": False,
                 },
@@ -1181,6 +1198,7 @@ print(json.dumps({
                     "CausalPrefixKernel": False,
                     "Utf8BitEncoder": False,
                     "ByteContextualEmbeddingValidator": False,
+                    "HierarchicalByteEmbedding": False,
                     "DynamicPositionalBias": False,
                     "RelativePositionalEmbeddingValidator": False,
                 },
