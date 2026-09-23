@@ -1,26 +1,50 @@
 import copy
-from typing import TYPE_CHECKING
+from collections.abc import Iterator
+from dataclasses import fields
+from typing import TYPE_CHECKING, TypeVar, cast
 
 import torch
 
 import models.gpt.expert_linear_adaptive.config as config
 from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
+    SelfAttentionConfig,
+    SelfAttentionProjectionStrategy,
 )
 from emperor.augmentations.adaptive_parameters import (
     AdaptiveLinearLayerConfig,
+    AdaptiveParameterAugmentationConfig,
+    DynamicBiasConfig,
+    DynamicWeightConfig,
     GroupingConfig,
+    WeightDecayScheduleOptions,
 )
+from emperor.config import ConfigBase
+from emperor.embedding.absolute import TextLearnedPositionalEmbeddingConfig
 from emperor.embedding.contextual import (
     ByteContextualEmbeddingConfig,
     CausalPrefixKernelConfig,
 )
+from emperor.embedding.hierarchical import HierarchicalByteEmbeddingConfig
 from emperor.embedding.relative import DynamicPositionalBiasConfig
 from emperor.experts import (
     ExpertWeightingPositionOptions,
     MixtureOfExpertsConfig,
     MixtureOfExpertsModelConfig,
     RoutingInitializationMode,
+)
+from emperor.layers import (
+    ActivationOptions,
+    AdditiveResidualConfig,
+    LastLayerBiasOptions,
+    LayerNormPositionOptions,
+    LayerStackConfig,
+)
+from emperor.transformer import (
+    FeedForwardConfig,
+    TransformerConfig,
+    TransformerEncoderBlockLayerConfig,
+    TransformerEncoderLayerConfig,
 )
 from models.gpt.expert_linear_adaptive._base_config_builder import (
     GptBackendConfigBuilder,
@@ -39,6 +63,30 @@ from models.gpt.expert_linear_adaptive.runtime_options import (
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
 
+_StackConfig = TypeVar("_StackConfig", bound=ConfigBase)
+
+
+def _nested_configs(config_node: object) -> Iterator[ConfigBase]:
+    if isinstance(config_node, ConfigBase):
+        yield config_node
+        for config_field in fields(config_node):
+            yield from _nested_configs(getattr(config_node, config_field.name))
+
+
+def _isolate_token_rows(stack_config: _StackConfig) -> _StackConfig:
+    """Copy a stack so each byte-encoded token stays independent of the batch."""
+    isolated = copy.deepcopy(stack_config)
+    for child in _nested_configs(isolated):
+        # Grouping mixes rows and decay schedules advance once per length group.
+        if isinstance(child, AdaptiveParameterAugmentationConfig):
+            child.grouping_config = None
+        if (
+            isinstance(child, (DynamicWeightConfig, DynamicBiasConfig))
+            and child.decay_schedule is not None
+        ):
+            child.decay_schedule = WeightDecayScheduleOptions.DISABLED
+    return isolated
+
 
 class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilder):
     def build(self) -> "ModelConfig":
@@ -47,7 +95,101 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
             model_config.experiment_config.contextual_embedding_config = (
                 self._build_contextual_embedding_config()
             )
+        if self.embedding_options.hierarchical_flag:
+            model_config.experiment_config.hierarchical_embedding_config = (
+                self._build_hierarchical_embedding_config()
+            )
         return model_config
+
+    def _build_hierarchical_embedding_config(self) -> HierarchicalByteEmbeddingConfig:
+        options = self.embedding_options
+        # Each token's bytes follow the leading [W] pooling symbol.
+        byte_sequence_length = options.hierarchical_max_token_bytes + 1
+        return HierarchicalByteEmbeddingConfig(
+            byte_embedding_dim=self.hidden_dim,
+            output_dim=self.hidden_dim,
+            max_token_bytes=options.hierarchical_max_token_bytes,
+            byte_position_config=TextLearnedPositionalEmbeddingConfig(
+                num_embeddings=byte_sequence_length,
+                embedding_dim=self.hidden_dim,
+            ),
+            encoder_config=TransformerConfig(
+                encoder_stack_config=LayerStackConfig(
+                    input_dim=self.hidden_dim,
+                    hidden_dim=self.hidden_dim,
+                    output_dim=self.hidden_dim,
+                    num_layers=options.hierarchical_encoder_num_layers,
+                    last_layer_bias_option=LastLayerBiasOptions.DEFAULT,
+                    apply_output_postprocessing_flag=True,
+                    # The wrapped encoder layer owns its norm, residual, and dropout.
+                    layer_config=TransformerEncoderBlockLayerConfig(
+                        activation=ActivationOptions.DISABLED,
+                        layer_norm_position=LayerNormPositionOptions.DISABLED,
+                        dropout_probability=0.0,
+                        layer_model_config=self._build_hierarchical_encoder_layer_config(
+                            byte_sequence_length
+                        ),
+                    ),
+                )
+            ),
+            projection_config=_isolate_token_rows(
+                self._build_linear_stack_config(
+                    input_dim=self.hidden_dim,
+                    output_dim=self.hidden_dim,
+                    num_layers=1,
+                    bias_flag=self.feed_forward_options.bias_flag,
+                    layer_norm_position=LayerNormPositionOptions.DISABLED,
+                    dropout_probability=0.0,
+                    apply_output_postprocessing_flag=False,
+                )
+            ),
+        )
+
+    def _build_hierarchical_encoder_layer_config(
+        self, byte_sequence_length: int
+    ) -> TransformerEncoderLayerConfig:
+        decoder_options = self.decoder_options
+        attention_options = self.attention_options
+        # The transformer's adaptive projection and feed-forward stacks, without
+        # attention heads or feed-forward experts.
+        projection_model_config = _isolate_token_rows(
+            self._build_attention_projection_base_stack_config()
+        )
+        feed_forward_stack_config = _isolate_token_rows(
+            cast(LayerStackConfig, super()._build_feed_forward_base_stack_config())
+        )
+        return TransformerEncoderLayerConfig(
+            embedding_dim=self.hidden_dim,
+            layer_norm_position=decoder_options.layer_norm_position,
+            normalization=decoder_options.normalization,
+            dropout_probability=decoder_options.dropout_probability,
+            residual_config=AdditiveResidualConfig(),
+            attention_config=SelfAttentionConfig(
+                # Bounds the largest equal-length token group in one batch.
+                batch_size=self.batch_size * self.sequence_length,
+                num_heads=attention_options.num_heads,
+                embedding_dim=self.hidden_dim,
+                query_key_projection_dim=self.hidden_dim,
+                value_projection_dim=self.hidden_dim,
+                target_sequence_length=byte_sequence_length,
+                source_sequence_length=byte_sequence_length,
+                target_dtype=torch.float32,
+                dropout_probability=decoder_options.dropout_probability,
+                zero_attention_flag=False,
+                causal_attention_mask_flag=False,
+                add_key_value_bias_flag=attention_options.add_key_value_bias_flag,
+                average_attention_weights_flag=False,
+                return_attention_weights_flag=False,
+                batch_first_flag=True,
+                projection_model_config=projection_model_config,
+                projection_strategy=SelfAttentionProjectionStrategy.SEPARATE,
+            ),
+            feed_forward_config=FeedForwardConfig(
+                input_dim=self.hidden_dim,
+                output_dim=self.hidden_dim,
+                stack_config=feed_forward_stack_config,
+            ),
+        )
 
     def _build_contextual_embedding_config(self) -> ByteContextualEmbeddingConfig:
         options = self.embedding_options

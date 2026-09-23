@@ -600,6 +600,13 @@ def _embedding_options_from_kwargs(
         residual_scale_initial_value=getattr(
             config_module, "CONTEXTUAL_EMBEDDING_RESIDUAL_SCALE_INITIAL_VALUE", 1e-3
         ),
+        hierarchical_flag=getattr(config_module, "HIERARCHICAL_EMBEDDING_FLAG", False),
+        hierarchical_max_token_bytes=getattr(
+            config_module, "HIERARCHICAL_EMBEDDING_MAX_TOKEN_BYTES", 32
+        ),
+        hierarchical_encoder_num_layers=getattr(
+            config_module, "HIERARCHICAL_EMBEDDING_ENCODER_NUM_LAYERS", 1
+        ),
     )
     updates = _pop_updates(
         kwargs,
@@ -611,6 +618,9 @@ def _embedding_options_from_kwargs(
             "contextual_embedding_max_token_bytes": "max_token_bytes",
             "contextual_embedding_kernel_dim": "kernel_dim",
             "contextual_embedding_residual_scale_initial_value": "residual_scale_initial_value",
+            "hierarchical_embedding_flag": "hierarchical_flag",
+            "hierarchical_embedding_max_token_bytes": "hierarchical_max_token_bytes",
+            "hierarchical_embedding_encoder_num_layers": "hierarchical_encoder_num_layers",
         },
     )
     return replace(options, **updates) if updates else options

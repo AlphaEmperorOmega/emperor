@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from emperor.config import ConfigBase, optional_field
 from emperor.embedding.absolute import AbsolutePositionalEmbeddingConfig
 from emperor.embedding.contextual import ByteContextualEmbeddingConfig
+from emperor.embedding.hierarchical import HierarchicalByteEmbeddingConfig
 from emperor.layers import LayerStackConfig, NormalizationOptions, RecurrentLayerConfig
 from models.gpt.expert_linear_adaptive._boundary_config_factory import (
     GptBoundaryConfig,
@@ -12,6 +13,9 @@ from models.gpt.expert_linear_adaptive._boundary_config_factory import (
 @dataclass
 class ExperimentConfig(ConfigBase):
     contextual_embedding_config: ByteContextualEmbeddingConfig | None = field(
+        default=None, kw_only=True
+    )
+    hierarchical_embedding_config: HierarchicalByteEmbeddingConfig | None = field(
         default=None, kw_only=True
     )
     decoder_output_normalization: NormalizationOptions = field(

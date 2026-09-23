@@ -157,6 +157,12 @@ CONTEXTUAL_EMBEDDING_MAX_TOKEN_BYTES: int = 4
 CONTEXTUAL_EMBEDDING_KERNEL_DIM: int = 32
 CONTEXTUAL_EMBEDDING_RESIDUAL_SCALE_INITIAL_VALUE: float = 1e-3
 
+# Hierarchical embedding encodes each token's bytes with an adaptive Transformer
+# encoder instead of a lookup table; it requires an untied LM head.
+HIERARCHICAL_EMBEDDING_FLAG: bool = False
+HIERARCHICAL_EMBEDDING_MAX_TOKEN_BYTES: int = 32
+HIERARCHICAL_EMBEDDING_ENCODER_NUM_LAYERS: int = 1
+
 #########################################################################
 # LANGUAGE-MODELING HEAD
 LM_HEAD_BIAS_FLAG: bool = False
