@@ -1,6 +1,7 @@
 from typing import TYPE_CHECKING
 
 import models.gpt.expert_linear.config as config
+from emperor.linears import LinearLayerConfig
 from models.gpt.expert_linear._boundary_config_factory import (
     BoundaryConfigDependencies,
     BoundaryConfigFactory,
@@ -13,6 +14,7 @@ from models.gpt.expert_linear._expert_config_factory import (
     ExpertConfigDependencies,
     ExpertConfigFactory,
 )
+from models.gpt.expert_linear._hierarchical_config import build_hierarchical_config
 from models.gpt.expert_linear._linear_layer_config_factory import (
     LinearLayerConfigDependencies,
     LinearLayerConfigFactory,
@@ -88,7 +90,7 @@ class _GptExpertLinearConfigBuilderImplementation:
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
-        return ModelConfig(
+        model_config = ModelConfig(
             learning_rate=self.learning_rate,
             batch_size=self.batch_size,
             input_dim=self.input_dim,
@@ -106,6 +108,16 @@ class _GptExpertLinearConfigBuilderImplementation:
                 ),
             ),
         )
+
+        if self.embedding_options.hierarchical_language_model_flag:
+            model_config.experiment_config.hierarchical_language_model_config = (
+                build_hierarchical_config(
+                    model_config,
+                    self.embedding_options,
+                    LinearLayerConfig(bias_flag=True),
+                )
+            )
+        return model_config
 
     def __positional_embedding_config(self):
         factory = PositionalEmbeddingConfigFactory(

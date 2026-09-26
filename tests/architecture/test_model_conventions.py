@@ -10,6 +10,7 @@ from emperor.datasets.text.language_modeling import (
     PennTreebank,
     WikiText2,
     WikiText103,
+    WikiText103Hierarchical,
 )
 from emperor.experiments import ExperimentTask
 from model_runtime.packages import PresetDefinition
@@ -90,7 +91,11 @@ class TestModelConventions(unittest.TestCase):
 
             with self.subTest(backend=backend):
                 self.assertEqual(
-                    [preset.name for preset in gpt_presets_module.ExperimentPreset],
+                    [
+                        preset.name
+                        for preset in gpt_presets_module.ExperimentPreset
+                        if preset.name != "HIERARCHICAL"
+                    ],
                     [
                         preset.name
                         for preset in bert_presets_module.ExperimentPreset
@@ -110,6 +115,7 @@ class TestModelConventions(unittest.TestCase):
                         for preset, definition in vars(gpt_presets_module)[
                             "_PRESET_DEFINITIONS"
                         ].items()
+                        if preset.name != "HIERARCHICAL"
                     },
                 )
                 self.assertEqual(
@@ -128,6 +134,7 @@ class TestModelConventions(unittest.TestCase):
                             PennTreebank,
                             WikiText103,
                             OpenWebText,
+                            *([WikiText103Hierarchical] if backend in ('expert_linear',) else []),
                         ]
                     },
                 )
@@ -202,7 +209,12 @@ class TestModelConventions(unittest.TestCase):
         for entry in MODEL_CATALOG.values():
             for preset in entry.preset_type:
                 with self.subTest(package=entry.catalog_key, preset=preset.name):
-                    config = entry.build_configuration(preset)
+                    dataset = (
+                        WikiText103Hierarchical
+                        if preset.name == "HIERARCHICAL"
+                        else None
+                    )
+                    config = entry.build_configuration(preset, dataset)
                     self.assertIsInstance(config, ModelConfig)
 
     def test_catalog_packages_have_one_external_test_module(self):

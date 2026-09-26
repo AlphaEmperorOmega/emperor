@@ -408,7 +408,13 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
             source = package_init.read_text(encoding="utf-8")
             if "_checkpoint_config_interpreter=" in source:
                 suppliers.append(package_init.relative_to(PROJECT_ROOT).as_posix())
-        self.assertEqual(suppliers, ["src/models/linears/linear/__init__.py"])
+        self.assertEqual(
+            suppliers,
+            [
+                "src/models/gpt/expert_linear/__init__.py",
+                "src/models/linears/linear/__init__.py",
+            ],
+        )
 
     def test_runs_own_a_typed_run_to_experiment_handoff(self) -> None:
         handoff_path = RUNS_ROOT / "_handoff.py"

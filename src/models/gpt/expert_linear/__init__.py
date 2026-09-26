@@ -69,6 +69,16 @@ class _ModelPackageAdapter:
         )
 
 
-MODEL_PACKAGE = ModelPackage(_IDENTITY, _ModelPackageAdapter())
+def _checkpoint_config_interpreter(tensor_shapes):
+    from .checkpoint_metadata import checkpoint_config_overrides
+
+    return checkpoint_config_overrides(tensor_shapes)
+
+
+MODEL_PACKAGE = ModelPackage(
+    _IDENTITY,
+    _ModelPackageAdapter(),
+    _checkpoint_config_interpreter=_checkpoint_config_interpreter,
+)
 
 __all__ = ["MODEL_PACKAGE"]

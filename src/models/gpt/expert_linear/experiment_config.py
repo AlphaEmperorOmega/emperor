@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from emperor.config import ConfigBase, optional_field
+from emperor.decoding.hierarchical import HierarchicalLanguageModelConfig
 from emperor.embedding.absolute import AbsolutePositionalEmbeddingConfig
 from emperor.layers import LayerStackConfig, NormalizationOptions, RecurrentLayerConfig
 from models.gpt.expert_linear._boundary_config_factory import GptBoundaryConfig
@@ -8,6 +9,9 @@ from models.gpt.expert_linear._boundary_config_factory import GptBoundaryConfig
 
 @dataclass
 class ExperimentConfig(ConfigBase):
+    hierarchical_language_model_config: HierarchicalLanguageModelConfig | None = (
+        optional_field("Complete vocabulary-free language model configuration.")
+    )
     decoder_output_normalization: NormalizationOptions = field(
         default=NormalizationOptions.LAYER_NORM, kw_only=True
     )

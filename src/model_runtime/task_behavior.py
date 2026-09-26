@@ -44,11 +44,33 @@ class ExperimentTaskBehavior:
     def synthetic_inputs(self, dataset: type, configuration: Any) -> tuple[Any, ...]:
         return self.synthetic_input_builder(dataset, configuration)
 
+    def validate_dataset(self, dataset: type, configuration: Any) -> None:
+        if self.task != ExperimentTask.CAUSAL_LANGUAGE_MODELING:
+            return
+        experiment = getattr(configuration, "experiment_config", None)
+        hierarchical = getattr(experiment, "hierarchical_language_model_config", None)
+        raw_text = bool(getattr(dataset, "hierarchical_language_model_flag", False))
+        if (hierarchical is not None) != raw_text:
+            raise ValueError(
+                "Hierarchical language modeling requires a compatible raw-text dataset such as WikiText103Hierarchical"
+            )
+
     def dataset_constructor_kwargs(self, configuration: Any) -> dict[str, Any]:
-        return {
+        arguments = {
             argument.name: argument.value_from(configuration)
             for argument in self.dataset_arguments
         }
+        hierarchical = getattr(
+            getattr(configuration, "experiment_config", None),
+            "hierarchical_language_model_config",
+            None,
+        )
+        if (
+            self.task == ExperimentTask.CAUSAL_LANGUAGE_MODELING
+            and hierarchical is not None
+        ):
+            arguments["max_token_bytes"] = hierarchical.embedding_config.max_token_bytes
+        return arguments
 
     def ranking_score(self, result: Mapping[str, Any]) -> tuple[float, float]:
         metrics = result.get("metrics", {})
@@ -109,6 +131,25 @@ def _token_inputs(_dataset: type, configuration: Any) -> tuple[Any, ...]:
         getattr(configuration, "sequence_length", None),
         "configuration.sequence_length",
     )
+    hierarchical = getattr(
+        getattr(configuration, "experiment_config", None),
+        "hierarchical_language_model_config",
+        None,
+    )
+    if hierarchical is not None:
+        from emperor.decoding.hierarchical import HierarchicalLanguageModelBatch
+
+        return (
+            HierarchicalLanguageModelBatch.collate(
+                [
+                    {
+                        "context_texts": [""] + ["a"] * (sequence_length - 1),
+                        "target_texts": ["a"] * sequence_length,
+                        "bos_mask": [True] + [False] * (sequence_length - 1),
+                    }
+                ]
+            ),
+        )
     vocabulary_size = _positive_integer(
         getattr(configuration, "input_dim", None),
         "configuration.input_dim",
