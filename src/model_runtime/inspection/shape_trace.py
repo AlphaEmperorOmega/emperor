@@ -513,7 +513,7 @@ def _trace_module_calls(
 
 def _sample_inputs(
     materialized: MaterializedConfiguration,
-) -> tuple[str, str, tuple[Tensor, ...]]:
+) -> tuple[str, str, tuple[Any, ...]]:
     package = materialized.package
     task = materialized.experiment_task
     dataset = materialized.dataset
@@ -546,7 +546,7 @@ class _PreparedShapeTrace:
     capture: InspectionCapture
     dataset_name: str
     task_name: str
-    inputs: tuple[Tensor, ...]
+    inputs: tuple[Any, ...]
 
 
 @dataclass(frozen=True, slots=True)
