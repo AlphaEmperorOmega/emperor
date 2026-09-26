@@ -46,9 +46,17 @@ class ExperimentPreset(BaseOptions):
     RESIDUAL_MEMORY = 25
     RECURRENT_RESIDUAL = 26
     RECURRENT_POST_NORM = 27
+    HIERARCHICAL = 28
 
 
 _PRESET_DEFINITIONS = {
+    ExperimentPreset.HIERARCHICAL: PresetDefinition(
+        preset_values={
+            "hierarchical_language_model_flag": True,
+            "lm_head_weight_tying_flag": False,
+        },
+        description="HAT-style byte encoder and decoder around the causal GPT backbone; no word vocabulary. Byte widths and depths remain configurable.",
+    ),
     ExperimentPreset.BASELINE: PresetDefinition(
         preset_values={},
         description=(
@@ -280,6 +288,28 @@ class ExperimentPresets(BuilderBackedExperimentPresetsBase):
             default_dataset=WikiText2,
             runtime_factory=runtime_from_flat,
         )
+
+    def get_config(
+        self,
+        model_config_preset=ExperimentPreset.BASELINE,
+        dataset=WikiText2,
+        *,
+        config_overrides=None,
+    ):
+        configurations = super().get_config(
+            model_config_preset, dataset, config_overrides=config_overrides
+        )
+        raw_text = bool(getattr(dataset, "hierarchical_language_model_flag", False))
+        for configuration in configurations:
+            hierarchical = (
+                configuration.experiment_config.hierarchical_language_model_config
+                is not None
+            )
+            if hierarchical != raw_text:
+                raise ValueError(
+                    "Hierarchical language modeling requires a compatible raw-text dataset such as WikiText103Hierarchical"
+                )
+        return configurations
 
     def _dataset_config(self, dataset: type) -> dict:
         return {
