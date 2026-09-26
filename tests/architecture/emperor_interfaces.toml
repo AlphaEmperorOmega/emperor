@@ -359,5 +359,5 @@ owners = ["emperor.decoding"]
 [[interfaces]]
 module = "emperor.decoding.hierarchical"
 kind = "runtime"
-exports = ["HierarchicalByteDecoderConfig", "HierarchicalByteDecoderOutput", "ByteGenerationOptions", "ByteTokenGenerationOutput"]
-owners = ["emperor.decoding.hierarchical._config", "emperor.decoding.hierarchical._records", "emperor.decoding.hierarchical._records", "emperor.decoding.hierarchical._records"]
+exports = ["HierarchicalByteDecoderConfig", "HierarchicalByteDecoderOutput", "ByteGenerationOptions", "ByteTokenGenerationOutput", "HierarchicalTextGenerationOutput", "HierarchicalLanguageModelBatch", "HierarchicalTextCodec", "HierarchicalLanguageModelConfig"]
+owners = ["emperor.decoding.hierarchical._config", "emperor.decoding.hierarchical._records", "emperor.decoding.hierarchical._records", "emperor.decoding.hierarchical._records", "emperor.decoding.hierarchical._records", "emperor.decoding.hierarchical._batch", "emperor.decoding.hierarchical._text", "emperor.decoding.hierarchical._config"]

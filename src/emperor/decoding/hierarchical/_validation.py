@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from dataclasses import fields
 
 import torch
@@ -12,7 +13,8 @@ from emperor.embedding.absolute import (
 from emperor.experts import MixtureOfExpertsLayerConfig, MixtureOfExpertsModelConfig
 from emperor.layers import LayerConfig, LayerStackConfig, RecurrentCompositionConfig
 
-from ._config import HierarchicalByteDecoderConfig
+from ._batch import HierarchicalLanguageModelBatch
+from ._config import HierarchicalByteDecoderConfig, HierarchicalLanguageModelConfig
 from ._records import OUTPUT_SYMBOLS
 
 _INTEGER_DTYPES = {torch.uint8, torch.int8, torch.int16, torch.int32, torch.int64}
@@ -303,3 +305,124 @@ class HierarchicalByteDecoderValidator:
                 "valid byte_prefix_ids must contain only byte values 0 through 255"
             )
         return prefixes, lengths, mask
+
+
+class HierarchicalLanguageModelValidator(HierarchicalByteDecoderValidator):
+    @staticmethod
+    def validate_config_types(cfg, overrides):
+        if not isinstance(cfg, HierarchicalLanguageModelConfig):
+            raise TypeError("cfg must be HierarchicalLanguageModelConfig")
+        if overrides is not None and not isinstance(
+            overrides, HierarchicalLanguageModelConfig
+        ):
+            raise TypeError("overrides must be HierarchicalLanguageModelConfig or None")
+
+    @classmethod
+    def resolve_config(cls, cfg):
+        from emperor.embedding.hierarchical import HierarchicalByteEmbeddingConfig
+
+        cls._positive_integer(cfg.sequence_length, "sequence_length")
+        if not isinstance(cfg.embedding_config, HierarchicalByteEmbeddingConfig):
+            raise TypeError("embedding_config must be HierarchicalByteEmbeddingConfig")
+        if not isinstance(cfg.decoding_config, HierarchicalByteDecoderConfig):
+            raise TypeError("decoding_config must be HierarchicalByteDecoderConfig")
+        dimension = cfg.embedding_config.output_dim
+        cls._positive_integer(dimension, "embedding_config.output_dim")
+        cls._dimension(
+            cfg.decoding_config, "conditioning_dim", dimension, "decoding_config"
+        )
+        if cfg.embedding_config.max_token_bytes != cfg.decoding_config.max_token_bytes:
+            raise ValueError("encoder and decoder max_token_bytes must agree")
+        if not isinstance(
+            cfg.backbone_config, (LayerStackConfig, RecurrentCompositionConfig)
+        ):
+            raise TypeError("backbone_config must supply a Transformer decoder stack")
+        cls._validate_independence(cfg)
+        for name in ("input_dim", "output_dim"):
+            cls._dimension(cfg.backbone_config, name, dimension, "backbone_config")
+        bounds = []
+        for path, child in _config_items(cfg.backbone_config, "backbone_config"):
+            if getattr(child, "cross_attention_config", None) is not None:
+                raise ValueError("backbone cross-attention is not supported")
+            if hasattr(child, "batch_first_flag"):
+                if (
+                    not path.endswith(".self_attention_config")
+                    or child.batch_first_flag is not True
+                    or child.causal_attention_mask_flag is not True
+                ):
+                    raise ValueError(
+                        f"{path} requires batch-first causal self-attention"
+                    )
+                cls._dimension(child, "embedding_dim", dimension, path)
+                cls._positive_integer(child.batch_size, f"{path}.batch_size")
+                bounds.append(child.batch_size)
+                for name in ("source_sequence_length", "target_sequence_length"):
+                    if getattr(child, name) < cfg.sequence_length:
+                        raise ValueError(f"{path}.{name} must cover sequence_length")
+        if not bounds:
+            raise ValueError("backbone_config requires causal self-attention")
+        if not isinstance(
+            cfg.position_config,
+            (
+                TextLearnedPositionalEmbeddingConfig,
+                TextSinusoidalPositionalEmbeddingConfig,
+            ),
+        ):
+            raise TypeError("position_config must supply text positions")
+        cls._dimension(
+            cfg.position_config, "embedding_dim", dimension, "position_config"
+        )
+        if cfg.position_config.num_embeddings < cfg.sequence_length:
+            raise ValueError("position_config must cover all real backbone positions")
+        if cfg.dropout_probability is None or not 0 <= cfg.dropout_probability < 1:
+            raise ValueError("dropout_probability must be in [0, 1)")
+        for name in ("embedding_normalization_config", "output_normalization_config"):
+            normalization = getattr(cfg, name)
+            if normalization is not None:
+                if not isinstance(normalization, LayerConfig):
+                    raise TypeError(f"{name} must be a LayerConfig or None")
+                cls._dimension(normalization, "input_dim", dimension, name)
+                cls._dimension(normalization, "output_dim", dimension, name)
+        return min(bounds)
+
+    @staticmethod
+    def validate_batch(batch, sequence_length):
+        if not isinstance(batch, HierarchicalLanguageModelBatch):
+            raise TypeError("hierarchical mode requires HierarchicalLanguageModelBatch")
+        mask, bos = batch.attention_mask, batch.bos_mask
+        if not isinstance(mask, Tensor) or mask.dtype != torch.bool or mask.ndim != 2:
+            raise TypeError("attention_mask must be a rank-2 bool tensor")
+        if min(mask.shape) <= 0 or mask.shape[1] > sequence_length:
+            raise ValueError(
+                "batch dimensions must be nonempty and fit sequence_length"
+            )
+        if not isinstance(bos, Tensor):
+            raise TypeError("bos_mask must be a bool tensor")
+        if (
+            bos.dtype != torch.bool
+            or bos.shape != mask.shape
+            or bool((bos.to(mask.device) & ~mask).any())
+        ):
+            raise ValueError(
+                "bos_mask must be bool, match attention_mask, and select valid positions"
+            )
+        if bool((~mask[:, :-1] & mask[:, 1:]).any()):
+            raise ValueError("attention_mask must use right padding")
+        if bool(bos[:, 1:].any()):
+            raise ValueError("BOS is only valid at the beginning of a window")
+        contexts = batch.context_texts
+        if (
+            not isinstance(contexts, Sequence)
+            or isinstance(contexts, str)
+            or len(contexts) != mask.shape[0]
+            or any(
+                not isinstance(row, Sequence)
+                or isinstance(row, str)
+                or len(row) != mask.shape[1]
+                for row in contexts
+            )
+        ):
+            raise ValueError("context_texts must match the batch/token mask shape")
+        for row, column in bos.nonzero().tolist():
+            if contexts[row][column] != "":
+                raise ValueError("BOS context must use the empty string placeholder")
