@@ -349,3 +349,15 @@ module = "emperor.datasets.text"
 kind = "namespace"
 exports = []
 owners = []
+
+[[interfaces]]
+module = "emperor.decoding"
+kind = "configuration"
+exports = ["hierarchical"]
+owners = ["emperor.decoding"]
+
+[[interfaces]]
+module = "emperor.decoding.hierarchical"
+kind = "runtime"
+exports = ["HierarchicalByteDecoderConfig", "HierarchicalByteDecoderOutput", "ByteGenerationOptions", "ByteTokenGenerationOutput"]
+owners = ["emperor.decoding.hierarchical._config", "emperor.decoding.hierarchical._records", "emperor.decoding.hierarchical._records", "emperor.decoding.hierarchical._records"]
