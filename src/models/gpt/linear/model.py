@@ -4,6 +4,12 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from emperor.decoding.hierarchical import (
+    ByteGenerationOptions,
+    HierarchicalByteDecoderOutput,
+    HierarchicalLanguageModelBatch,
+    HierarchicalTextGenerationOutput,
+)
 from emperor.experiments.language_model import LanguageModelExperiment
 from emperor.layers import LayerConfig, LayerNormPositionOptions
 from emperor.transformer import TransformerDecoderLayerState
@@ -34,6 +40,19 @@ class Model(LanguageModelExperiment):
         super().__init__(config)
         self.experiment_config: ExperimentConfig = experiment_config
         self.boundary_config: GptBoundaryConfig = boundary_config
+        hierarchical = experiment_config.hierarchical_language_model_config
+        enabled = boundary_config.embedding_options.hierarchical_language_model_flag
+        if enabled != (hierarchical is not None):
+            raise ValueError(
+                "hierarchical_language_model_flag must match its supplied configuration"
+            )
+        if enabled:
+            if boundary_config.lm_head_options.weight_tying_flag:
+                raise ValueError(
+                    "Hierarchical language modeling requires lm_head_weight_tying_flag=False"
+                )
+            self.hierarchical_model = hierarchical.build()
+            return
         self.token_embedding = self.__build_token_embedding()
         self.positional_embedding = self.__build_positional_embedding()
         self.embedding_layer_norm = self.__build_embedding_layer_norm()
@@ -119,9 +138,17 @@ class Model(LanguageModelExperiment):
 
     def forward(
         self,
-        input_ids: Tensor,
+        input_ids: Tensor | HierarchicalLanguageModelBatch,
         attention_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor] | HierarchicalByteDecoderOutput:
+        if hasattr(self, "hierarchical_model"):
+            if attention_mask is not None:
+                raise ValueError("hierarchical batches carry their own attention_mask")
+            return self.hierarchical_model(input_ids)
+        if isinstance(input_ids, HierarchicalLanguageModelBatch):
+            raise ValueError(
+                "HierarchicalLanguageModelBatch requires hierarchical_language_model_flag=True"
+            )
         input_ids, attention_mask = self.__prepare_inputs(input_ids, attention_mask)
         hidden = self.__build_input_embeddings(input_ids)
         sequence_output, auxiliary_loss = self.__run_decoder(hidden, attention_mask)
@@ -203,7 +230,30 @@ class Model(LanguageModelExperiment):
             )
         return attention_mask.to(self.device)
 
+    def generate_text(
+        self,
+        prompt: str = "",
+        *,
+        max_new_tokens: int = 32,
+        max_new_bytes: int = 256,
+        options: ByteGenerationOptions | None = None,
+        prompt_is_complete: bool = False,
+    ) -> HierarchicalTextGenerationOutput:
+        if not hasattr(self, "hierarchical_model"):
+            raise ValueError(
+                "generate_text requires hierarchical_language_model_flag=True"
+            )
+        return self.hierarchical_model.generate_text(
+            prompt,
+            max_new_tokens=max_new_tokens,
+            max_new_bytes=max_new_bytes,
+            options=options,
+            prompt_is_complete=prompt_is_complete,
+        )
+
     def generate(self, input_ids: Tensor, max_new_tokens: int) -> Tensor:
+        if hasattr(self, "hierarchical_model"):
+            raise ValueError("Use generate_text for hierarchical language modeling")
         self.__validate_max_new_tokens(max_new_tokens)
         input_ids, _ = self.__prepare_inputs(input_ids, attention_mask=None)
         self.__validate_generation_length(input_ids, max_new_tokens)

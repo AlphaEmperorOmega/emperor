@@ -17,6 +17,7 @@ from emperor.decoding.hierarchical import (
 from models.catalog import model_package
 
 GPT_PACKAGES = (
+    "gpt/linear",
     "gpt/expert_linear",
     "gpt/expert_linear_adaptive",
 )
