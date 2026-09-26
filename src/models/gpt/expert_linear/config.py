@@ -830,6 +830,15 @@ ROUTER_STACK_LAST_LAYER_BIAS_OPTION: LastLayerBiasOptions = LastLayerBiasOptions
 ROUTER_STACK_APPLY_OUTPUT_POSTPROCESSING_FLAG: bool = False
 ROUTER_BIAS_FLAG: bool = True
 
+# Hierarchical language model
+HIERARCHICAL_LANGUAGE_MODEL_FLAG: bool = False
+HIERARCHICAL_BYTE_EMBEDDING_DIM: int = 32
+HIERARCHICAL_BYTE_ENCODER_NUM_LAYERS: int = 1
+HIERARCHICAL_BYTE_DECODER_NUM_LAYERS: int = 1
+HIERARCHICAL_BYTE_NUM_HEADS: int = 4
+HIERARCHICAL_BYTE_FEED_FORWARD_DIM: int = 64
+HIERARCHICAL_MAX_TOKEN_BYTES: int = 64
+
 # Workbench Config Schema Boundary
 # Construction defaults remain available to flat CLI adapters and presets. The
 # grouped builder interface also exposes its supported residual settings.
@@ -849,6 +858,7 @@ _PUBLIC_CONFIG_KEYS = {
 
 RUNTIME_VALUE_CONSTRAINTS = positive_runtime_fields("HIDDEN_DIM")
 _PUBLIC_CONFIG_PREFIXES = (
+    "HIERARCHICAL_",
     "TRAINER_",
     "CALLBACK_",
     "DATA_",

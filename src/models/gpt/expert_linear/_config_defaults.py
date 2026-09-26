@@ -39,6 +39,13 @@ from models.gpt.expert_linear.runtime_options import (
 
 def gpt_embedding_options(config: ModuleType) -> GptEmbeddingOptions:
     return GptEmbeddingOptions(
+        hierarchical_language_model_flag=config.HIERARCHICAL_LANGUAGE_MODEL_FLAG,
+        byte_embedding_dim=config.HIERARCHICAL_BYTE_EMBEDDING_DIM,
+        byte_encoder_num_layers=config.HIERARCHICAL_BYTE_ENCODER_NUM_LAYERS,
+        byte_decoder_num_layers=config.HIERARCHICAL_BYTE_DECODER_NUM_LAYERS,
+        byte_num_heads=config.HIERARCHICAL_BYTE_NUM_HEADS,
+        byte_feed_forward_dim=config.HIERARCHICAL_BYTE_FEED_FORWARD_DIM,
+        byte_limit=config.HIERARCHICAL_MAX_TOKEN_BYTES,
         layer_norm_flag=config.EMBEDDING_LAYER_NORM_FLAG,
         normalization=config.EMBEDDING_NORMALIZATION,
         dropout_probability=config.EMBEDDING_DROPOUT_PROBABILITY,

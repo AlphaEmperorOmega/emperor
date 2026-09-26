@@ -875,6 +875,7 @@ modules = [
 [families.experiments]
 status = "pending"
 focused_tests = [
+  "tests/model_packages/test_gpt_hierarchical_language_model.py",
   "tests/unit/test_*experiment*.py",
   "tests/unit/test_classifier.py",
   "tests/unit/test_language_model.py",
@@ -928,8 +929,8 @@ modules = [
 
 [families.decoding]
 status = "pending"
-focused_tests = ["tests/unit/test_hierarchical_byte_decoder.py", "tests/unit/test_hierarchical_text_batch.py", "tests/integration/test_hierarchical_language_model.py", ]
-integration_tests = ["tests/integration/test_hierarchical_language_model.py", ]
+focused_tests = ["tests/unit/test_hierarchical_byte_decoder.py", "tests/unit/test_hierarchical_text_batch.py", "tests/integration/test_hierarchical_language_model.py", "tests/model_packages/test_gpt_hierarchical_language_model.py"]
+integration_tests = ["tests/integration/test_hierarchical_language_model.py", "tests/model_packages/test_gpt_hierarchical_language_model.py"]
 mutation_scope = ["src/emperor/decoding/*"]
 environment = ["cpu", "float32", "float64", "lightning-trainer", "local-text-fixtures"]
 coverage_evidence = ""

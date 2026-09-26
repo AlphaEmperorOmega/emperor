@@ -14,6 +14,7 @@ from emperor.attention import (
     MixtureOfAttentionHeadsConfig,
     SelfAttentionConfig,
 )
+from emperor.datasets.text.language_modeling import WikiText103Hierarchical
 from emperor.embedding.absolute import (
     TextSinusoidalPositionalEmbeddingConfig,
 )
@@ -129,7 +130,11 @@ class TestGptExpertLinearModel(unittest.TestCase):
         )
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
-                configs = presets.get_config(preset)
+                configs = (
+                    presets.get_config(preset, WikiText103Hierarchical)
+                    if preset is ExperimentPreset.HIERARCHICAL
+                    else presets.get_config(preset)
+                )
                 self.assertTrue(configs)
                 decoder_config = configs[0].experiment_config.decoder_config
                 block_config = getattr(decoder_config, "block_config", decoder_config)
@@ -277,7 +282,7 @@ class TestGptExpertLinearModel(unittest.TestCase):
         self.assertNotIn("CAUSAL", ExperimentPreset.__members__)
         self.assertEqual(
             [preset.value for preset in ExperimentPreset],
-            list(range(1, 22)),
+            list(range(1, 23)),
         )
         parameters = inspect.signature(GptExpertLinearConfigBuilder).parameters
         self.assertNotIn("expert_attention_flag", parameters)
@@ -453,6 +458,9 @@ class TestGptExpertLinearModel(unittest.TestCase):
 
     def test_every_preset_executes_mixture_attention_and_expert_ff(self):
         for preset in ExperimentPreset:
+            if preset is ExperimentPreset.HIERARCHICAL:
+                # Typed raw-text execution has its own complete-path suite.
+                continue
             with self.subTest(preset=preset.name):
                 cfg = self._preset_config(preset)
                 model = Model(cfg)
@@ -683,6 +691,12 @@ class TestGptExpertLinearModel(unittest.TestCase):
         for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
             dataset_options.DEFAULT_EXPERIMENT_TASK
         ]:
+            if getattr(dataset, "hierarchical_language_model_flag", False):
+                with self.assertRaises(ValueError):
+                    model_package("gpt/expert_linear").presets.get_config(
+                        ExperimentPreset.BASELINE, dataset
+                    )
+                continue
             with self.subTest(dataset=dataset.__name__):
                 overrides = self._small_overrides()
                 overrides.pop("input_dim")

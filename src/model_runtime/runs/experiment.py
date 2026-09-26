@@ -258,6 +258,10 @@ class ExperimentBase:
         )
 
     def _build_dataset(self, training_run: TrainingRun) -> Any:
+        task = getattr(training_run, "experiment_task", None) or self.experiment_task
+        experiment_task_behavior(task).validate_dataset(
+            training_run.dataset_type, training_run.config
+        )
         return training_run.dataset_type(
             **self._dataset_constructor_kwargs(training_run)
         )
