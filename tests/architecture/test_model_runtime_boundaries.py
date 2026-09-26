@@ -412,6 +412,7 @@ class ModelRuntimeBoundaryTests(unittest.TestCase):
             suppliers,
             [
                 "src/models/gpt/expert_linear/__init__.py",
+                "src/models/gpt/expert_linear_adaptive/__init__.py",
                 "src/models/linears/linear/__init__.py",
             ],
         )

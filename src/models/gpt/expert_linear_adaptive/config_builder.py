@@ -53,6 +53,9 @@ from models.gpt.expert_linear_adaptive._expert_control_config_factory import (
     ControlConfigDependencies,
     ControlConfigFactory,
 )
+from models.gpt.expert_linear_adaptive._hierarchical_config import (
+    build_hierarchical_config,
+)
 from models.gpt.expert_linear_adaptive.experiment_config import ExperimentConfig
 from models.gpt.expert_linear_adaptive.runtime_defaults import DEFAULT_RUNTIME
 from models.gpt.expert_linear_adaptive.runtime_options import (
@@ -98,6 +101,14 @@ class _GptExpertLinearAdaptiveConfigBuilderImplementation(GptBackendConfigBuilde
         if self.embedding_options.hierarchical_flag:
             model_config.experiment_config.hierarchical_embedding_config = (
                 self._build_hierarchical_embedding_config()
+            )
+        if self.embedding_options.hierarchical_language_model_flag:
+            model_config.experiment_config.hierarchical_language_model_config = (
+                build_hierarchical_config(
+                    model_config,
+                    self.embedding_options,
+                    self._build_linear_layer_config(bias_flag=True),
+                )
             )
         return model_config
 

@@ -134,7 +134,7 @@ class TestModelConventions(unittest.TestCase):
                             PennTreebank,
                             WikiText103,
                             OpenWebText,
-                            *([WikiText103Hierarchical] if backend in ('expert_linear',) else []),
+                            *([WikiText103Hierarchical] if backend in ('expert_linear', 'expert_linear_adaptive') else []),
                         ]
                     },
                 )
