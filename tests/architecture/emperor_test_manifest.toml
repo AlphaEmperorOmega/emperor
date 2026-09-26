@@ -921,3 +921,23 @@ modules = [
   "src/emperor/experiments/translation/_metrics.py",
   "src/emperor/experiments/translation/_records.py",
 ]
+
+[families.decoding]
+status = "pending"
+focused_tests = ["tests/unit/test_hierarchical_byte_decoder.py", ]
+integration_tests = []
+mutation_scope = ["src/emperor/decoding/*"]
+environment = ["cpu", "float32", "float64", "lightning-trainer", "local-text-fixtures"]
+coverage_evidence = ""
+mutation_evidence = ""
+review_evidence = ""
+blocked_reason = ""
+modules = [
+  "src/emperor/decoding/__init__.py",
+  "src/emperor/decoding/hierarchical/__init__.py",
+  "src/emperor/decoding/hierarchical/_component.py",
+  "src/emperor/decoding/hierarchical/_config.py",
+  "src/emperor/decoding/hierarchical/_generation.py",
+  "src/emperor/decoding/hierarchical/_records.py",
+  "src/emperor/decoding/hierarchical/_validation.py",
+]
