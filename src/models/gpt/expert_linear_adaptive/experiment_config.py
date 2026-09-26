@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 
 from emperor.config import ConfigBase, optional_field
+from emperor.decoding.hierarchical import HierarchicalLanguageModelConfig
 from emperor.embedding.absolute import AbsolutePositionalEmbeddingConfig
 from emperor.embedding.contextual import ByteContextualEmbeddingConfig
 from emperor.embedding.hierarchical import HierarchicalByteEmbeddingConfig
@@ -12,6 +13,9 @@ from models.gpt.expert_linear_adaptive._boundary_config_factory import (
 
 @dataclass
 class ExperimentConfig(ConfigBase):
+    hierarchical_language_model_config: HierarchicalLanguageModelConfig | None = (
+        optional_field("Complete vocabulary-free language model configuration.")
+    )
     contextual_embedding_config: ByteContextualEmbeddingConfig | None = field(
         default=None, kw_only=True
     )
