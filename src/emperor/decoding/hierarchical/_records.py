@@ -39,3 +39,11 @@ class ByteTokenGenerationOutput:
     text: str
     stop_reason: str
     new_bytes: int
+
+
+@dataclass(frozen=True)
+class HierarchicalTextGenerationOutput:
+    text: str
+    stop_reason: str
+    new_bytes: int
+    new_tokens: int

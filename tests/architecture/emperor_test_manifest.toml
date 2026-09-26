@@ -101,7 +101,8 @@ focused_tests = [
   "tests/unit/test_transformer_absolute_positional_embedding.py",
   "tests/unit/test_transformer_relative_positional_embedding.py",
 ]
-integration_tests = ["tests/integration/test_hierarchical_embedding_composition.py"]
+integration_tests = [
+  "tests/integration/test_hierarchical_language_model.py","tests/integration/test_hierarchical_embedding_composition.py"]
 mutation_scope = ["src/emperor/embedding/*"]
 environment = ["cpu", "float32", "float64", "bfloat16-autocast", "meta-device", "cuda-conditional"]
 coverage_evidence = "tests/architecture/emperor_behavioral/evidence/embedding-coverage.toml"
@@ -924,8 +925,8 @@ modules = [
 
 [families.decoding]
 status = "pending"
-focused_tests = ["tests/unit/test_hierarchical_byte_decoder.py", ]
-integration_tests = []
+focused_tests = ["tests/unit/test_hierarchical_byte_decoder.py", "tests/unit/test_hierarchical_text_batch.py", "tests/integration/test_hierarchical_language_model.py", ]
+integration_tests = ["tests/integration/test_hierarchical_language_model.py", ]
 mutation_scope = ["src/emperor/decoding/*"]
 environment = ["cpu", "float32", "float64", "lightning-trainer", "local-text-fixtures"]
 coverage_evidence = ""
@@ -935,9 +936,12 @@ blocked_reason = ""
 modules = [
   "src/emperor/decoding/__init__.py",
   "src/emperor/decoding/hierarchical/__init__.py",
+  "src/emperor/decoding/hierarchical/_batch.py",
   "src/emperor/decoding/hierarchical/_component.py",
   "src/emperor/decoding/hierarchical/_config.py",
   "src/emperor/decoding/hierarchical/_generation.py",
+  "src/emperor/decoding/hierarchical/_language_model.py",
   "src/emperor/decoding/hierarchical/_records.py",
+  "src/emperor/decoding/hierarchical/_text.py",
   "src/emperor/decoding/hierarchical/_validation.py",
 ]
