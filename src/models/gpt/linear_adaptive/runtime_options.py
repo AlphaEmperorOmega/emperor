@@ -138,6 +138,13 @@ def resolve_controller_stack_options(
 
 @dataclass(frozen=True)
 class GptEmbeddingOptions:
+    hierarchical_language_model_flag: bool = field(default=False, kw_only=True)
+    byte_embedding_dim: int = field(default=32, kw_only=True)
+    byte_encoder_num_layers: int = field(default=1, kw_only=True)
+    byte_decoder_num_layers: int = field(default=1, kw_only=True)
+    byte_num_heads: int = field(default=4, kw_only=True)
+    byte_feed_forward_dim: int = field(default=64, kw_only=True)
+    byte_limit: int = field(default=64, kw_only=True)
     layer_norm_flag: bool
     normalization: NormalizationOptions = field(
         default=NormalizationOptions.LAYER_NORM, kw_only=True
