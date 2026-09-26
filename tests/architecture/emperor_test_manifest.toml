@@ -770,6 +770,7 @@ modules = [
 [families.datasets]
 status = "pending"
 focused_tests = [
+  "tests/unit/test_wikitext_hierarchical.py",
   "tests/unit/test_dataset*.py",
   "tests/unit/test_*dataset.py",
   "tests/unit/test_*datasets.py",
@@ -789,6 +790,7 @@ mutation_evidence = ""
 review_evidence = ""
 blocked_reason = ""
 modules = [
+  "src/emperor/datasets/text/language_modeling/_wiki_text_103_hierarchical.py",
   "src/emperor/datasets/__init__.py",
   "src/emperor/datasets/_base.py",
   "src/emperor/datasets/_metadata.py",
