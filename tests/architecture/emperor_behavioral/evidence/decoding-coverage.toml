@@ -1,0 +1,138 @@
+family = "decoding"
+result = "partial"
+baseline_revision = "181bfd80f0e7a424dcb559a0022b9b9442bb0db4"
+measured_at = "2026-09-26T21:58:47.877993+00:00"
+environment = "CPU; Python 3.13; PyTorch 2.12.0+cpu; float32, float64, bfloat16 autocast; CUDA unavailable"
+focused_tests = 57
+passed_tests = 55
+skipped_tests = 2
+statements = 90.53
+branches = 76.43
+statement_count = 665
+covered_statements = 602
+branch_count = 280
+covered_branches = 214
+mutation_result = "not run"
+independent_review = "not performed"
+notes = "Tests pass. Coverage includes the full decoding family; some negative validation and generation-option paths remain unexercised. This is partial evidence, not full behavioral certification."
+command = """
+PYTHONPATH=src:tests:. OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLCONFIGDIR=/tmp/emperor-hat-mpl torchenv/bin/python - <<'PY'
+# Preload torch: starting the coverage tracer before its native import crashes this environment.
+import torch
+import coverage
+import unittest
+measurement = coverage.Coverage(data_file='/tmp/hat-fidelity-coverage', source=['src/emperor/decoding', 'src/emperor/datasets/text/language_modeling', 'src/emperor/experiments/language_model', 'src/emperor/embedding/hierarchical'], branch=True, data_suffix=False)
+measurement.start()
+suite = unittest.defaultTestLoader.loadTestsFromNames([
+    'tests.unit.test_hierarchical_byte_decoder',
+    'tests.unit.test_hierarchical_text_batch',
+    'tests.unit.test_wikitext_hierarchical',
+    'tests.integration.test_hierarchical_language_model',
+    'tests.model_packages.test_gpt_hierarchical_language_model',
+    'tests.unit.test_language_model',
+    'tests.unit.test_hierarchical_byte_embedding',
+    'tests.integration.test_hierarchical_embedding_composition',
+])
+result = unittest.TextTestRunner(verbosity=1).run(suite)
+measurement.stop()
+measurement.save()
+measurement.json_report(outfile='/tmp/hat-fidelity-coverage.json')
+raise SystemExit(not result.wasSuccessful())
+PY
+"""
+
+[[modules]]
+path = "src/emperor/datasets/text/language_modeling/_wiki_text_103_hierarchical.py"
+sha256 = "21554728b6edcc28594f00ae8f62c18105fff021c66b3071766b2aaa16208c8f"
+statements = 64
+covered_statements = 60
+branches = 14
+covered_branches = 12
+
+[[modules]]
+path = "src/emperor/decoding/__init__.py"
+sha256 = "cd85e8ff0c76037575b20532d45d6b808b364b04f130857b117124048f03caf0"
+statements = 2
+covered_statements = 2
+branches = 0
+covered_branches = 0
+
+[[modules]]
+path = "src/emperor/decoding/hierarchical/__init__.py"
+sha256 = "09b64b848f5f224add02ffc1214e72e166767fc6c4338c41d83f8d96a1ac70ad"
+statements = 5
+covered_statements = 5
+branches = 0
+covered_branches = 0
+
+[[modules]]
+path = "src/emperor/decoding/hierarchical/_batch.py"
+sha256 = "3f053374df217f43b64943cf6ba7c688c49710a8a4d327f250b7b88c93a83f32"
+statements = 64
+covered_statements = 59
+branches = 18
+covered_branches = 15
+
+[[modules]]
+path = "src/emperor/decoding/hierarchical/_component.py"
+sha256 = "6115886b048e70910db75d1014e954824a7b1e60aa41486823cd4e8890c92eff"
+statements = 59
+covered_statements = 59
+branches = 12
+covered_branches = 12
+
+[[modules]]
+path = "src/emperor/decoding/hierarchical/_config.py"
+sha256 = "99b26c710c6942d15cfb2f9731761b7c884e13bcf035175c79ee686c6633903a"
+statements = 27
+covered_statements = 27
+branches = 0
+covered_branches = 0
+
+[[modules]]
+path = "src/emperor/decoding/hierarchical/_generation.py"
+sha256 = "2bb5d2e9870ee478b959b6a9c1500b334dd663fca01ab5f95572e7ad436b2232"
+statements = 91
+covered_statements = 82
+branches = 42
+covered_branches = 32
+
+[[modules]]
+path = "src/emperor/decoding/hierarchical/_language_model.py"
+sha256 = "1304be18139815de4fec12238f9240db1807745887583c0738cf369432767246"
+statements = 103
+covered_statements = 100
+branches = 26
+covered_branches = 22
+
+[[modules]]
+path = "src/emperor/decoding/hierarchical/_records.py"
+sha256 = "02c848d55048aaf34d4e9bc4005c3caf747e55dc0a0727912b93e557624d9559"
+statements = 30
+covered_statements = 30
+branches = 0
+covered_branches = 0
+
+[[modules]]
+path = "src/emperor/decoding/hierarchical/_text.py"
+sha256 = "1f22d274eae9b7692e433da29006609569b6b272106ee64c3232648a011bb6f2"
+statements = 46
+covered_statements = 45
+branches = 20
+covered_branches = 18
+
+[[modules]]
+path = "src/emperor/decoding/hierarchical/_validation.py"
+sha256 = "927759b88ecf9e4e1c09249e09c9086c1e8ae119d3808e4cac66845e43116e41"
+statements = 238
+covered_statements = 193
+branches = 162
+covered_branches = 115
+
+[[modules]]
+path = "src/emperor/experiments/language_model/_hierarchical.py"
+sha256 = "b56bdb674969853e4ed5c5ab71f29f98ac8b65ac44f55847fff2eb89f8d1d89e"
+statements = 62
+covered_statements = 56
+branches = 16
+covered_branches = 10
