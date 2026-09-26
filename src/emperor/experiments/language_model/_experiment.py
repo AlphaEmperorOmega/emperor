@@ -5,11 +5,17 @@ import torch.nn as nn
 from lightning import LightningModule
 from torch import Tensor
 
+from emperor.decoding.hierarchical import HierarchicalLanguageModelBatch
 from emperor.experiments._auxiliary_loss import AuxiliaryLoss
 from emperor.experiments._config_validation import _ExperimentConfigValidator
 
+from ._hierarchical import HierarchicalLanguageModelHandler
 from ._metrics import LanguageModelMetricsLogger
-from ._records import LanguageModelBatch, LanguageModelStepOutput
+from ._records import (
+    HierarchicalLanguageModelStepOutput,
+    LanguageModelBatch,
+    LanguageModelStepOutput,
+)
 
 if TYPE_CHECKING:
     from emperor.config import ModelConfig
@@ -27,20 +33,30 @@ class LanguageModelExperiment(LightningModule):
         self.loss_fn = nn.CrossEntropyLoss()
         self.metrics = LanguageModelMetricsLogger()
         self._auxiliary_loss = AuxiliaryLoss("Language-model")
+        self.hierarchical_handler = HierarchicalLanguageModelHandler()
 
     def training_step(self, batch: LanguageModelBatch, batch_idx: int) -> Tensor:
         output = self._model_step_outputs(batch)
-        self.metrics.log_training_step(self.log_dict, output)
+        if isinstance(output, HierarchicalLanguageModelStepOutput):
+            self.hierarchical_handler.log(self.log_dict, "train", output)
+        else:
+            self.metrics.log_training_step(self.log_dict, output)
         return output.total_loss
 
     def validation_step(self, batch: LanguageModelBatch, batch_idx: int) -> Tensor:
         output = self._model_step_outputs(batch)
-        self.metrics.log_validation_step(self.log_dict, output)
+        if isinstance(output, HierarchicalLanguageModelStepOutput):
+            self.hierarchical_handler.log(self.log_dict, "validation", output)
+        else:
+            self.metrics.log_validation_step(self.log_dict, output)
         return output.total_loss
 
     def test_step(self, batch: LanguageModelBatch, batch_idx: int) -> Tensor:
         output = self._model_step_outputs(batch)
-        self.metrics.log_test_step(self.log_dict, output)
+        if isinstance(output, HierarchicalLanguageModelStepOutput):
+            self.hierarchical_handler.log(self.log_dict, "test", output)
+        else:
+            self.metrics.log_test_step(self.log_dict, output)
         return output.total_loss
 
     def _model_step(self, batch: LanguageModelBatch) -> Tensor:
@@ -50,6 +66,8 @@ class LanguageModelExperiment(LightningModule):
         self,
         batch: LanguageModelBatch,
     ) -> LanguageModelStepOutput:
+        if isinstance(batch, HierarchicalLanguageModelBatch):
+            return self.hierarchical_handler.step(self, batch)
         tokens, targets = self._unpack_batch(batch)
         tokens = tokens.to(self.device)
         targets = targets.to(self.device)

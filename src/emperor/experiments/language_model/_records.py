@@ -12,3 +12,9 @@ class LanguageModelStepOutput:
     logits: Tensor
     labels: Tensor
     auxiliary_loss: Tensor
+
+
+@dataclass(frozen=True)
+class HierarchicalLanguageModelStepOutput(LanguageModelStepOutput):
+    nll_sum: Tensor
+    byte_count: int

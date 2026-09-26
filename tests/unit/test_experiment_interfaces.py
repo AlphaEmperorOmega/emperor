@@ -53,6 +53,7 @@ EXPECTED_SOURCE_TREE = (
     "classifier/_validation_examples.py",
     "language_model/__init__.py",
     "language_model/_experiment.py",
+    "language_model/_hierarchical.py",
     "language_model/_metrics.py",
     "language_model/_records.py",
     "masked_language_model/__init__.py",
