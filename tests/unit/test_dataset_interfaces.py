@@ -26,6 +26,7 @@ class DatasetInterfaceTests(unittest.TestCase):
             "PennTreebank",
             "WikiText2",
             "WikiText103",
+            "WikiText103Hierarchical",
         ),
         "emperor.datasets.text.translation": ("Multi30kDeEn", "Multi30kEnDe"),
     }
@@ -50,6 +51,10 @@ class DatasetInterfaceTests(unittest.TestCase):
         ("emperor.datasets.text.language_modeling._penn_treebank", "PennTreebank"),
         ("emperor.datasets.text.language_modeling._wiki_text_2", "WikiText2"),
         ("emperor.datasets.text.language_modeling._wiki_text_103", "WikiText103"),
+        (
+            "emperor.datasets.text.language_modeling._wiki_text_103_hierarchical",
+            "WikiText103Hierarchical",
+        ),
         ("emperor.datasets.text.translation._adapter", "Multi30kDeEn"),
         ("emperor.datasets.text.translation._adapter", "Multi30kEnDe"),
     )
