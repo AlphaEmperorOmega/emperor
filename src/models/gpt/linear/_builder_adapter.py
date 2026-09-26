@@ -322,6 +322,13 @@ def _modern_embedding_options(
         **_modern_option_updates(
             kwargs,
             {
+                "hierarchical_language_model_flag": "hierarchical_language_model_flag",
+                "hierarchical_byte_embedding_dim": "byte_embedding_dim",
+                "hierarchical_byte_encoder_num_layers": "byte_encoder_num_layers",
+                "hierarchical_byte_decoder_num_layers": "byte_decoder_num_layers",
+                "hierarchical_byte_num_heads": "byte_num_heads",
+                "hierarchical_byte_feed_forward_dim": "byte_feed_forward_dim",
+                "hierarchical_max_token_bytes": "byte_limit",
                 "embedding_layer_norm_flag": "layer_norm_flag",
                 "embedding_normalization": "normalization",
                 "embedding_dropout_probability": "dropout_probability",
@@ -721,6 +728,13 @@ def _modern_option_updates(
 
 def _modern_supported_flat_keys() -> set[str]:
     keys = {
+        "hierarchical_language_model_flag",
+        "hierarchical_byte_embedding_dim",
+        "hierarchical_byte_encoder_num_layers",
+        "hierarchical_byte_decoder_num_layers",
+        "hierarchical_byte_num_heads",
+        "hierarchical_byte_feed_forward_dim",
+        "hierarchical_max_token_bytes",
         "embedding_layer_norm_flag",
         "embedding_normalization",
         "embedding_dropout_probability",

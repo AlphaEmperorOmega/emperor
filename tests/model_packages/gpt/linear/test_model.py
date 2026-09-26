@@ -15,6 +15,7 @@ import torch.nn as nn
 import models.gpt.linear.config as config
 import models.gpt.linear.dataset_options as dataset_options
 from emperor.attention import SelfAttentionProjectionStrategy
+from emperor.datasets.text.language_modeling import WikiText103Hierarchical
 from emperor.embedding.absolute import (
     TextLearnedPositionalEmbeddingConfig,
     TextSinusoidalPositionalEmbeddingConfig,
@@ -167,7 +168,11 @@ class TestGptLinearModel(unittest.TestCase):
         )
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
-                configs = presets.get_config(preset)
+                configs = (
+                    presets.get_config(preset, WikiText103Hierarchical)
+                    if preset is ExperimentPreset.HIERARCHICAL
+                    else presets.get_config(preset)
+                )
                 self.assertTrue(configs)
                 decoder_config = configs[0].experiment_config.decoder_config
                 block_config = getattr(decoder_config, "block_config", decoder_config)
@@ -936,6 +941,8 @@ class TestGptLinearModel(unittest.TestCase):
         presets = model_package("gpt/linear").presets
         for dataset in self._default_datasets():
             for preset in ExperimentPreset:
+                if preset is ExperimentPreset.HIERARCHICAL:
+                    continue  # Raw batches are covered by the shared HAT suite.
                 with self.subTest(dataset=dataset.__name__, preset=preset.name):
                     cfg = presets.get_config(
                         preset,
@@ -959,6 +966,8 @@ class TestGptLinearModel(unittest.TestCase):
     @pytest.mark.training
     def test_every_preset_completes_one_tiny_training_epoch(self):
         for preset in ExperimentPreset:
+            if preset is ExperimentPreset.HIERARCHICAL:
+                continue  # The shared HAT suite trains on raw-text fixtures.
             with self.subTest(preset=preset.name):
                 cfg = model_package("gpt/linear").presets.get_config(
                     preset,
@@ -1375,8 +1384,12 @@ class TestGptLinearModel(unittest.TestCase):
         return gate.model_config.layer_config.layer_model_config.bias_flag
 
     def _default_datasets(self) -> list[type]:
-        return dataset_options.DATASET_OPTIONS_BY_TASK[
-            dataset_options.DEFAULT_EXPERIMENT_TASK
+        return [
+            dataset
+            for dataset in dataset_options.DATASET_OPTIONS_BY_TASK[
+                dataset_options.DEFAULT_EXPERIMENT_TASK
+            ]
+            if dataset is not WikiText103Hierarchical
         ]
 
     def _default_dataset(self) -> type:
