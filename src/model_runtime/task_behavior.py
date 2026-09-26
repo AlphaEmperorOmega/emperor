@@ -210,6 +210,8 @@ _CAUSAL_LANGUAGE_MODELING_RESULT_METRIC_KEYS = _stage_metric_keys(
     "cross_entropy",
     "perplexity",
     "auxiliary_loss",
+    "symbol_cross_entropy",
+    "bits_per_byte",
 )
 
 _DECLARED_BEHAVIORS = (
