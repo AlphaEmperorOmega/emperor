@@ -11,6 +11,7 @@ import models.gpt.linear_adaptive.config as config
 import models.gpt.linear_adaptive.dataset_options as dataset_options
 import models.gpt.linear_adaptive.runtime_options as runtime_options
 from emperor.augmentations.adaptive_parameters import AdaptiveLinearLayerConfig
+from emperor.datasets.text.language_modeling import WikiText103Hierarchical
 from emperor.experiments.language_model import LanguageModelExperiment
 from emperor.layers import (
     ActivationOptions,
@@ -110,7 +111,11 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
         )
         for preset in ExperimentPreset:
             with self.subTest(preset=preset.name):
-                configs = presets.get_config(preset)
+                configs = (
+                    presets.get_config(preset, WikiText103Hierarchical)
+                    if preset is ExperimentPreset.HIERARCHICAL
+                    else presets.get_config(preset)
+                )
                 self.assertTrue(configs)
                 decoder_config = configs[0].experiment_config.decoder_config
                 block_config = getattr(decoder_config, "block_config", decoder_config)
@@ -498,6 +503,8 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
 
     def test_every_preset_forwards_a_finite_causal_batch(self):
         for preset in ExperimentPreset:
+            if preset is ExperimentPreset.HIERARCHICAL:
+                continue  # Raw batches are covered by the shared HAT suite.
             with self.subTest(preset=preset.name):
                 cfg = self._preset_config(preset)
                 logits, auxiliary_loss = Model(cfg)(self._input_ids(cfg))
@@ -518,6 +525,14 @@ class TestGptLinearAdaptiveModel(unittest.TestCase):
         ]
         for dataset in datasets:
             with self.subTest(dataset=dataset.__name__):
+                if dataset is WikiText103Hierarchical:
+                    with self.assertRaisesRegex(ValueError, "raw-text dataset"):
+                        model_package("gpt/linear_adaptive").presets.get_config(
+                            ExperimentPreset.BASELINE,
+                            dataset,
+                            config_overrides={"lm_head_weight_tying_flag": False},
+                        )
+                    continue
                 overrides = self._small_overrides()
                 overrides.pop("input_dim")
                 overrides.pop("output_dim")
