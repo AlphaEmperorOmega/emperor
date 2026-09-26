@@ -143,6 +143,8 @@ class ExperimentTaskBehaviorTests(unittest.TestCase):
                 "cross_entropy",
                 "perplexity",
                 "auxiliary_loss",
+                "symbol_cross_entropy",
+                "bits_per_byte",
             ),
         }
 

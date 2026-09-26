@@ -890,6 +890,7 @@ mutation_evidence = ""
 review_evidence = ""
 blocked_reason = ""
 modules = [
+  "src/emperor/experiments/language_model/_hierarchical.py",
   "src/emperor/experiments/__init__.py",
   "src/emperor/experiments/_auxiliary_loss.py",
   "src/emperor/experiments/_config_validation.py",
