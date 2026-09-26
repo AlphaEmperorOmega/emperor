@@ -5,6 +5,12 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 
+from emperor.decoding.hierarchical import (
+    ByteGenerationOptions,
+    HierarchicalByteDecoderOutput,
+    HierarchicalLanguageModelBatch,
+    HierarchicalTextGenerationOutput,
+)
 from emperor.embedding.contextual import ByteContextualEmbeddingConfig
 from emperor.embedding.hierarchical import HierarchicalByteEmbeddingConfig
 from emperor.experiments.language_model import LanguageModelExperiment
@@ -42,6 +48,19 @@ class Model(LanguageModelExperiment):
         super().__init__(config)
         self.experiment_config: ExperimentConfig = experiment_config
         self.boundary_config: GptBoundaryConfig = boundary_config
+        hierarchical = experiment_config.hierarchical_language_model_config
+        enabled = boundary_config.embedding_options.hierarchical_language_model_flag
+        if enabled != (hierarchical is not None):
+            raise ValueError(
+                "hierarchical_language_model_flag must match its supplied configuration"
+            )
+        if enabled:
+            if boundary_config.lm_head_options.weight_tying_flag:
+                raise ValueError(
+                    "Hierarchical language modeling requires lm_head_weight_tying_flag=False"
+                )
+            self.hierarchical_model = hierarchical.build()
+            return
         embedding_options = boundary_config.embedding_options
         self.token_text_adapter = (
             TokenTextAdapter(config.input_dim)
@@ -143,7 +162,7 @@ class Model(LanguageModelExperiment):
 
     def set_token_vocabulary(self, token_texts: Sequence[str]) -> None:
         """Bind exact vocabulary spellings in token-ID order for standalone inference."""
-        if self.token_text_adapter is None:
+        if getattr(self, "token_text_adapter", None) is None:
             raise ValueError(
                 "Token text vocabulary is only used with contextual or hierarchical "
                 "embedding."
@@ -152,7 +171,7 @@ class Model(LanguageModelExperiment):
         self.__validate_token_byte_lengths()
 
     def setup(self, stage: str) -> None:
-        if self.token_text_adapter is not None:
+        if getattr(self, "token_text_adapter", None) is not None:
             self.token_text_adapter.bind_datamodule(self.trainer.datamodule)
             self.__validate_token_byte_lengths()
 
@@ -225,9 +244,17 @@ class Model(LanguageModelExperiment):
 
     def forward(
         self,
-        input_ids: Tensor,
+        input_ids: Tensor | HierarchicalLanguageModelBatch,
         attention_mask: Tensor | None = None,
-    ) -> tuple[Tensor, Tensor]:
+    ) -> tuple[Tensor, Tensor] | HierarchicalByteDecoderOutput:
+        if hasattr(self, "hierarchical_model"):
+            if attention_mask is not None:
+                raise ValueError("hierarchical batches carry their own attention_mask")
+            return self.hierarchical_model(input_ids)
+        if isinstance(input_ids, HierarchicalLanguageModelBatch):
+            raise ValueError(
+                "HierarchicalLanguageModelBatch requires hierarchical_language_model_flag=True"
+            )
         input_ids, attention_mask = self.__prepare_inputs(input_ids, attention_mask)
         hidden, embedding_loss = self.__build_input_embeddings(
             input_ids, attention_mask
@@ -239,7 +266,7 @@ class Model(LanguageModelExperiment):
     def __build_input_embeddings(
         self, input_ids: Tensor, attention_mask: Tensor
     ) -> tuple[Tensor, Tensor]:
-        if self.token_text_adapter is not None:
+        if getattr(self, "token_text_adapter", None) is not None:
             state = self.token_embedding(
                 self.token_text_adapter(input_ids), attention_mask=attention_mask != 0
             )
@@ -254,7 +281,7 @@ class Model(LanguageModelExperiment):
             loss = hidden.new_zeros(())
         hidden = self.embedding_layer_norm(hidden)
         hidden = self.embedding_dropout(hidden)
-        if self.token_text_adapter is not None:
+        if getattr(self, "token_text_adapter", None) is not None:
             hidden = hidden * (attention_mask != 0).unsqueeze(-1)
         return hidden, loss
 
@@ -326,7 +353,30 @@ class Model(LanguageModelExperiment):
             )
         return attention_mask.to(self.device)
 
+    def generate_text(
+        self,
+        prompt: str = "",
+        *,
+        max_new_tokens: int = 32,
+        max_new_bytes: int = 256,
+        options: ByteGenerationOptions | None = None,
+        prompt_is_complete: bool = False,
+    ) -> HierarchicalTextGenerationOutput:
+        if not hasattr(self, "hierarchical_model"):
+            raise ValueError(
+                "generate_text requires hierarchical_language_model_flag=True"
+            )
+        return self.hierarchical_model.generate_text(
+            prompt,
+            max_new_tokens=max_new_tokens,
+            max_new_bytes=max_new_bytes,
+            options=options,
+            prompt_is_complete=prompt_is_complete,
+        )
+
     def generate(self, input_ids: Tensor, max_new_tokens: int) -> Tensor:
+        if hasattr(self, "hierarchical_model"):
+            raise ValueError("Use generate_text for hierarchical language modeling")
         self.__validate_max_new_tokens(max_new_tokens)
         input_ids, _ = self.__prepare_inputs(input_ids, attention_mask=None)
         self.__validate_generation_length(input_ids, max_new_tokens)

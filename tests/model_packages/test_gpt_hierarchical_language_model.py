@@ -18,6 +18,7 @@ from models.catalog import model_package
 
 GPT_PACKAGES = (
     "gpt/expert_linear",
+    "gpt/expert_linear_adaptive",
 )
 
 
@@ -256,6 +257,109 @@ class GptHierarchicalLanguageModelTests(unittest.TestCase):
                     config_overrides={"lm_head_weight_tying_flag": False},
                 )
 
+    def test_adaptive_packages_use_requested_byte_parameter_generators(self):
+        from emperor.augmentations.adaptive_parameters import (
+            AdaptiveLinearLayerConfig,
+            GeneratorDynamicBiasConfig,
+            HypernetworkDynamicWeightConfig,
+        )
+
+        for name in ("gpt/expert_linear_adaptive",):
+            with self.subTest(package=name):
+                torch.manual_seed(29)
+                package, cfg = configuration(
+                    name,
+                    bias_option_flag=True,
+                    bias_option=GeneratorDynamicBiasConfig,
+                    weight_option_flag=True,
+                    weight_option=HypernetworkDynamicWeightConfig,
+                    adaptive_generator_stack_hidden_dim=8,
+                    hierarchical_byte_embedding_dim=4,
+                    hierarchical_byte_feed_forward_dim=8,
+                )
+                composition = cfg.experiment_config.hierarchical_language_model_config
+                encoder_layer = composition.embedding_config.encoder_config.encoder_stack_config.layer_config.layer_model_config
+                decoder_layer = composition.decoding_config.decoder_config.decoder_stack_config.layer_config.layer_model_config
+                for projection in (
+                    encoder_layer.attention_config.projection_model_config,
+                    encoder_layer.feed_forward_config.stack_config,
+                    composition.embedding_config.projection_config,
+                    decoder_layer.self_attention_config.projection_model_config,
+                    decoder_layer.feed_forward_config.stack_config,
+                    composition.decoding_config.conditioning_projection_config,
+                    composition.decoding_config.output_projection_config,
+                ):
+                    linear = projection.layer_config.layer_model_config
+                    self.assertIsInstance(linear, AdaptiveLinearLayerConfig)
+                    self.assertIsInstance(
+                        linear.adaptive_augmentation_config.bias_config,
+                        GeneratorDynamicBiasConfig,
+                    )
+                    self.assertIsInstance(
+                        linear.adaptive_augmentation_config.weight_config,
+                        HypernetworkDynamicWeightConfig,
+                    )
+                model = package.build_model(cfg).eval()
+                windows = list(HierarchicalTextCodec(8).training_windows("mat café", 4))
+                batch = HierarchicalLanguageModelBatch.collate(windows)
+                before = model(batch).logits
+                loss = model._model_step(batch)
+                self.assertTrue(torch.isfinite(loss))
+                loss.backward()
+                for component_name in ("encoder", "backbone", "decoder"):
+                    component = getattr(model.hierarchical_model, component_name)
+                    active_types = set()
+                    for path, linear in component.named_modules():
+                        if not isinstance(
+                            getattr(linear, "cfg", None), AdaptiveLinearLayerConfig
+                        ):
+                            continue
+                        augmentation = linear.adaptive_behaviour
+                        # Router adaptivity is independently configured by the package.
+                        if component_name == "backbone" and augmentation is None:
+                            continue
+                        location = f"{name}.{component_name}.{path}"
+                        self.assertIsNotNone(augmentation, location)
+                        for generator_name in ("weight_model", "bias_model"):
+                            generator = getattr(augmentation, generator_name)
+                            self.assertIsNotNone(generator, location)
+                            gradients = [
+                                parameter.grad
+                                for parameter in generator.parameters()
+                                if parameter.grad is not None
+                            ]
+                            # Unselected experts need not execute; every byte child does.
+                            if component_name == "backbone" and not gradients:
+                                continue
+                            self.assertTrue(gradients, location)
+                            self.assertTrue(
+                                all(
+                                    torch.isfinite(gradient).all()
+                                    for gradient in gradients
+                                ),
+                                location,
+                            )
+                            magnitude = sum(
+                                gradient.abs().sum().item() for gradient in gradients
+                            )
+                            # An expert routed only the first causal position has no
+                            # query gradient: its attention has just one allowed key.
+                            if component_name == "backbone" and magnitude == 0:
+                                continue
+                            self.assertGreater(magnitude, 0, location)
+                            active_types.add(type(generator.cfg))
+                    self.assertEqual(
+                        active_types,
+                        {GeneratorDynamicBiasConfig, HypernetworkDynamicWeightConfig},
+                        component_name,
+                    )
+                companion = list(HierarchicalTextCodec(8).training_windows("dog", 4))[0]
+                together = model(
+                    HierarchicalLanguageModelBatch.collate([*windows, companion])
+                )
+                torch.testing.assert_close(
+                    before, together.logits[: len(before)], rtol=1e-5, atol=1e-5
+                )
 
     @pytest.mark.training
     def test_bounded_fixture_training_validation_and_generation(self):
