@@ -1,0 +1,107 @@
+feature = "HAT byte decoder and raw WikiText-103 integration"
+baseline_revision = "181bfd80f0e7a424dcb559a0022b9b9442bb0db4"
+scope = "Bounded local fixtures; no corpus download or full WikiText-103 training"
+coverage_evidence = "tests/architecture/emperor_behavioral/evidence/decoding-coverage.toml"
+
+[focused]
+result = "pass"
+tests = 57
+skipped = 2
+skip_reason = "CUDA unavailable"
+commands = "See decoding-coverage.toml for the exact executable coverage/test command."
+includes = ["native dense/adaptive/MoE decoders", "UTF-8 generation", "causality and padding independence", "all four GPT packages", "local raw-text training and validation", "metrics", "strict checkpoint round trips", "CLI and shape inspection", "hierarchical encoder", "same encoder in GPT and BERT blocks"]
+
+[regression]
+passed = 2337
+skipped = 14
+subtests_passed = 8699
+initial_failures = 3
+initial_failure_reason = "Expected dataset exports, experiment source files, and metric declarations needed updating. All three were fixed and their suites rerun."
+families = ["embedding", "transformer", "adaptive_parameters", "experts", "sampler", "datasets", "experiments", "decoding"]
+selection = "Union of family focused_tests and integration_tests in tests/architecture/emperor_test_manifest.toml (139 test files at measurement time)."
+command = "PYTHONPATH=src:tests:. OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLCONFIGDIR=/tmp/emperor-hat-mpl torchenv/bin/python -m pytest -q <selected files>"
+
+[regression_followup]
+result = "pass"
+passed = 83
+subtests_passed = 357
+command = "PYTHONPATH=src:tests:. OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLCONFIGDIR=/tmp/emperor-hat-mpl torchenv/bin/python -m pytest -q tests/unit/test_dataset_interfaces.py tests/unit/test_experiment_interfaces.py tests/unit/test_experiment_task_behavior.py tests/model_packages/gpt/expert_linear tests/model_packages/gpt/expert_linear_adaptive"
+other_passed_checks = ["test_model_package_checkpoint_capability.py", "test_checkpoint_continuation.py", "generated inspection metadata --check", "Ruff on changed Python files", "git diff --check"]
+
+[architecture]
+passed = 107
+subtests_passed = 2820
+failures = 6
+result = "unchanged baseline failures"
+command = "PYTHONPATH=src:tests:. OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLCONFIGDIR=/tmp/emperor-hat-mpl torchenv/bin/python -m pytest -q tests/architecture"
+failure_details = [
+  "Four GPT/BERT search-axis comparison subtests in TestModelConventions.test_gpt_presets_search_axes_and_monitors_match_applicable_bert_metadata (linear, linear_adaptive, expert_linear, expert_linear_adaptive)",
+  "test_training_operations_are_statically_classified: six existing tests lack training markers",
+  "test_hardcoded_validator_dispatch_matches_migration_ledger: existing neuron terminal/cluster validators are absent from its ledger",
+]
+baseline_proof = "The same six failures were reproduced from a read-only git archive of baseline_revision in /tmp/hat-baseline; targeted baseline run had six passes and six failures."
+
+[runtime_structure]
+result = "unchanged baseline failure"
+command = "PYTHONPATH=src:tests:. torchenv/bin/python tools/model_runtime_quality.py structure"
+failure = "src/model_runtime/inspection/_graph_semantics.py has 667 lines and requires cohesion review above 600"
+baseline_proof = "The identical command against the archived baseline fails on the same unchanged file and line count."
+
+[final_contracts]
+result = "pass"
+passed = 59
+subtests_passed = 810
+command = "PYTHONPATH=src:tests:. OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLCONFIGDIR=/tmp/emperor-hat-mpl torchenv/bin/python -m pytest -q tests/architecture/test_emperor_interfaces.py tests/architecture/test_emperor_source_layout.py tests/architecture/test_emperor_test_manifest.py tests/architecture/test_model_runtime_boundaries.py"
+notes = "Run after final source formatting, validation changes, and coverage/ledger updates."
+
+[offline_example]
+result = "pass"
+command = "PYTHONPATH=src:tests:. OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLCONFIGDIR=/tmp/emperor-hat-mpl torchenv/bin/python examples/hierarchical_language_model.py --model gpt/expert_linear_adaptive --tiny --adaptive-bytes --steps 1 --save /tmp/hat-example.pt --cache /tmp/hat-example-cache --max-new-bytes 4"
+reload = "Strict reload of that checkpoint and generation from a café prompt also passed."
+
+[gpt_lineup_extension]
+packages = ["gpt/linear", "gpt/linear_adaptive", "gpt/expert_linear", "gpt/expert_linear_adaptive"]
+result = "pass"
+shared_tests = 7
+shared_subtests = 6
+shared_command = "PYTHONPATH=src:tests:. OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLCONFIGDIR=/tmp/emperor-hat-mpl torchenv/bin/python -m pytest -q tests/model_packages/test_gpt_hierarchical_language_model.py"
+regression_tests = 151
+regression_subtests = 928
+regression_command = "PYTHONPATH=src:tests:. OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLCONFIGDIR=/tmp/emperor-hat-mpl torchenv/bin/python -m pytest -q tests/model_packages/gpt/linear tests/model_packages/gpt/linear_adaptive tests/model_packages/gpt/expert_linear tests/model_packages/gpt/expert_linear_adaptive tests/unit/test_model_package_checkpoint_capability.py tests/integration/test_checkpoint_continuation.py"
+architecture_passed = 100
+architecture_subtests_passed = 2759
+architecture_failures = 6
+architecture_notes = "Same six baseline failures recorded above; no new failures. This run selected tests/architecture."
+other_checks = ["generated inspection metadata --check", "Ruff on changed Python files", "git diff --check", "both added offline examples: one training step, validation and UTF-8 generation", "strict reload and seeded generation from both example checkpoints"]
+scope = "Added package-owned configuration, defaults, presets, raw dataset selection, checkpoint interpretation and model entry points for linear and linear_adaptive; shared Emperor components unchanged."
+notes = "The original focused coverage run preceded this package extension; the fidelity documentation review below subsequently refreshed it. No new Emperor source modules were added or changed for the extension. No corpus download or full training run was performed."
+
+[fidelity_documentation_review]
+result = "pass"
+comparison = "docs/hierarchical-implementation-review.md"
+author_huggingface_revision = "c4797ee9ad934afd5adb27b490d0a3b1d84e4895"
+author_vllm_revision = "d408d3ce60cd990e6817a424cfb93eb0d5b886ce"
+author_splitter_revision = "5ba5dc0b756139ab6661449b983a6a6ebbcc2fd9"
+scope = "Read-only source comparison; clarified comments/docstrings and current guides. No author code execution, weights, corpus download or full training."
+behavior_check = "Executable AST unchanged in all 13 edited Python files after excluding docstrings; compared with a snapshot immediately before the review edits."
+focused_passed = 55
+focused_skipped = 2
+skip_reason = "Encoder and decoder CUDA tests require an available CUDA device."
+coverage = "602/665 decoding statements; 214/280 decoding branches. Encoder component: 63/63 statements and 16/16 branches in this run."
+contract_tests_passed = 29
+contract_subtests_passed = 748
+contract_command = "PYTHONPATH=src:tests:. OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLCONFIGDIR=/tmp/emperor-hat-mpl torchenv/bin/python -m pytest -q tests/architecture/test_emperor_interfaces.py tests/architecture/test_emperor_source_layout.py tests/architecture/test_emperor_test_manifest.py"
+other_checks = ["Ruff on 13 annotated Python files", "local documentation links resolve", "measured source hashes and evidence TOML verified", "git diff --check"]
+limitations = ["adaptation rather than exact paper or released-model reproduction", "no numerical comparison against an author implementation", "independent review not performed", "convergence and performance at corpus scale not established"]
+
+[generalized_composition]
+result = "pass"
+packages = ["gpt/linear", "gpt/linear_adaptive", "gpt/expert_linear", "gpt/expert_linear_adaptive"]
+passed_tests = 8
+passed_subtests = 10
+command = "PYTHONPATH=src:tests:. OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 MPLCONFIGDIR=/tmp/emperor-hat-mpl torchenv/bin/python -m pytest -q tests/model_packages/test_gpt_hierarchical_language_model.py"
+backbone_check = "Hierarchical and ordinary package backbone configs match. Identical backbone weights produce matching hidden values and auxiliary losses for all four packages, with two layers and three experts/top-k two where applicable. Caller configs remain unchanged."
+adaptive_check = "Both adaptive packages use HypernetworkDynamicWeightConfig and GeneratorDynamicBiasConfig in byte attention, feed-forward and boundary projections. Finite nonzero generator gradients reach both byte components and active backbone paths. Byte width four differs from backbone width eight; batch-companion independence passes."
+scope = "Existing runtime wiring already supports this composition. Added regression coverage and documentation, including rectangular adaptive-weight compatibility and the native four-projection mirrored feed-forward topology. No runtime algorithm change."
+other_checks = ["Ruff on changed Python files", "git diff --check", "documentation links resolve"]
+coverage_note = "The focused coverage measurements above remain the earlier measurement of unchanged Emperor source; this package-level test expansion did not rerun coverage."
