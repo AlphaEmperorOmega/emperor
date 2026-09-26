@@ -18,6 +18,7 @@ from models.catalog import model_package
 
 GPT_PACKAGES = (
     "gpt/linear",
+    "gpt/linear_adaptive",
     "gpt/expert_linear",
     "gpt/expert_linear_adaptive",
 )
@@ -265,7 +266,7 @@ class GptHierarchicalLanguageModelTests(unittest.TestCase):
             HypernetworkDynamicWeightConfig,
         )
 
-        for name in ("gpt/expert_linear_adaptive",):
+        for name in ("gpt/linear_adaptive", "gpt/expert_linear_adaptive"):
             with self.subTest(package=name):
                 torch.manual_seed(29)
                 package, cfg = configuration(

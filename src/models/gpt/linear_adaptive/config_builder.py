@@ -9,6 +9,7 @@ from models.gpt.linear_adaptive._core_config_factory import (
     CoreConfigDependencies,
     CoreConfigFactory,
 )
+from models.gpt.linear_adaptive._hierarchical_config import build_hierarchical_config
 from models.gpt.linear_adaptive._linear_layer_config_factory import (
     AdaptiveAugmentationConfigFactory,
     AdaptiveAugmentationDependencies,
@@ -221,7 +222,7 @@ class _GptLinearAdaptiveConfigBuilderImplementation:
     def build(self) -> "ModelConfig":
         from emperor.config import ModelConfig
 
-        return ModelConfig(
+        model_config = ModelConfig(
             learning_rate=self.learning_rate,
             batch_size=self.batch_size,
             input_dim=self.input_dim,
@@ -239,6 +240,19 @@ class _GptLinearAdaptiveConfigBuilderImplementation:
                 ),
             ),
         )
+
+        options = model_config.experiment_config.boundary_config.embedding_options
+        if options.hierarchical_language_model_flag:
+            model_config.experiment_config.hierarchical_language_model_config = (
+                build_hierarchical_config(
+                    model_config,
+                    options,
+                    self.__adaptive_linear_layer_config_factory(
+                        self.adaptive_augmentation_config
+                    ).build_backend_linear_layer_config(bias_flag=True),
+                )
+            )
+        return model_config
 
     def __positional_embedding_config(self):
         positional_embedding_config_dependencies = (

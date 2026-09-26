@@ -46,6 +46,31 @@ class BoundaryConfigFactory:
         )
 
     def _validate(self) -> None:
+        options = self.embedding_options
+        if type(options.hierarchical_language_model_flag) is not bool:
+            raise TypeError("hierarchical_language_model_flag must be bool")
+        if options.hierarchical_language_model_flag:
+            if self.lm_head_options.weight_tying_flag:
+                raise ValueError(
+                    "Hierarchical language modeling requires lm_head_weight_tying_flag=False"
+                )
+            for name in (
+                "byte_embedding_dim",
+                "byte_encoder_num_layers",
+                "byte_decoder_num_layers",
+                "byte_num_heads",
+                "byte_feed_forward_dim",
+                "byte_limit",
+            ):
+                if (
+                    type(getattr(options, name)) is not int
+                    or getattr(options, name) <= 0
+                ):
+                    raise ValueError(f"hierarchical {name} must be a positive integer")
+            if options.byte_embedding_dim % options.byte_num_heads:
+                raise ValueError(
+                    "hierarchical byte width must be divisible by byte heads"
+                )
         for name, value in {
             "input_dim": self.input_dim,
             "hidden_dim": self.hidden_dim,
