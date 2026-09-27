@@ -1,9 +1,14 @@
+from copy import deepcopy
+
 from emperor.halting import HaltingConfig
 from emperor.layers import (
     GateConfig,
+    HierarchicalReasoningModelRecurrentConfig,
     LayerConfig,
     LayerStackConfig,
+    RecurrentCompositionConfig,
     RecurrentLayerConfig,
+    TinyRecursiveModelRecurrentConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import DynamicMemoryConfig
@@ -49,10 +54,56 @@ class ControlConfigFactory:
     def wrap_recurrent(
         self,
         block_config: LayerStackConfig,
-    ) -> LayerStackConfig | RecurrentLayerConfig:
+    ) -> LayerStackConfig | RecurrentCompositionConfig:
         options = self.runtime.recurrence
         if not options.enabled:
             return block_config
+        shared = dict(
+            input_dim=self.runtime.hidden_dim,
+            output_dim=self.runtime.hidden_dim,
+            gradient_transition_count=options.gradient_transition_count,
+            no_gradient_transition_count=options.no_gradient_transition_count,
+            initial_iterations=options.initial_iterations,
+            iteration_increment=options.iteration_increment,
+            forward_calls_before_iteration_increment=(
+                options.forward_calls_before_iteration_increment
+            ),
+            smooth_iteration_growth_flag=options.smooth_iteration_growth_flag,
+            recurrent_layer_norm_position=options.layer_norm_position,
+            recurrent_normalization=options.normalization,
+            gate_config=self._gate_config(options.gate),
+            residual_config=None,
+            halting_config=self._halting_config(
+                options.halting,
+                self.runtime.recurrent_halting_option,
+            ),
+            memory_config=None,
+        )
+        if options.composition_option is TinyRecursiveModelRecurrentConfig:
+            return TinyRecursiveModelRecurrentConfig(
+                **shared,
+                block_config=block_config,
+                latent_updates_per_answer_update=(
+                    options.latent_updates_per_answer_update
+                ),
+                answer_update_count=options.answer_update_count,
+                initialization_standard_deviation=(
+                    options.initialization_standard_deviation
+                ),
+            )
+        if options.composition_option is HierarchicalReasoningModelRecurrentConfig:
+            return HierarchicalReasoningModelRecurrentConfig(
+                **shared,
+                high_block_config=block_config,
+                low_block_config=deepcopy(block_config),
+                high_cycles=options.high_cycles,
+                low_cycles=options.low_cycles,
+                initialization_standard_deviation=(
+                    options.initialization_standard_deviation
+                ),
+            )
+        if options.composition_option is not RecurrentLayerConfig:
+            raise ValueError("Unsupported recurrent composition for linears/linear")
         return RecurrentLayerConfig(
             max_steps=options.max_steps,
             gradient_transition_count=options.gradient_transition_count,

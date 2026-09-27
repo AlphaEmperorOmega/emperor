@@ -7,11 +7,15 @@ from emperor.layers import (
     ActivationOptions,
     AdditiveResidualConfig,  # noqa: F401
     AttentionResidualConfig,  # noqa: F401
+    HierarchicalReasoningModelRecurrentConfig,  # noqa: F401
     LastLayerBiasOptions,
     LayerGateOptions,
     LayerNormPositionOptions,
     NormalizationOptions,
+    RecurrentCompositionConfig,
+    RecurrentLayerConfig,  # noqa: F401
     ResidualConfig,
+    TinyRecursiveModelRecurrentConfig,  # noqa: F401
     WeightedBlendResidualConfig,  # noqa: F401
     WeightedResidualConfig,  # noqa: F401
 )
@@ -213,7 +217,13 @@ MEMORY_STACK_BIAS_FLAG: bool | None = None
 # Recurrent Layer Options
 # If `RECURRENT_FLAG` is False, the recurrent-specific parameters below are ignored.
 RECURRENT_FLAG: bool = False
+RECURRENT_COMPOSITION_OPTION: type[RecurrentCompositionConfig] = RecurrentLayerConfig
 RECURRENT_MAX_STEPS: int = 4
+RECURRENT_LATENT_UPDATES_PER_ANSWER_UPDATE: int = 2
+RECURRENT_ANSWER_UPDATE_COUNT: int = 2
+RECURRENT_HIGH_CYCLES: int = 2
+RECURRENT_LOW_CYCLES: int = 2
+RECURRENT_INITIALIZATION_STANDARD_DEVIATION: float = 1.0
 RECURRENT_INITIAL_ITERATIONS: int = 2
 RECURRENT_GRADIENT_TRANSITION_COUNT: int | None = None
 RECURRENT_NO_GRADIENT_TRANSITION_COUNT: int | None = None

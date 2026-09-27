@@ -3,7 +3,7 @@ from emperor.layers import (
     GateConfig,
     LayerConfig,
     LayerStackConfig,
-    RecurrentLayerConfig,
+    RecurrentCompositionConfig,
 )
 from emperor.linears import LinearLayerConfig
 from emperor.memory import DynamicMemoryConfig
@@ -17,7 +17,9 @@ class HiddenModelConfigFactory:
         self.runtime = runtime
         self.control_factory = ControlConfigFactory(runtime)
 
-    def build_hidden_model_config(self) -> LayerStackConfig | RecurrentLayerConfig:
+    def build_hidden_model_config(
+        self,
+    ) -> LayerStackConfig | RecurrentCompositionConfig:
         gate_config = self.control_factory.build_gate_config()
         halting_config = self.control_factory.build_halting_config()
         memory_config = self.control_factory.build_memory_config()

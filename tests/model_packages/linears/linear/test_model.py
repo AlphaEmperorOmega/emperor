@@ -25,12 +25,15 @@ from emperor.layers import (
     AdditiveResidualConfig,
     AttentionResidualConfig,
     GateConfig,
+    HierarchicalReasoningModelRecurrentConfig,
     LastLayerBiasOptions,
     LayerConfig,
     LayerGateOptions,
     LayerNormPositionOptions,
     LayerStackConfig,
+    RecurrentCompositionConfig,
     RecurrentLayerConfig,
+    TinyRecursiveModelRecurrentConfig,
     WeightedBlendResidualConfig,
     WeightedResidualConfig,
 )
@@ -440,7 +443,7 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
             and not any(key.startswith(prefix) for prefix in _NON_MODEL_PREFIXES)
         ]
 
-        self.assertEqual(len(model_keys), 143)
+        self.assertEqual(len(model_keys), 149)
         for key in model_keys:
             with self.subTest(key=key):
                 flat_key = config_key_to_model_param(key)
@@ -467,6 +470,12 @@ class TestLinearRuntimeDefaults(unittest.TestCase):
         runtime = runtime_from_flat({"recurrent_initial_iterations": None})
 
         self.assertIsNone(runtime.recurrence.initial_iterations)
+
+    def test_recurrent_composition_rejects_abstract_selector(self):
+        with self.assertRaisesRegex(ValueError, "recurrent_composition_option"):
+            runtime_from_flat(
+                {"recurrent_composition_option": RecurrentCompositionConfig}
+            )
 
     def test_noncanonical_runtime_key_spellings_are_rejected(self):
         for retired_key in (
@@ -1397,6 +1406,18 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
         cases = (
             ("--hidden-dim", "64", "hidden_dim", 64),
             (
+                "--recurrent-composition-option",
+                "TinyRecursiveModelRecurrentConfig",
+                "recurrent_composition_option",
+                TinyRecursiveModelRecurrentConfig,
+            ),
+            (
+                "--recurrent-composition-option",
+                "HierarchicalReasoningModelRecurrentConfig",
+                "recurrent_composition_option",
+                HierarchicalReasoningModelRecurrentConfig,
+            ),
+            (
                 "--layer-norm-position",
                 "AFTER",
                 "layer_norm_position",
@@ -1441,6 +1462,72 @@ class TestLinearPresetsAndMetadata(unittest.TestCase):
 
 
 class TestLinearModelBehavior(unittest.TestCase):
+    def test_plain_trm_and_hrm_build_forward_and_backpropagate(self):
+        variants = (
+            (
+                TinyRecursiveModelRecurrentConfig,
+                {
+                    "recurrent_latent_updates_per_answer_update": 1,
+                    "recurrent_answer_update_count": 2,
+                },
+            ),
+            (
+                HierarchicalReasoningModelRecurrentConfig,
+                {"recurrent_high_cycles": 2, "recurrent_low_cycles": 1},
+            ),
+        )
+        presets = model_package("linears/linear").presets
+        for option, schedule in variants:
+            with self.subTest(option=option.__name__):
+                cfg = presets.get_config(
+                    ExperimentPreset.RECURRENT,
+                    config_overrides={
+                        "input_dim": 8,
+                        "hidden_dim": 8,
+                        "output_dim": 4,
+                        "stack_num_layers": 2,
+                        "recurrent_composition_option": option,
+                        "recurrent_initial_iterations": 2,
+                        "stack_gate_flag": False,
+                        "recurrent_stack_gate_flag": False,
+                        "stack_halting_flag": False,
+                        "recurrent_stack_halting_flag": False,
+                        "memory_flag": False,
+                        "stack_residual_connection_option": None,
+                        **schedule,
+                    },
+                )[0]
+                recurrent = cfg.experiment_config.model_config
+                self.assertIsInstance(recurrent, option)
+                self.assertIsNone(recurrent.gate_config)
+                self.assertIsNone(recurrent.halting_config)
+                self.assertIsNone(recurrent.memory_config)
+                self.assertIsNone(recurrent.residual_config)
+                if option is HierarchicalReasoningModelRecurrentConfig:
+                    self.assertIsNot(
+                        recurrent.high_block_config, recurrent.low_block_config
+                    )
+
+                model = Model(cfg)
+                output = model(torch.randn(3, 1, 2, 4))
+                logits = output[0] if isinstance(output, tuple) else output
+                self.assertEqual(logits.shape, (3, 4))
+                logits.square().mean().backward()
+                recurrent_gradients = [
+                    parameter.grad
+                    for parameter in model.main_model.parameters()
+                    if parameter.requires_grad
+                ]
+                self.assertTrue(recurrent_gradients)
+                self.assertTrue(
+                    any(
+                        gradient is not None
+                        and torch.isfinite(gradient).all()
+                        and torch.any(gradient.abs() > 0)
+                        for gradient in recurrent_gradients
+                    )
+                )
+
     def _fake_batch(self, dataset: type, batch_size: int) -> torch.Tensor:
         return torch.randn(
             batch_size,

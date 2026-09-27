@@ -12,6 +12,8 @@ from emperor.layers import (
     LayerGateOptions,
     LayerNormPositionOptions,
     NormalizationOptions,
+    RecurrentCompositionConfig,
+    RecurrentLayerConfig,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -86,7 +88,15 @@ class MemoryOptions:
 @dataclass(frozen=True, slots=True)
 class RecurrenceOptions:
     enabled: bool
+    composition_option: type[RecurrentCompositionConfig] = field(
+        default=RecurrentLayerConfig, kw_only=True
+    )
     max_steps: int
+    latent_updates_per_answer_update: int = field(default=2, kw_only=True)
+    answer_update_count: int = field(default=2, kw_only=True)
+    high_cycles: int = field(default=2, kw_only=True)
+    low_cycles: int = field(default=2, kw_only=True)
+    initialization_standard_deviation: float = field(default=1.0, kw_only=True)
     initial_iterations: int = field(default=2, kw_only=True)
     gradient_transition_count: int | None = field(default=None, kw_only=True)
     no_gradient_transition_count: int | None = field(default=None, kw_only=True)

@@ -13,6 +13,7 @@ from emperor.layers import (
     LayerGateOptions,
     LayerNormPositionOptions,
     NormalizationOptions,
+    RecurrentCompositionConfig,
     ResidualConfig,
 )
 from emperor.memory import DynamicMemoryConfig, MemoryPositionOptions
@@ -311,6 +312,12 @@ class MemoryValues:
 @dataclass(frozen=True, slots=True)
 class RecurrenceValues:
     enabled: bool
+    composition_option: type[RecurrentCompositionConfig]
+    latent_updates_per_answer_update: int
+    answer_update_count: int
+    high_cycles: int
+    low_cycles: int
+    initialization_standard_deviation: float
     initial_iterations: int | None
     gradient_transition_count: int | None
     no_gradient_transition_count: int | None
@@ -348,7 +355,13 @@ class ControlDefaultValues:
     memory_test_time_training_learning_rate: float | None
     memory_test_time_training_num_inner_steps: int | None
     recurrent_flag: bool
+    recurrent_composition_option: type[RecurrentCompositionConfig]
     recurrent_max_steps: int
+    recurrent_latent_updates_per_answer_update: int
+    recurrent_answer_update_count: int
+    recurrent_high_cycles: int
+    recurrent_low_cycles: int
+    recurrent_initialization_standard_deviation: float
     recurrent_initial_iterations: int | None
     recurrent_gradient_transition_count: int | None
     recurrent_no_gradient_transition_count: int | None
@@ -640,7 +653,17 @@ _DEFAULT_VALUES = RuntimeDefaultValues(
             config.MEMORY_TEST_TIME_TRAINING_NUM_INNER_STEPS
         ),
         recurrent_flag=config.RECURRENT_FLAG,
+        recurrent_composition_option=config.RECURRENT_COMPOSITION_OPTION,
         recurrent_max_steps=config.RECURRENT_MAX_STEPS,
+        recurrent_latent_updates_per_answer_update=(
+            config.RECURRENT_LATENT_UPDATES_PER_ANSWER_UPDATE
+        ),
+        recurrent_answer_update_count=config.RECURRENT_ANSWER_UPDATE_COUNT,
+        recurrent_high_cycles=config.RECURRENT_HIGH_CYCLES,
+        recurrent_low_cycles=config.RECURRENT_LOW_CYCLES,
+        recurrent_initialization_standard_deviation=(
+            config.RECURRENT_INITIALIZATION_STANDARD_DEVIATION
+        ),
         recurrent_initial_iterations=config.RECURRENT_INITIAL_ITERATIONS,
         recurrent_gradient_transition_count=(
             config.RECURRENT_GRADIENT_TRANSITION_COUNT
@@ -1074,6 +1097,28 @@ def read_recurrence_values(reader: RuntimeOverrideReader) -> RecurrenceValues:
     defaults = _DEFAULT_VALUES.control
     return RecurrenceValues(
         enabled=reader.boolean("recurrent_flag", defaults.recurrent_flag),
+        composition_option=reader.implementation(
+            "recurrent_composition_option",
+            defaults.recurrent_composition_option,
+            RecurrentCompositionConfig,
+        ),
+        latent_updates_per_answer_update=reader.integer(
+            "recurrent_latent_updates_per_answer_update",
+            defaults.recurrent_latent_updates_per_answer_update,
+        ),
+        answer_update_count=reader.integer(
+            "recurrent_answer_update_count", defaults.recurrent_answer_update_count
+        ),
+        high_cycles=reader.integer(
+            "recurrent_high_cycles", defaults.recurrent_high_cycles
+        ),
+        low_cycles=reader.integer(
+            "recurrent_low_cycles", defaults.recurrent_low_cycles
+        ),
+        initialization_standard_deviation=reader.floating(
+            "recurrent_initialization_standard_deviation",
+            defaults.recurrent_initialization_standard_deviation,
+        ),
         initial_iterations=reader.optional_integer(
             "recurrent_initial_iterations", defaults.recurrent_initial_iterations
         ),

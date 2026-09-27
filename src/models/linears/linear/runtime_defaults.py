@@ -2,9 +2,15 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
+from math import isfinite
 from typing import Final, cast
 
-from emperor.layers import LastLayerBiasOptions
+from emperor.layers import (
+    HierarchicalReasoningModelRecurrentConfig,
+    LastLayerBiasOptions,
+    RecurrentLayerConfig,
+    TinyRecursiveModelRecurrentConfig,
+)
 from models.linears.linear._residual import (
     ResidualStackOptions,
     ResidualStackSource,
@@ -381,9 +387,40 @@ def _recurrence_options(
         halting_measures.dropout_probability,
     )
     values: RecurrenceValues = read_recurrence_values(reader)
+    if values.composition_option not in (
+        RecurrentLayerConfig,
+        TinyRecursiveModelRecurrentConfig,
+        HierarchicalReasoningModelRecurrentConfig,
+    ):
+        raise ValueError(
+            f"{_PACKAGE_NAME}: 'recurrent_composition_option' must select standard, TRM, or HRM recurrence"
+        )
+    for key, value in (
+        (
+            "recurrent_latent_updates_per_answer_update",
+            values.latent_updates_per_answer_update,
+        ),
+        ("recurrent_answer_update_count", values.answer_update_count),
+        ("recurrent_high_cycles", values.high_cycles),
+        ("recurrent_low_cycles", values.low_cycles),
+    ):
+        _positive(key, value)
+    if (
+        not isfinite(values.initialization_standard_deviation)
+        or values.initialization_standard_deviation < 0
+    ):
+        raise ValueError(
+            f"{_PACKAGE_NAME}: 'recurrent_initialization_standard_deviation' must be non-negative"
+        )
     return RecurrenceOptions(
         enabled=values.enabled,
+        composition_option=values.composition_option,
         max_steps=max_steps,
+        latent_updates_per_answer_update=values.latent_updates_per_answer_update,
+        answer_update_count=values.answer_update_count,
+        high_cycles=values.high_cycles,
+        low_cycles=values.low_cycles,
+        initialization_standard_deviation=values.initialization_standard_deviation,
         initial_iterations=cast(int, values.initial_iterations),
         gradient_transition_count=values.gradient_transition_count,
         no_gradient_transition_count=values.no_gradient_transition_count,
